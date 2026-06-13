@@ -1,7 +1,7 @@
 import type { AppConfig, BotConfig } from "./types.js";
 
 export type LegacyConfig = Partial<AppConfig> & {
-  lark?: Partial<Omit<BotConfig, "id" | "name" | "enabled" | "skillNames" | "pendingReply">>;
+  lark?: Partial<Omit<BotConfig, "id" | "name" | "enabled" | "skillNames" | "pendingReaction">>;
 };
 
 export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig {
@@ -18,13 +18,17 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
         replyIdentity: override.lark.replyIdentity ?? "bot",
         eventTypes: override.lark.eventTypes ?? ["im.message.receive_v1"],
         skillNames: ["*"],
-        pendingReply: "正在查询，请稍候…"
+        pendingReaction: "OnIt"
       } satisfies BotConfig]
     : [];
+  const bots = (override.bots ?? legacyBot).map((bot) => ({
+    ...bot,
+    pendingReaction: bot.pendingReaction || "OnIt"
+  }));
   return {
     ...base,
     ...override,
-    bots: override.bots ?? legacyBot,
+    bots,
     model: { ...base.model, ...override.model },
     runtime: { ...base.runtime, ...override.runtime }
   };

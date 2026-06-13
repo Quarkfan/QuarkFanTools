@@ -12,7 +12,7 @@ export interface BotConfig {
   replyIdentity: LarkIdentity;
   eventTypes: string[];
   skillNames: string[];
-  pendingReply: string;
+  pendingReaction: string;
 }
 
 export interface AppConfig {

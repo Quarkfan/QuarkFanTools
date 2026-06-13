@@ -120,7 +120,7 @@ function renderBot(bot: BotConfig): string {
         <label><span>接收身份</span><select data-bot="${bot.id}" data-field="receiveIdentity"><option value="bot" ${bot.receiveIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.receiveIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
         <label><span>回复身份</span><select data-bot="${bot.id}" data-field="replyIdentity"><option value="bot" ${bot.replyIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.replyIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
       </div>
-      ${botField(bot, "查询中提示", "pendingReply")}
+      ${botField(bot, "处理中表情", "pendingReaction")}
       <div class="skill-access">
         <span>允许访问的 Skills</span>
         ${snapshot.skills.map((skill) => `<label class="check"><input type="checkbox" data-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes("*") || bot.skillNames.includes(skill.name) ? "checked" : ""}/>${escapeHtml(skill.name)}</label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
@@ -166,7 +166,7 @@ function newBot(): BotConfig {
     replyIdentity: "bot",
     eventTypes: ["im.message.receive_v1"],
     skillNames: [],
-    pendingReply: "正在查询，请稍候…"
+    pendingReaction: "OnIt"
   };
 }
 

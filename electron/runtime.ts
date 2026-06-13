@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { runClaude } from "./claude.js";
-import { LarkEventStream, replyToMessage } from "./lark-cli.js";
+import { addMessageReaction, LarkEventStream, removeMessageReaction, replyToMessage } from "./lark-cli.js";
 import { Logger } from "./logger.js";
 import { discoverSkills } from "./skills.js";
 import { stateRoot } from "./paths.js";
@@ -133,10 +133,15 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     void this.saveProcessed(bot.id);
     this.activeTasks += 1;
     this.emitSnapshot();
+    let pendingReactionId = "";
 
     try {
-      await replyToMessage(bot, message.messageId, bot.pendingReply || "正在查询，请稍候…");
-      await this.logger.write("info", "已发送查询中提示", bot.name);
+      try {
+        pendingReactionId = await addMessageReaction(bot, message.messageId, bot.pendingReaction || "OnIt");
+        await this.logger.write("info", "已添加处理中表情", bot.name);
+      } catch (error) {
+        await this.logger.write("warn", "添加处理中表情失败，继续处理消息", `${bot.name}: ${String(error)}`);
+      }
       const allowed = new Set(bot.skillNames);
       const botSkills = allowed.has("*") ? this.skills : this.skills.filter((skill) => allowed.has(skill.name));
       const response = await runClaude(this.config, bot, message, botSkills);
@@ -145,6 +150,14 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     } catch (error) {
       await this.logger.write("error", "消息处理失败", `${bot.name}: ${String(error)}`);
     } finally {
+      if (pendingReactionId) {
+        try {
+          await removeMessageReaction(bot, message.messageId, pendingReactionId);
+          await this.logger.write("info", "已移除处理中表情", bot.name);
+        } catch (error) {
+          await this.logger.write("warn", "移除处理中表情失败", `${bot.name}: ${String(error)}`);
+        }
+      }
       this.activeTasks -= 1;
       this.emitSnapshot();
     }

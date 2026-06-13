@@ -36,5 +36,5 @@ test("migrates a legacy single bot config", () => {
   assert.equal(config.bots.length, 1);
   assert.equal(config.bots[0]?.appId, "cli_test");
   assert.deepEqual(config.bots[0]?.skillNames, ["*"]);
-  assert.equal(config.bots[0]?.pendingReply, "正在查询，请稍候…");
+  assert.equal(config.bots[0]?.pendingReaction, "OnIt");
 });

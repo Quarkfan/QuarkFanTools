@@ -178,6 +178,42 @@ export async function replyToMessage(bot: BotConfig, messageId: string, text: st
   });
 }
 
+export async function addMessageReaction(bot: BotConfig, messageId: string, emojiType: string): Promise<string> {
+  await prepareLarkConfig(bot);
+  const output = await runLarkCapture(bot, [
+    "im",
+    "reactions",
+    "create",
+    "--as",
+    bot.replyIdentity,
+    "--params",
+    JSON.stringify({ message_id: messageId }),
+    "--data",
+    JSON.stringify({ reaction_type: { emoji_type: emojiType } }),
+    "--format",
+    "json"
+  ]);
+  const result = JSON.parse(output) as unknown;
+  const reactionId = findString(result, (key) => key === "reaction_id");
+  if (!reactionId) throw new Error(`飞书未返回 reaction_id: ${output}`);
+  return reactionId;
+}
+
+export async function removeMessageReaction(bot: BotConfig, messageId: string, reactionId: string): Promise<void> {
+  await prepareLarkConfig(bot);
+  await runLarkCapture(bot, [
+    "im",
+    "reactions",
+    "delete",
+    "--as",
+    bot.replyIdentity,
+    "--params",
+    JSON.stringify({ message_id: messageId, reaction_id: reactionId }),
+    "--format",
+    "json"
+  ]);
+}
+
 async function runLarkCapture(bot: BotConfig, args: string[]): Promise<string> {
   const { command, prefix } = await resolveLarkCommand(bot);
   return new Promise<string>((resolve, reject) => {
@@ -187,9 +223,14 @@ async function runLarkCapture(bot: BotConfig, args: string[]): Promise<string> {
       stdio: ["ignore", "pipe", "pipe"]
     });
     let output = "";
+    let error = "";
     child.stdout?.on("data", (chunk) => (output += String(chunk)));
-    child.stderr?.on("data", (chunk) => (output += String(chunk)));
-    child.on("exit", (code) => (code === 0 ? resolve(output.trim()) : reject(new Error(output || `lark-cli auth login exited ${code}`))));
+    child.stderr?.on("data", (chunk) => (error += String(chunk)));
+    child.on("exit", (code) => (
+      code === 0
+        ? resolve(output.trim())
+        : reject(new Error([error, output].filter(Boolean).join("\n") || `lark-cli exited ${code}`))
+    ));
   });
 }
 
