@@ -2,10 +2,10 @@ import { app, shell } from "electron";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import path from "node:path";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { projectRoot, stateRoot } from "./paths.js";
-import type { BotConfig, LarkMessage } from "./types.js";
+import type { BotConfig, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
 
 function bundledLarkBinary(): string {
@@ -214,11 +214,39 @@ export async function removeMessageReaction(bot: BotConfig, messageId: string, r
   ]);
 }
 
-async function runLarkCapture(bot: BotConfig, args: string[]): Promise<string> {
+export async function downloadMessageResources(bot: BotConfig, message: LarkMessage, outputDir: string): Promise<LarkMessage> {
+  if (message.resources.length === 0) return message;
+  await mkdir(outputDir, { recursive: true });
+  const resources: LarkMessageResource[] = [];
+  for (const resource of message.resources) {
+    await runLarkCapture(bot, [
+      "im",
+      "+messages-resources-download",
+      "--as",
+      bot.receiveIdentity,
+      "--message-id",
+      message.messageId,
+      "--file-key",
+      resource.key,
+      "--type",
+      resource.type,
+      "--output",
+      resource.key,
+      "--format",
+      "json"
+    ], outputDir);
+    const fileName = (await readdir(outputDir)).find((entry) => entry === resource.key || entry.startsWith(`${resource.key}.`));
+    if (!fileName) throw new Error(`飞书资源下载完成，但未找到文件: ${resource.key}`);
+    resources.push({ ...resource, localPath: path.join(outputDir, fileName) });
+  }
+  return { ...message, resources };
+}
+
+async function runLarkCapture(bot: BotConfig, args: string[], cwd = projectRoot()): Promise<string> {
   const { command, prefix } = await resolveLarkCommand(bot);
   return new Promise<string>((resolve, reject) => {
     const child = spawn(command, [...prefix, ...profileArgs(bot), ...args], {
-      cwd: projectRoot(),
+      cwd,
       env: larkEnv(bot),
       stdio: ["ignore", "pipe", "pipe"]
     });

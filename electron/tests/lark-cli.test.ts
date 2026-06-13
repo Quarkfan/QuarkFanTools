@@ -25,9 +25,30 @@ test("normalizes a Feishu message event", () => {
   assert.equal(message?.eventId, "evt_1");
   assert.equal(message?.messageId, "om_1");
   assert.equal(message?.senderId, "ou_1");
+  assert.equal(message?.messageType, "text");
   assert.equal(message?.text, "帮我查一下加盟费用");
+  assert.deepEqual(message?.resources, []);
   assert.ok(message?.receivedAt);
   assert.equal(message?.createdAt, "1781330000000");
+});
+
+test("normalizes image resources without text", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_image",
+        chat_id: "oc_1",
+        chat_type: "p2p",
+        message_type: "image",
+        content: JSON.stringify({ image_key: "img_1" })
+      }
+    }
+  });
+
+  assert.equal(message?.text, "[图片消息]");
+  assert.deepEqual(message?.resources, [{ key: "img_1", type: "image" }]);
 });
 
 test("ignores unrelated event types", () => {

@@ -45,10 +45,19 @@ export interface LarkMessage {
   chatId: string;
   chatType: string;
   senderId: string;
+  messageType: string;
   text: string;
+  resources: LarkMessageResource[];
   createdAt?: string;
   receivedAt: string;
   raw: unknown;
+}
+
+export interface LarkMessageResource {
+  key: string;
+  type: "image" | "file";
+  name?: string;
+  localPath?: string;
 }
 
 export interface RuntimeSnapshot {

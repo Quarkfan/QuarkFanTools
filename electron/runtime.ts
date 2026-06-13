@@ -3,10 +3,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { runClaude } from "./claude.js";
-import { addMessageReaction, LarkEventStream, removeMessageReaction, replyToMessage } from "./lark-cli.js";
+import { addMessageReaction, downloadMessageResources, LarkEventStream, removeMessageReaction, replyToMessage } from "./lark-cli.js";
 import { Logger } from "./logger.js";
 import { discoverSkills } from "./skills.js";
 import { stateRoot } from "./paths.js";
+import { conversationKey } from "./conversation.js";
+import { SessionStore } from "./sessions.js";
 import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
@@ -14,6 +16,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private streams = new Map<string, LarkEventStream>();
   private connectedBotIds = new Set<string>();
   private processed = new Map<string, Set<string>>();
+  private sessionStore = new SessionStore();
+  private conversationTasks = new Map<string, Promise<void>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private running = false;
   private activeTasks = 0;
@@ -28,7 +32,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   async initialize(): Promise<void> {
     this.config = await loadConfig();
     this.skills = await discoverSkills();
-    await Promise.all(this.config.bots.map((bot) => this.loadProcessed(bot.id)));
+    await Promise.all(this.config.bots.flatMap((bot) => [this.loadProcessed(bot.id), this.sessionStore.load(bot)]));
     this.emitSnapshot();
   }
 
@@ -79,7 +83,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
 
   private createStream(bot: BotConfig): LarkEventStream {
     const stream = new LarkEventStream();
-    stream.on("message", (message: LarkMessage) => void this.handleMessage(bot, message));
+    stream.on("message", (message: LarkMessage) => void this.enqueueMessage(bot, message));
     stream.on("connected", () => {
       this.connectedBotIds.add(bot.id);
       void this.logger.write("success", "机器人事件订阅已连接", bot.name);
@@ -118,6 +122,18 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (this.config) this.emit("snapshot", this.snapshot());
   }
 
+  private enqueueMessage(bot: BotConfig, message: LarkMessage): void {
+    const key = `${bot.id}:${conversationKey(message)}`;
+    const previous = this.conversationTasks.get(key) ?? Promise.resolve();
+    const task = previous
+      .catch(() => undefined)
+      .then(() => this.handleMessage(bot, message))
+      .finally(() => {
+        if (this.conversationTasks.get(key) === task) this.conversationTasks.delete(key);
+      });
+    this.conversationTasks.set(key, task);
+  }
+
   private async handleMessage(bot: BotConfig, message: LarkMessage): Promise<void> {
     const processed = this.processed.get(bot.id) ?? new Set<string>();
     if (processed.has(message.eventId)) return;
@@ -144,9 +160,27 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       const allowed = new Set(bot.skillNames);
       const botSkills = allowed.has("*") ? this.skills : this.skills.filter((skill) => allowed.has(skill.name));
-      const response = await runClaude(this.config, bot, message, botSkills);
-      await replyToMessage(bot, message.messageId, response);
-      await this.logger.write("success", "消息处理并回复完成", `${bot.name}: ${response}`);
+      const key = conversationKey(message);
+      if (["/new", "新对话", "重置会话"].includes(message.text.trim())) {
+        await this.sessionStore.clear(bot, key);
+        await replyToMessage(bot, message.messageId, "已开启新对话，后续消息不会沿用之前的上下文。");
+        await this.logger.write("success", "已重置连续会话", `${bot.name}: ${key}`);
+        return;
+      }
+      const resourcesDir = path.join(stateRoot(), "bots", bot.id, "messages", message.messageId);
+      let enrichedMessage = message;
+      try {
+        enrichedMessage = await downloadMessageResources(bot, message, resourcesDir);
+        if (enrichedMessage.resources.length > 0) {
+          await this.logger.write("info", "已下载飞书消息资源", `${bot.name}: ${enrichedMessage.resources.length} 个`);
+        }
+      } catch (error) {
+        await this.logger.write("warn", "下载飞书消息资源失败，继续处理文本内容", `${bot.name}: ${String(error)}`);
+      }
+      const result = await runClaude(this.config, bot, enrichedMessage, botSkills, this.sessionStore.get(bot, key));
+      if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId);
+      await replyToMessage(bot, message.messageId, result.response);
+      await this.logger.write("success", "消息处理并回复完成", `${bot.name}: ${result.response}`);
     } catch (error) {
       await this.logger.write("error", "消息处理失败", `${bot.name}: ${String(error)}`);
     } finally {

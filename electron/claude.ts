@@ -1,6 +1,6 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { app } from "electron";
-import { access, mkdir, readdir, rm, symlink } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { skillsRoot, stateRoot, workspaceRoot } from "./paths.js";
 import { larkRuntimeEnvironment } from "./lark-cli.js";
@@ -37,7 +37,18 @@ function claudeExecutable(): string | undefined {
     : undefined;
 }
 
-export async function runClaude(config: AppConfig, bot: BotConfig, message: LarkMessage, skills: SkillSummary[]): Promise<string> {
+export interface ClaudeRunResult {
+  response: string;
+  sessionId: string;
+}
+
+export async function runClaude(
+  config: AppConfig,
+  bot: BotConfig,
+  message: LarkMessage,
+  skills: SkillSummary[],
+  resumeSessionId?: string
+): Promise<ClaudeRunResult> {
   const { claudeHome, workspace } = await ensureBotWorkspace(bot, skills);
   const botState = path.join(stateRoot(), "bots", bot.id);
   const skillList = skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
@@ -45,10 +56,19 @@ export async function runClaude(config: AppConfig, bot: BotConfig, message: Lark
     "根据飞书消息选择最匹配的 Skill，并严格遵循该 Skill 的 SKILL.md。",
     "你只能访问当前机器人的 skills 目录，不得尝试访问其他机器人或未授权 Skill。",
     "仅在用户明确要求时更新 Skill 和 knowledge 文件。",
+    "你可以默认通过 Bash 调用 lark-cli，命令会自动使用当前机器人隔离的飞书身份与凭据。",
+    "需要读取飞书文档时，先执行 `lark-cli skills read lark-doc`，再使用 `lark-cli docs +fetch`、`lark-cli docs +search`、`lark-cli wiki` 或 `lark-cli drive`。",
+    "需要将生成的图片或文件回复给用户时，可执行 `lark-cli im +messages-reply --message-id <消息ID> --image <工作区相对路径> --as <回复身份>` 或对应的 --file。",
     "最终只输出应回复给飞书用户的内容，不要输出运行日志或内部推理。",
     "",
     "可用 Skills：",
     skillList || "- 当前没有可用 Skill；明确告知用户。",
+    "",
+    `当前消息 ID：${message.messageId}`,
+    `当前飞书回复身份：${bot.replyIdentity}`,
+    message.resources.length > 0
+      ? `已下载的消息资源：\n${message.resources.map((resource) => `- ${resource.type}: ${resource.localPath ?? resource.key}`).join("\n")}`
+      : "当前消息没有附件。",
     "",
     `飞书消息：${message.text}`
   ].join("\n");
@@ -57,50 +77,98 @@ export async function runClaude(config: AppConfig, bot: BotConfig, message: Lark
     ...process.env,
     ...larkRuntimeEnvironment(bot),
     CLAUDE_CONFIG_DIR: claudeHome,
-    CLAUDE_AGENT_SDK_CLIENT_APP: "quarkfantools/1.0.0",
+    CLAUDE_AGENT_SDK_CLIENT_APP: `quarkfantools/${app.getVersion()}`,
     ANTHROPIC_BASE_URL: config.model.baseUrl,
     ANTHROPIC_MODEL: config.model.model,
     ANTHROPIC_AUTH_TOKEN: config.model.apiKey,
     ANTHROPIC_API_KEY: config.model.apiKey
   };
-  let result = "";
-  for await (const item of query({
-    prompt,
-    options: {
-      cwd: workspace,
-      env,
-      model: config.model.model,
-      pathToClaudeCodeExecutable: claudeExecutable(),
-      settingSources: [],
-      skills: "all",
-      tools: ["Skill", "Read", "Write", "Edit", "Glob", "Grep", "Bash"],
-      allowedTools: ["Skill", "Read", "Write", "Edit", "Glob", "Grep", "Bash"],
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      sandbox: {
-        enabled: true,
-        failIfUnavailable: true,
-        autoAllowBashIfSandboxed: true,
-        allowUnsandboxedCommands: false,
-        filesystem: {
-          denyRead: [path.join(workspaceRoot(), "bots"), path.join(stateRoot(), "bots"), skillsRoot()],
-          denyWrite: [path.join(workspaceRoot(), "bots"), path.join(stateRoot(), "bots"), skillsRoot()],
-          allowRead: [workspace, botState, ...skills.map((skill) => path.dirname(skill.path))],
-          allowWrite: [workspace, botState, ...skills.map((skill) => path.dirname(skill.path))]
+  const run = async (resume?: string): Promise<ClaudeRunResult> => {
+    let result = "";
+    let sessionId = "";
+    for await (const item of query({
+      prompt: buildPrompt(prompt, message),
+      options: {
+        cwd: workspace,
+        env,
+        model: config.model.model,
+        ...(resume ? { resume } : {}),
+        pathToClaudeCodeExecutable: claudeExecutable(),
+        settingSources: [],
+        skills: "all",
+        tools: ["Skill", "Read", "Write", "Edit", "Glob", "Grep", "Bash"],
+        allowedTools: ["Skill", "Read", "Write", "Edit", "Glob", "Grep", "Bash"],
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        sandbox: {
+          enabled: true,
+          failIfUnavailable: true,
+          autoAllowBashIfSandboxed: true,
+          allowUnsandboxedCommands: false,
+          filesystem: {
+            denyRead: [path.join(workspaceRoot(), "bots"), path.join(stateRoot(), "bots"), skillsRoot()],
+            denyWrite: [path.join(workspaceRoot(), "bots"), path.join(stateRoot(), "bots"), skillsRoot()],
+            allowRead: [workspace, botState, ...skills.map((skill) => path.dirname(skill.path))],
+            allowWrite: [workspace, botState, ...skills.map((skill) => path.dirname(skill.path))]
+          }
+        },
+        maxTurns: 20,
+        systemPrompt: {
+          type: "preset",
+          preset: "claude_code",
+          append: "你是 QuarkfanTools 本地飞书 Skill Agent。"
         }
-      },
-      maxTurns: 20,
-      systemPrompt: {
-        type: "preset",
-        preset: "claude_code",
-        append: "你是 QuarkfanTools 本地飞书 Skill Agent。"
+      }
+    })) {
+      sessionId = item.session_id || sessionId;
+      if (item.type === "result") {
+        if (item.subtype !== "success") throw new Error(item.errors.join("\n") || item.subtype);
+        result = item.result;
       }
     }
-  })) {
-    if (item.type === "result") {
-      if (item.subtype !== "success") throw new Error(item.errors.join("\n") || item.subtype);
-      result = item.result;
-    }
+    return {
+      response: result.trim() || "处理完成，但没有生成可回复内容。",
+      sessionId
+    };
+  };
+  if (!resumeSessionId) return run();
+  try {
+    return await run(resumeSessionId);
+  } catch (error) {
+    if (!/session|resume|conversation.*not found|no conversation/i.test(String(error))) throw error;
+    return run();
   }
-  return result.trim() || "处理完成，但没有生成可回复内容。";
+}
+
+async function* buildPrompt(text: string, message: LarkMessage): AsyncIterable<SDKUserMessage> {
+  const content: SDKUserMessage["message"]["content"] = [{ type: "text", text }];
+  for (const resource of message.resources) {
+    if (resource.type !== "image" || !resource.localPath) continue;
+    const mediaType = imageMediaType(resource.localPath);
+    if (!mediaType) continue;
+    content.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: mediaType,
+        data: (await readFile(resource.localPath)).toString("base64")
+      }
+    });
+  }
+  yield {
+    type: "user",
+    message: { role: "user", content },
+    parent_tool_use_id: null
+  };
+}
+
+function imageMediaType(filePath: string): "image/jpeg" | "image/png" | "image/gif" | "image/webp" | null {
+  switch (path.extname(filePath).toLowerCase()) {
+    case ".jpg":
+    case ".jpeg": return "image/jpeg";
+    case ".png": return "image/png";
+    case ".gif": return "image/gif";
+    case ".webp": return "image/webp";
+    default: return null;
+  }
 }
