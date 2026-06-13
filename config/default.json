@@ -6,7 +6,8 @@
     "baseUrl": "",
     "model": "",
     "apiKeyEnv": "ANTHROPIC_AUTH_TOKEN",
-    "apiKey": ""
+    "apiKey": "",
+    "multimodalEnabled": true
   },
   "runtime": {
     "sandbox": "workspace-write",

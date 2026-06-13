@@ -24,6 +24,7 @@ export interface AppConfig {
     model: string;
     apiKeyEnv: string;
     apiKey: string;
+    multimodalEnabled: boolean;
   };
   runtime: {
     sandbox: "read-only" | "workspace-write" | "danger-full-access";
@@ -66,6 +67,13 @@ export interface RuntimeSnapshot {
   activeTasks: number;
   skills: SkillSummary[];
   config: AppConfig;
+}
+
+export interface StorageStats {
+  totalBytes: number;
+  sessionCount: number;
+  expiredSessionCount: number;
+  botCount: number;
 }
 
 export interface LogEntry {

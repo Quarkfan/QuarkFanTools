@@ -177,7 +177,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       } catch (error) {
         await this.logger.write("warn", "下载飞书消息资源失败，继续处理文本内容", `${bot.name}: ${String(error)}`);
       }
-      const result = await runClaude(this.config, bot, enrichedMessage, botSkills, this.sessionStore.get(bot, key));
+      const result = await runClaude(this.config, bot, enrichedMessage, botSkills, key, this.sessionStore.get(bot, key));
       if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId);
       await replyToMessage(bot, message.messageId, result.response);
       await this.logger.write("success", "消息处理并回复完成", `${bot.name}: ${result.response}`);

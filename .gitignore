@@ -4,6 +4,7 @@ dist-electron/
 release/
 runtime/
 state/
+bots/
 config/local.json
 *.log
 .DS_Store

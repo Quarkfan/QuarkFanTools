@@ -1,10 +1,11 @@
 import "./style.css";
-import type { AppConfig, BotConfig, LogEntry, RuntimeSnapshot } from "../electron/types";
+import type { AppConfig, BotConfig, LogEntry, RuntimeSnapshot, StorageStats } from "../electron/types";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let snapshot: RuntimeSnapshot;
 let logs: LogEntry[] = [];
-let activeView: "console" | "config" = "console";
+let storage: StorageStats;
+let activeView: "console" | "config" | "storage" = "console";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -36,6 +37,7 @@ function render(): void {
       <nav>
         <button class="${activeView === "console" ? "active" : ""}" data-view="console">运行台</button>
         <button class="${activeView === "config" ? "active" : ""}" data-view="config">配置</button>
+        <button class="${activeView === "storage" ? "active" : ""}" data-view="storage">存储管理</button>
       </nav>
       <div class="rail-foot">
         <div>${statusDot(snapshot.running)}${snapshot.running ? "RUNNING" : "STOPPED"}</div>
@@ -46,7 +48,7 @@ function render(): void {
       <header>
         <div>
           <p class="eyebrow">MACOS / FEISHU / CLAUDE</p>
-          <h1>${activeView === "console" ? "运行控制台" : "机器人与模型配置"}</h1>
+          <h1>${activeView === "console" ? "运行控制台" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
         </div>
         <div class="actions">
           <button class="ghost" id="import-skill">导入 Skill 文件夹</button>
@@ -56,10 +58,40 @@ function render(): void {
         </div>
       </header>
       ${!isConfigured ? `<div class="notice">至少配置一个启用的飞书机器人，并填写 Claude 兼容模型连接信息。</div>` : ""}
-      ${activeView === "console" ? renderConsole() : renderConfig()}
+      ${activeView === "console" ? renderConsole() : activeView === "config" ? renderConfig() : renderStorage()}
     </main>
   `;
   bindEvents();
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function renderStorage(): string {
+  return `
+    <section class="metrics">
+      <article><span>会话存储占用</span><strong>${formatBytes(storage.totalBytes)}</strong></article>
+      <article><span>连续会话</span><strong>${storage.sessionCount}</strong></article>
+      <article><span>已过期会话</span><strong>${storage.expiredSessionCount}</strong></article>
+      <article><span>机器人目录</span><strong>${storage.botCount}</strong></article>
+    </section>
+    <section class="storage-grid">
+      <div class="panel storage-card">
+        <div class="panel-title"><span>EXPIRED SESSION CLEANUP</span><small>24 小时无活动</small></div>
+        <p>清理已过期会话的独立 workspace、消息附件和 Claude 会话记录。不会删除机器人配置、飞书授权或用户导入的 Skills。</p>
+        <button class="ghost" id="clear-expired" ${storage.expiredSessionCount === 0 ? "disabled" : ""}>清理 ${storage.expiredSessionCount} 个过期会话</button>
+      </div>
+      <div class="panel storage-card danger-zone">
+        <div class="panel-title"><span>ALL SESSION DATA</span><small>不可恢复</small></div>
+        <p>清理全部会话上下文、workspace 和已下载消息附件。机器人配置、飞书授权与用户 Skills 会保留。</p>
+        <button class="danger" id="clear-all-storage">清理全部会话数据</button>
+      </div>
+    </section>
+  `;
 }
 
 function renderConsole(): string {
@@ -140,6 +172,7 @@ function renderConfig(): string {
           ${field("Claude Base URL", "baseUrl", c.model.baseUrl, "url", "服务商提供的 Claude / Anthropic 兼容地址")}
           ${field("模型", "model", c.model.model)}
           ${field("API Key", "apiKey", c.model.apiKey, "password")}
+          <label><span>多模态视觉能力</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
         </div>
         <div class="panel config-panel">
           <div class="panel-title"><span>BOT ISOLATION</span><small>每个机器人独立凭据、监听和 Skill 权限</small></div>
@@ -181,6 +214,15 @@ function bindEvents(): void {
     snapshot = await window.quarkfanTools.importSkill();
     render();
   };
+  document.querySelector<HTMLButtonElement>("#clear-expired")?.addEventListener("click", async () => {
+    storage = await window.quarkfanTools.clearExpiredStorage();
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#clear-all-storage")?.addEventListener("click", async () => {
+    if (!window.confirm("确认清理全部会话上下文、workspace 和消息附件？此操作不可恢复。")) return;
+    storage = await window.quarkfanTools.clearAllSessionStorage();
+    render();
+  });
   document.querySelector<HTMLButtonElement>("#start")?.addEventListener("click", async () => {
     snapshot = await window.quarkfanTools.start();
     render();
@@ -210,6 +252,7 @@ function bindEvents(): void {
     next.model.baseUrl = String(form.get("baseUrl") ?? "");
     next.model.model = String(form.get("model") ?? "");
     next.model.apiKey = String(form.get("apiKey") ?? "");
+    next.model.multimodalEnabled = String(form.get("multimodalEnabled") ?? "true") === "true";
     document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-bot][data-field]").forEach((input) => {
       const bot = next.bots.find((item) => item.id === input.dataset.bot);
       if (!bot) return;
@@ -226,7 +269,11 @@ function bindEvents(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  [snapshot, logs] = await Promise.all([window.quarkfanTools.snapshot(), window.quarkfanTools.logs()]);
+  [snapshot, logs, storage] = await Promise.all([
+    window.quarkfanTools.snapshot(),
+    window.quarkfanTools.logs(),
+    window.quarkfanTools.storageStats()
+  ]);
   window.quarkfanTools.onSnapshot((value) => {
     snapshot = value;
     render();

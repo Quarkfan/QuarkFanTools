@@ -73,9 +73,14 @@ label small { color: #536159; line-height: 1.5; }
 .skill-access > span { display: block; margin-bottom: 8px; }
 .skill-access .check { display: flex; align-items: center; gap: 8px; padding: 5px 0; color: #c8d4ce; }
 .skill-access .check input { width: auto; }
+.storage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.storage-card { padding: 0 18px 20px; }
+.storage-card .panel-title { margin: 0 -18px 18px; }
+.storage-card p { min-height: 64px; color: #819087; font-size: 12px; line-height: 1.7; }
+.danger-zone { border-color: #563737; }
 
 @media (max-width: 1100px) {
   main { padding-left: 28px; padding-right: 28px; }
-  .workspace, .config-grid, .bot-grid { grid-template-columns: 1fr; }
+  .workspace, .config-grid, .bot-grid, .storage-grid { grid-template-columns: 1fr; }
   .skill-list, .logs { max-height: 300px; }
 }

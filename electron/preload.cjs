@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("quarkfanTools", {
   snapshot: () => ipcRenderer.invoke("runtime:snapshot"),
   logs: () => ipcRenderer.invoke("runtime:logs"),
+  storageStats: () => ipcRenderer.invoke("storage:stats"),
+  clearExpiredStorage: () => ipcRenderer.invoke("storage:clear-expired"),
+  clearAllSessionStorage: () => ipcRenderer.invoke("storage:clear-all"),
   start: () => ipcRenderer.invoke("runtime:start"),
   stop: () => ipcRenderer.invoke("runtime:stop"),
   saveConfig: (config) => ipcRenderer.invoke("config:save", config),

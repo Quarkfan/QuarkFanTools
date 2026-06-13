@@ -11,7 +11,8 @@ const base: AppConfig = {
     baseUrl: "",
     model: "",
     apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
-    apiKey: ""
+    apiKey: "",
+    multimodalEnabled: true
   },
   runtime: {
     sandbox: "workspace-write",
@@ -37,4 +38,5 @@ test("migrates a legacy single bot config", () => {
   assert.equal(config.bots[0]?.appId, "cli_test");
   assert.deepEqual(config.bots[0]?.skillNames, ["*"]);
   assert.equal(config.bots[0]?.pendingReaction, "OnIt");
+  assert.equal(config.model.multimodalEnabled, true);
 });

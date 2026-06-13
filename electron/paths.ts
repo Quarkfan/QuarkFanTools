@@ -16,6 +16,12 @@ export function skillsRoot(): string {
     : path.join(projectRoot(), "skills");
 }
 
+export function builtinSkillsRoot(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "builtin-skills")
+    : path.join(projectRoot(), "builtin-skills");
+}
+
 export function stateRoot(): string {
   const root = app.isPackaged
     ? path.join(app.getPath("userData"), "state")

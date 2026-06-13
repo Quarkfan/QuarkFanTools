@@ -5,6 +5,7 @@ import { saveConfig } from "./config.js";
 import { migrateLegacyData } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
 import { importSkillFolder } from "./skills.js";
+import { clearAllSessionStorage, clearExpiredStorage, storageStats } from "./storage.js";
 import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
@@ -58,6 +59,21 @@ runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
 
 ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
+ipcMain.handle("storage:stats", () => storageStats());
+ipcMain.handle("storage:clear-expired", async () => {
+  await runtime.stop();
+  const removed = await clearExpiredStorage();
+  await runtime.initialize();
+  await runtime.logger.write("success", "已清理过期会话存储", `${removed} 个会话`);
+  return storageStats();
+});
+ipcMain.handle("storage:clear-all", async () => {
+  await runtime.stop();
+  await clearAllSessionStorage();
+  await runtime.initialize();
+  await runtime.logger.write("success", "已清理全部会话存储", "机器人配置、飞书授权和用户 Skills 已保留");
+  return storageStats();
+});
 ipcMain.handle("runtime:start", async () => {
   await runtime.start();
   return runtime.snapshot();

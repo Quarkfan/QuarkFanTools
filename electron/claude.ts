@@ -2,6 +2,7 @@ import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { app } from "electron";
 import { access, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
 import path from "node:path";
+import { workspaceSessionId } from "./conversation.js";
 import { skillsRoot, stateRoot, workspaceRoot } from "./paths.js";
 import { larkRuntimeEnvironment } from "./lark-cli.js";
 import type { AppConfig, BotConfig, LarkMessage, SkillSummary } from "./types.js";
@@ -23,9 +24,9 @@ async function syncSkillLinks(targetRoot: string, skills: SkillSummary[]): Promi
   }
 }
 
-async function ensureBotWorkspace(bot: BotConfig, skills: SkillSummary[]): Promise<{ claudeHome: string; workspace: string }> {
+async function ensureBotWorkspace(bot: BotConfig, conversationKey: string, skills: SkillSummary[]): Promise<{ claudeHome: string; workspace: string }> {
   const claudeHome = path.join(stateRoot(), "bots", bot.id, "claude-home");
-  const workspace = path.join(workspaceRoot(), "bots", bot.id);
+  const workspace = path.join(workspaceRoot(), "bots", bot.id, "sessions", workspaceSessionId(conversationKey));
   await syncSkillLinks(path.join(claudeHome, "skills"), skills);
   await syncSkillLinks(path.join(workspace, "skills"), skills);
   return { claudeHome, workspace };
@@ -47,9 +48,10 @@ export async function runClaude(
   bot: BotConfig,
   message: LarkMessage,
   skills: SkillSummary[],
+  conversationKey: string,
   resumeSessionId?: string
 ): Promise<ClaudeRunResult> {
-  const { claudeHome, workspace } = await ensureBotWorkspace(bot, skills);
+  const { claudeHome, workspace } = await ensureBotWorkspace(bot, conversationKey, skills);
   const botState = path.join(stateRoot(), "bots", bot.id);
   const skillList = skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
   const prompt = [
@@ -66,6 +68,7 @@ export async function runClaude(
     "",
     `当前消息 ID：${message.messageId}`,
     `当前飞书回复身份：${bot.replyIdentity}`,
+    `当前模型多模态视觉能力：${config.model.multimodalEnabled ? "已启用" : "未启用"}`,
     message.resources.length > 0
       ? `已下载的消息资源：\n${message.resources.map((resource) => `- ${resource.type}: ${resource.localPath ?? resource.key}`).join("\n")}`
       : "当前消息没有附件。",
@@ -87,7 +90,7 @@ export async function runClaude(
     let result = "";
     let sessionId = "";
     for await (const item of query({
-      prompt: buildPrompt(prompt, message),
+      prompt: buildPrompt(prompt, message, config.model.multimodalEnabled),
       options: {
         cwd: workspace,
         env,
@@ -140,8 +143,16 @@ export async function runClaude(
   }
 }
 
-async function* buildPrompt(text: string, message: LarkMessage): AsyncIterable<SDKUserMessage> {
+async function* buildPrompt(text: string, message: LarkMessage, multimodalEnabled: boolean): AsyncIterable<SDKUserMessage> {
   const content: SDKUserMessage["message"]["content"] = [{ type: "text", text }];
+  if (!multimodalEnabled) {
+    yield {
+      type: "user",
+      message: { role: "user", content },
+      parent_tool_use_id: null
+    };
+    return;
+  }
   for (const resource of message.resources) {
     if (resource.type !== "image" || !resource.localPath) continue;
     const mediaType = imageMediaType(resource.localPath);
