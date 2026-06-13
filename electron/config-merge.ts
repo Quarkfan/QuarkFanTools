@@ -29,6 +29,7 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
     ...base,
     ...override,
     bots,
+    skillMarket: { ...base.skillMarket, ...override.skillMarket },
     model: { ...base.model, ...override.model },
     runtime: { ...base.runtime, ...override.runtime }
   };

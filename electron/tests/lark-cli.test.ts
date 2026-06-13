@@ -51,6 +51,24 @@ test("normalizes image resources without text", () => {
   assert.deepEqual(message?.resources, [{ key: "img_1", type: "image" }]);
 });
 
+test("preserves Office attachment names for built-in preprocessing", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_file",
+        chat_id: "oc_1",
+        chat_type: "p2p",
+        message_type: "file",
+        content: JSON.stringify({ file_key: "file_1", file_name: "review.pptx" })
+      }
+    }
+  });
+
+  assert.deepEqual(message?.resources, [{ key: "file_1", type: "file", name: "review.pptx" }]);
+});
+
 test("ignores unrelated event types", () => {
   assert.equal(
     normalizeLarkEvent({

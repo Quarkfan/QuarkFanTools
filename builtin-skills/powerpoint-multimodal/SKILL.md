@@ -10,14 +10,11 @@ Before analysis, confirm the runtime prompt says `当前模型多模态视觉能
 
 ## Required analysis workflow
 
-1. Copy the source into the current session workspace if needed.
-2. Extract OOXML and media:
-   `unzip -q <input.pptx> -d <extracted-dir>`.
-3. Generate a visual Quick Look preview:
-   `qlmanage -p -o <preview-dir> <input.pptx>`.
-4. Find every generated PDF/image/preview artifact and inspect it with `Read`.
-5. Correlate visual findings with slide XML, notes, charts, and embedded media.
-6. Report any slide that could not be visually inspected. Do not silently treat text extraction as equivalent.
+1. QuarkfanTools automatically extracts PPTX content and creates visual preview resources without requiring user-installed tools.
+2. Find every provided `content.txt`, PDF, image, or preview artifact and inspect it with `Read`.
+3. Do not ask the user to install Office, Python, Node, LibreOffice, or command-line utilities.
+4. Correlate visual findings with slide XML, notes, charts, and embedded media.
+5. Report any slide that could not be visually inspected. Do not silently treat text extraction as equivalent.
 
 ## Review criteria
 

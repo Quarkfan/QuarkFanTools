@@ -2,13 +2,14 @@ import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
 import { stateRoot, workspaceRoot } from "./paths.js";
-import type { StorageStats } from "./types.js";
+import type { StorageSession, StorageStats } from "./types.js";
 
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 
 interface SessionRecord {
   sessionId: string;
   updatedAt: string;
+  messageIds?: string[];
 }
 
 export async function storageStats(): Promise<StorageStats> {
@@ -16,22 +17,33 @@ export async function storageStats(): Promise<StorageStats> {
   let sessionCount = 0;
   let expiredSessionCount = 0;
   let totalBytes = 0;
+  const sessionEntries: StorageSession[] = [];
   const cutoff = Date.now() - SESSION_IDLE_MS;
   for (const botId of bots) {
     totalBytes += await directorySize(path.join(stateRoot(), "bots", botId, "messages"));
     totalBytes += await directorySize(path.join(stateRoot(), "bots", botId, "claude-home"));
     totalBytes += await fileSize(path.join(stateRoot(), "bots", botId, "sessions.json"));
     totalBytes += await directorySize(path.join(workspaceRoot(), "bots", botId));
-    for (const record of Object.values(await readSessions(botId))) {
+    for (const [key, record] of Object.entries(await readSessions(botId))) {
       sessionCount += 1;
-      if (Date.parse(record.updatedAt) < cutoff) expiredSessionCount += 1;
+      const expired = Date.parse(record.updatedAt) < cutoff;
+      if (expired) expiredSessionCount += 1;
+      sessionEntries.push({
+        id: sessionStorageId(botId, key),
+        botId,
+        conversationKey: key,
+        updatedAt: record.updatedAt,
+        bytes: await sessionSize(botId, key, record),
+        expired
+      });
     }
   }
   return {
     totalBytes,
     sessionCount,
     expiredSessionCount,
-    botCount: bots.length
+    botCount: bots.length,
+    sessions: sessionEntries.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
   };
 }
 
@@ -40,21 +52,44 @@ async function fileSize(target: string): Promise<number> {
 }
 
 export async function clearExpiredStorage(): Promise<number> {
-  const cutoff = Date.now() - SESSION_IDLE_MS;
+  const stats = await storageStats();
+  return clearSelectedSessionStorage(stats.sessions.filter((session) => session.expired).map((session) => session.id));
+}
+
+export async function clearSelectedSessionStorage(ids: string[]): Promise<number> {
+  const selected = new Set(ids);
   let removed = 0;
   for (const botId of await botIds()) {
     const sessions = await readSessions(botId);
     for (const [key, record] of Object.entries(sessions)) {
-      if (Date.parse(record.updatedAt) >= cutoff) continue;
-      await rm(path.join(workspaceRoot(), "bots", botId, "sessions", workspaceSessionId(key)), { recursive: true, force: true });
-      await removeMatching(path.join(stateRoot(), "bots", botId, "claude-home"), record.sessionId);
+      if (!selected.has(sessionStorageId(botId, key))) continue;
+      await removeSession(botId, key, record);
       delete sessions[key];
       removed += 1;
     }
     await writeSessions(botId, sessions);
-    await removeOldChildren(path.join(stateRoot(), "bots", botId, "messages"), cutoff);
   }
   return removed;
+}
+
+function sessionStorageId(botId: string, key: string): string {
+  return `${botId}:${workspaceSessionId(key)}`;
+}
+
+async function sessionSize(botId: string, key: string, record: SessionRecord): Promise<number> {
+  let total = await directorySize(path.join(workspaceRoot(), "bots", botId, "sessions", workspaceSessionId(key)));
+  for (const messageId of record.messageIds ?? []) {
+    total += await directorySize(path.join(stateRoot(), "bots", botId, "messages", messageId));
+  }
+  return total;
+}
+
+async function removeSession(botId: string, key: string, record: SessionRecord): Promise<void> {
+  await rm(path.join(workspaceRoot(), "bots", botId, "sessions", workspaceSessionId(key)), { recursive: true, force: true });
+  await removeMatching(path.join(stateRoot(), "bots", botId, "claude-home"), record.sessionId);
+  for (const messageId of record.messageIds ?? []) {
+    await rm(path.join(stateRoot(), "bots", botId, "messages", messageId), { recursive: true, force: true });
+  }
 }
 
 export async function clearAllSessionStorage(): Promise<void> {
@@ -104,15 +139,6 @@ async function directorySize(root: string): Promise<number> {
     else total += (await stat(target).catch(() => ({ size: 0 }))).size;
   }
   return total;
-}
-
-async function removeOldChildren(root: string, cutoff: number): Promise<void> {
-  for (const entry of await readdir(root, { withFileTypes: true }).catch(() => [])) {
-    if (!entry.isDirectory()) continue;
-    const target = path.join(root, entry.name);
-    const value = await stat(target).catch(() => null);
-    if (value && value.mtimeMs < cutoff) await rm(target, { recursive: true, force: true });
-  }
 }
 
 async function removeMatching(root: string, needle: string): Promise<void> {

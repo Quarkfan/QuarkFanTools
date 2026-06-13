@@ -1,5 +1,11 @@
 {
   "bots": [],
+  "skillMarket": {
+    "enabled": false,
+    "repositoryUrl": "",
+    "branch": "main",
+    "token": ""
+  },
   "model": {
     "providerId": "anthropic",
     "providerName": "Claude Compatible",

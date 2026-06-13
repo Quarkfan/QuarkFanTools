@@ -24,11 +24,19 @@ function parseContent(content: unknown): any {
 
 function extractResources(value: unknown, resources: Map<string, LarkMessageResource>): void {
   if (!value || typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  if (typeof record.file_key === "string" && record.file_key) {
+    resources.set(record.file_key, {
+      key: record.file_key,
+      type: "file",
+      name: typeof record.file_name === "string" ? record.file_name : undefined
+    });
+  }
   for (const [key, child] of Object.entries(value)) {
     if (typeof child === "string" && key === "image_key" && child) {
       resources.set(child, { key: child, type: "image" });
     } else if (typeof child === "string" && key === "file_key" && child) {
-      resources.set(child, { key: child, type: "file" });
+      if (!resources.has(child)) resources.set(child, { key: child, type: "file" });
     } else {
       extractResources(child, resources);
     }

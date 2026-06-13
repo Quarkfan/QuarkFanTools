@@ -5,10 +5,12 @@ import { loadConfig } from "./config.js";
 import { runClaude } from "./claude.js";
 import { addMessageReaction, downloadMessageResources, LarkEventStream, removeMessageReaction, replyToMessage } from "./lark-cli.js";
 import { Logger } from "./logger.js";
+import { preprocessOfficeResources } from "./office.js";
 import { discoverSkills } from "./skills.js";
 import { stateRoot } from "./paths.js";
 import { conversationKey } from "./conversation.js";
 import { SessionStore } from "./sessions.js";
+import { syncSkillMarket } from "./skill-market.js";
 import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
@@ -29,8 +31,15 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.logger.on("entry", (entry) => this.emit("log", entry));
   }
 
-  async initialize(): Promise<void> {
+  async initialize(syncMarket = true): Promise<void> {
     this.config = await loadConfig();
+    if (syncMarket) {
+      try {
+        await syncSkillMarket(this.config.skillMarket);
+      } catch (error) {
+        await this.logger.write("warn", "技能市场自动同步失败", String(error));
+      }
+    }
     this.skills = await discoverSkills();
     await Promise.all(this.config.bots.flatMap((bot) => [this.loadProcessed(bot.id), this.sessionStore.load(bot)]));
     this.emitSnapshot();
@@ -171,6 +180,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       let enrichedMessage = message;
       try {
         enrichedMessage = await downloadMessageResources(bot, message, resourcesDir);
+        enrichedMessage = await preprocessOfficeResources(enrichedMessage, resourcesDir, this.config.model.multimodalEnabled);
         if (enrichedMessage.resources.length > 0) {
           await this.logger.write("info", "已下载飞书消息资源", `${bot.name}: ${enrichedMessage.resources.length} 个`);
         }
@@ -178,7 +188,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         await this.logger.write("warn", "下载飞书消息资源失败，继续处理文本内容", `${bot.name}: ${String(error)}`);
       }
       const result = await runClaude(this.config, bot, enrichedMessage, botSkills, key, this.sessionStore.get(bot, key));
-      if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId);
+      if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId, message.messageId);
       await replyToMessage(bot, message.messageId, result.response);
       await this.logger.write("success", "消息处理并回复完成", `${bot.name}: ${result.response}`);
     } catch (error) {

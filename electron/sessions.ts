@@ -8,6 +8,7 @@ const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 interface SessionRecord {
   sessionId: string;
   updatedAt: string;
+  messageIds?: string[];
 }
 
 export class SessionStore {
@@ -30,9 +31,14 @@ export class SessionStore {
     return undefined;
   }
 
-  async set(bot: BotConfig, key: string, sessionId: string): Promise<void> {
+  async set(bot: BotConfig, key: string, sessionId: string, messageId: string): Promise<void> {
     const records = this.records.get(bot.id) ?? new Map<string, SessionRecord>();
-    records.set(key, { sessionId, updatedAt: new Date().toISOString() });
+    const previous = records.get(key);
+    records.set(key, {
+      sessionId,
+      updatedAt: new Date().toISOString(),
+      messageIds: [...new Set([...(previous?.messageIds ?? []), messageId])].slice(-100)
+    });
     this.records.set(bot.id, records);
     await this.save(bot);
   }

@@ -5,7 +5,8 @@ import { saveConfig } from "./config.js";
 import { migrateLegacyData } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
 import { importSkillFolder } from "./skills.js";
-import { clearAllSessionStorage, clearExpiredStorage, storageStats } from "./storage.js";
+import { syncSkillMarket } from "./skill-market.js";
+import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageStats } from "./storage.js";
 import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
@@ -63,14 +64,21 @@ ipcMain.handle("storage:stats", () => storageStats());
 ipcMain.handle("storage:clear-expired", async () => {
   await runtime.stop();
   const removed = await clearExpiredStorage();
-  await runtime.initialize();
+  await runtime.initialize(false);
   await runtime.logger.write("success", "已清理过期会话存储", `${removed} 个会话`);
+  return storageStats();
+});
+ipcMain.handle("storage:clear-selected", async (_event, ids: string[]) => {
+  await runtime.stop();
+  const removed = await clearSelectedSessionStorage(ids);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "已清理所选会话存储", `${removed} 个会话`);
   return storageStats();
 });
 ipcMain.handle("storage:clear-all", async () => {
   await runtime.stop();
   await clearAllSessionStorage();
-  await runtime.initialize();
+  await runtime.initialize(false);
   await runtime.logger.write("success", "已清理全部会话存储", "机器人配置、飞书授权和用户 Skills 已保留");
   return storageStats();
 });
@@ -95,7 +103,15 @@ ipcMain.handle("skills:import", async () => {
   });
   if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
   await importSkillFolder(result.filePaths[0]);
-  await runtime.initialize();
+  await runtime.initialize(false);
+  return runtime.snapshot();
+});
+ipcMain.handle("skills:market-sync", async () => {
+  const config = runtime.snapshot().config;
+  await runtime.logger.write("info", "正在同步技能市场", config.skillMarket.repositoryUrl);
+  await syncSkillMarket(config.skillMarket);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "技能市场同步完成", `${runtime.snapshot().skills.length} 个可用 Skill`);
   return runtime.snapshot();
 });
 ipcMain.handle("lark:login-user", async (_event, botId: string) => {

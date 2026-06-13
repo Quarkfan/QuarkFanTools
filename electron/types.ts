@@ -17,6 +17,12 @@ export interface BotConfig {
 
 export interface AppConfig {
   bots: BotConfig[];
+  skillMarket: {
+    enabled: boolean;
+    repositoryUrl: string;
+    branch: string;
+    token: string;
+  };
   model: {
     providerId: string;
     providerName: string;
@@ -74,6 +80,16 @@ export interface StorageStats {
   sessionCount: number;
   expiredSessionCount: number;
   botCount: number;
+  sessions: StorageSession[];
+}
+
+export interface StorageSession {
+  id: string;
+  botId: string;
+  conversationKey: string;
+  updatedAt: string;
+  bytes: number;
+  expired: boolean;
 }
 
 export interface LogEntry {

@@ -1,6 +1,6 @@
 import { access, cp, mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { builtinSkillsRoot, skillsRoot } from "./paths.js";
+import { builtinSkillsRoot, marketSkillsRoot, skillsRoot } from "./paths.js";
 import type { SkillSummary } from "./types.js";
 
 function frontmatterValue(content: string, key: string): string {
@@ -13,15 +13,13 @@ export async function discoverSkills(): Promise<SkillSummary[]> {
   const names = new Set<string>();
   const userRoot = skillsRoot();
   await mkdir(userRoot, { recursive: true });
-  for (const root of [userRoot, builtinSkillsRoot()]) {
-    const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillDir = path.join(root, entry.name);
+  for (const root of [userRoot, marketSkillsRoot(), builtinSkillsRoot()]) {
+    for (const skillDir of await skillDirectories(root)) {
+      const entryName = path.basename(skillDir);
       const skillPath = path.join(skillDir, "SKILL.md");
       try {
         const content = await readFile(skillPath, "utf8");
-        const name = frontmatterValue(content, "name") || entry.name;
+        const name = frontmatterValue(content, "name") || entryName;
         if (names.has(name)) continue;
         names.add(name);
         skills.push({
@@ -36,6 +34,39 @@ export async function discoverSkills(): Promise<SkillSummary[]> {
     }
   }
   return skills;
+}
+
+async function skillDirectories(root: string): Promise<string[]> {
+  const result: string[] = [];
+  try {
+    await access(path.join(root, "SKILL.md"));
+    result.push(root);
+  } catch {
+    // The root may be a marketplace containing multiple skills.
+  }
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === ".git") continue;
+    const first = path.join(root, entry.name);
+    try {
+      await access(path.join(first, "SKILL.md"));
+      result.push(first);
+      continue;
+    } catch {
+      // Market repositories commonly group skills one directory deeper.
+    }
+    for (const child of await readdir(first, { withFileTypes: true }).catch(() => [])) {
+      if (!child.isDirectory()) continue;
+      try {
+        const target = path.join(first, child.name);
+        await access(path.join(target, "SKILL.md"));
+        result.push(target);
+      } catch {
+        // Ignore non-skill directories.
+      }
+    }
+  }
+  return result;
 }
 
 export async function importSkillFolder(source: string): Promise<string> {

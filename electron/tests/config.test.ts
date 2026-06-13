@@ -5,6 +5,12 @@ import type { AppConfig } from "../types.js";
 
 const base: AppConfig = {
   bots: [],
+  skillMarket: {
+    enabled: false,
+    repositoryUrl: "",
+    branch: "main",
+    token: ""
+  },
   model: {
     providerId: "anthropic",
     providerName: "Claude Compatible",

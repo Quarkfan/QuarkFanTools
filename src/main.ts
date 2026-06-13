@@ -80,6 +80,17 @@ function renderStorage(): string {
       <article><span>机器人目录</span><strong>${storage.botCount}</strong></article>
     </section>
     <section class="storage-grid">
+      <div class="panel storage-card session-selector">
+        <div class="panel-title"><span>SELECT SESSION CLEANUP</span><small>${storage.sessions.length} sessions</small></div>
+        <div class="session-list">
+          ${storage.sessions.map((session) => `
+            <label class="check session-row">
+              <input type="checkbox" data-session-id="${escapeHtml(session.id)}" />
+              <span><strong>${escapeHtml(snapshot.config.bots.find((bot) => bot.id === session.botId)?.name || session.botId)}</strong><small>${escapeHtml(session.conversationKey)} / ${new Date(session.updatedAt).toLocaleString()} / ${formatBytes(session.bytes)}${session.expired ? " / 已过期" : ""}</small></span>
+            </label>`).join("") || `<div class="empty">当前没有连续会话存储。</div>`}
+        </div>
+        <button class="ghost" id="clear-selected" ${storage.sessions.length === 0 ? "disabled" : ""}>清理所选会话</button>
+      </div>
       <div class="panel storage-card">
         <div class="panel-title"><span>EXPIRED SESSION CLEANUP</span><small>24 小时无活动</small></div>
         <p>清理已过期会话的独立 workspace、消息附件和 Claude 会话记录。不会删除机器人配置、飞书授权或用户导入的 Skills。</p>
@@ -175,6 +186,14 @@ function renderConfig(): string {
           <label><span>多模态视觉能力</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
         </div>
         <div class="panel config-panel">
+          <div class="panel-title"><span>SKILL MARKET</span><small>Built-in Git client / HTTPS</small></div>
+          <label><span>启用技能市场</span><select name="marketEnabled"><option value="true" ${c.skillMarket.enabled ? "selected" : ""}>启用</option><option value="false" ${!c.skillMarket.enabled ? "selected" : ""}>停用</option></select></label>
+          ${field("HTTPS Git 仓库", "marketRepositoryUrl", c.skillMarket.repositoryUrl, "url", "应用内置 Git 客户端，不依赖本机 Git；仅支持 HTTPS URL")}
+          ${field("分支", "marketBranch", c.skillMarket.branch)}
+          ${field("访问 Token（可选）", "marketToken", c.skillMarket.token, "password", "私有仓库使用；仅保存在本机配置")}
+          <div class="form-actions"><button type="button" class="ghost" id="sync-market" ${c.skillMarket.enabled && c.skillMarket.repositoryUrl ? "" : "disabled"}>立即同步技能市场</button></div>
+        </div>
+        <div class="panel config-panel">
           <div class="panel-title"><span>BOT ISOLATION</span><small>每个机器人独立凭据、监听和 Skill 权限</small></div>
           <div class="empty">启用的机器人会各自建立独立飞书 CLI 与 Claude 状态目录。未勾选的 Skill 不会暴露给该机器人。</div>
           <div class="form-actions"><button type="button" class="ghost" id="add-bot">新增机器人</button></div>
@@ -205,8 +224,9 @@ function newBot(): BotConfig {
 
 function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
-    button.onclick = () => {
+    button.onclick = async () => {
       activeView = button.dataset.view as typeof activeView;
+      if (activeView === "storage") storage = await window.quarkfanTools.storageStats();
       render();
     };
   });
@@ -216,6 +236,22 @@ function bindEvents(): void {
   };
   document.querySelector<HTMLButtonElement>("#clear-expired")?.addEventListener("click", async () => {
     storage = await window.quarkfanTools.clearExpiredStorage();
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#clear-selected")?.addEventListener("click", async () => {
+    const ids = [...document.querySelectorAll<HTMLInputElement>("[data-session-id]:checked")].map((input) => String(input.dataset.sessionId));
+    if (ids.length === 0) return;
+    storage = await window.quarkfanTools.clearSelectedStorage(ids);
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#sync-market")?.addEventListener("click", async () => {
+    const form = new FormData(document.querySelector<HTMLFormElement>("#config-form")!);
+    const next = structuredClone(snapshot.config);
+    next.skillMarket.enabled = String(form.get("marketEnabled") ?? "false") === "true";
+    next.skillMarket.repositoryUrl = String(form.get("marketRepositoryUrl") ?? "");
+    next.skillMarket.branch = String(form.get("marketBranch") ?? "main");
+    next.skillMarket.token = String(form.get("marketToken") ?? "");
+    snapshot = await window.quarkfanTools.saveConfig(next);
     render();
   });
   document.querySelector<HTMLButtonElement>("#clear-all-storage")?.addEventListener("click", async () => {
@@ -253,6 +289,10 @@ function bindEvents(): void {
     next.model.model = String(form.get("model") ?? "");
     next.model.apiKey = String(form.get("apiKey") ?? "");
     next.model.multimodalEnabled = String(form.get("multimodalEnabled") ?? "true") === "true";
+    next.skillMarket.enabled = String(form.get("marketEnabled") ?? "false") === "true";
+    next.skillMarket.repositoryUrl = String(form.get("marketRepositoryUrl") ?? "");
+    next.skillMarket.branch = String(form.get("marketBranch") ?? "main");
+    next.skillMarket.token = String(form.get("marketToken") ?? "");
     document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-bot][data-field]").forEach((input) => {
       const bot = next.bots.find((item) => item.id === input.dataset.bot);
       if (!bot) return;
