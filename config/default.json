@@ -1,0 +1,24 @@
+{
+  "lark": {
+    "cliPath": "",
+    "profile": "",
+    "appId": "",
+    "appSecret": "",
+    "receiveIdentity": "bot",
+    "replyIdentity": "bot",
+    "eventTypes": ["im.message.receive_v1"]
+  },
+  "model": {
+    "providerId": "anthropic",
+    "providerName": "Claude Compatible",
+    "baseUrl": "",
+    "model": "",
+    "apiKeyEnv": "ANTHROPIC_AUTH_TOKEN",
+    "apiKey": ""
+  },
+  "runtime": {
+    "sandbox": "workspace-write",
+    "approvalPolicy": "never",
+    "maxConcurrentTasks": 2
+  }
+}
