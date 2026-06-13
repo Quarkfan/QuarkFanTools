@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile } from "node:fs/promises";
+import { access, cp, mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { skillsRoot } from "./paths.js";
 import type { SkillSummary } from "./types.js";
@@ -30,4 +30,14 @@ export async function discoverSkills(): Promise<SkillSummary[]> {
     }
   }
   return skills;
+}
+
+export async function importSkillFolder(source: string): Promise<string> {
+  await access(path.join(source, "SKILL.md"));
+  const root = skillsRoot();
+  await mkdir(root, { recursive: true });
+  const target = path.join(root, path.basename(source));
+  if (path.resolve(source) === path.resolve(target)) return target;
+  await cp(source, target, { recursive: true, force: true });
+  return target;
 }

@@ -1,22 +1,13 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { defaultConfigPath, localConfigPath } from "./paths.js";
+import { mergeConfig, type LegacyConfig } from "./config-merge.js";
 import type { AppConfig } from "./types.js";
-
-function mergeConfig(base: AppConfig, override: Partial<AppConfig>): AppConfig {
-  return {
-    ...base,
-    ...override,
-    lark: { ...base.lark, ...override.lark },
-    model: { ...base.model, ...override.model },
-    runtime: { ...base.runtime, ...override.runtime }
-  };
-}
 
 export async function loadConfig(): Promise<AppConfig> {
   const base = JSON.parse(await readFile(defaultConfigPath(), "utf8")) as AppConfig;
   try {
-    const local = JSON.parse(await readFile(localConfigPath(), "utf8")) as Partial<AppConfig>;
+    const local = JSON.parse(await readFile(localConfigPath(), "utf8")) as LegacyConfig;
     return mergeConfig(base, local);
   } catch {
     return base;

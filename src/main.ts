@@ -1,5 +1,5 @@
 import "./style.css";
-import type { AppConfig, LogEntry, RuntimeSnapshot } from "../electron/types";
+import type { AppConfig, BotConfig, LogEntry, RuntimeSnapshot } from "../electron/types";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let snapshot: RuntimeSnapshot;
@@ -15,7 +15,12 @@ function escapeHtml(value: unknown): string {
 }
 
 function configured(config: AppConfig): boolean {
-  return Boolean(config.lark.appId && config.lark.appSecret && config.model.model && config.model.apiKey);
+  return Boolean(
+    config.model.baseUrl &&
+    config.model.model &&
+    config.model.apiKey &&
+    config.bots.some((bot) => bot.enabled && bot.appId && bot.appSecret)
+  );
 }
 
 function statusDot(ok: boolean): string {
@@ -41,16 +46,16 @@ function render(): void {
       <header>
         <div>
           <p class="eyebrow">MACOS / FEISHU / CLAUDE</p>
-          <h1>${activeView === "console" ? "运行控制台" : "连接与模型配置"}</h1>
+          <h1>${activeView === "console" ? "运行控制台" : "机器人与模型配置"}</h1>
         </div>
         <div class="actions">
-          <button class="ghost" id="open-skills">打开 Skills</button>
+          <button class="ghost" id="import-skill">导入 Skill 文件夹</button>
           ${snapshot.running
             ? `<button class="danger" id="stop">停止监听</button>`
             : `<button class="primary" id="start" ${isConfigured ? "" : "disabled"}>启动监听</button>`}
         </div>
       </header>
-      ${!isConfigured ? `<div class="notice">首次运行需要填写飞书 App ID / Secret 和模型连接信息。保存后即可启动。</div>` : ""}
+      ${!isConfigured ? `<div class="notice">至少配置一个启用的飞书机器人，并填写 Claude 兼容模型连接信息。</div>` : ""}
       ${activeView === "console" ? renderConsole() : renderConfig()}
     </main>
   `;
@@ -60,20 +65,20 @@ function render(): void {
 function renderConsole(): string {
   return `
     <section class="metrics">
-      <article><span>飞书连接</span><strong>${statusDot(snapshot.larkConnected)}${snapshot.larkConnected ? "在线" : "离线"}</strong></article>
+      <article><span>在线机器人</span><strong>${statusDot(snapshot.connectedBotIds.length > 0)}${snapshot.connectedBotIds.length}/${snapshot.config.bots.filter((bot) => bot.enabled).length}</strong></article>
       <article><span>可用 Skills</span><strong>${snapshot.skills.length}</strong></article>
       <article><span>运行中任务</span><strong>${snapshot.activeTasks}</strong></article>
-      <article><span>接收身份</span><strong>${escapeHtml(snapshot.config.lark.receiveIdentity).toUpperCase()}</strong></article>
+      <article><span>模型</span><strong>${escapeHtml(snapshot.config.model.model || "未配置")}</strong></article>
     </section>
     <section class="workspace">
       <div class="panel skill-panel">
-        <div class="panel-title"><span>SKILL REGISTRY</span><small>${snapshot.skills.length} loaded</small></div>
+        <div class="panel-title"><span>BOT REGISTRY</span><small>${snapshot.config.bots.length} configured</small></div>
         <div class="skill-list">
-          ${snapshot.skills.map((skill) => `
+          ${snapshot.config.bots.map((bot) => `
             <div class="skill">
-              <div class="skill-glyph">${escapeHtml(skill.name.slice(0, 2).toUpperCase())}</div>
-              <div><strong>${escapeHtml(skill.name)}</strong><p>${escapeHtml(skill.description || "No description")}</p></div>
-            </div>`).join("") || `<div class="empty">将 Skill 文件夹放入 skills/ 后重启应用。</div>`}
+              <div class="skill-glyph">${escapeHtml(bot.name.slice(0, 2).toUpperCase())}</div>
+              <div><strong>${statusDot(snapshot.connectedBotIds.includes(bot.id))}${escapeHtml(bot.name)}</strong><p>${bot.skillNames.length} 个授权 Skill / ${bot.enabled ? "启用" : "停用"}</p></div>
+            </div>`).join("") || `<div class="empty">前往配置页添加机器人。</div>`}
         </div>
       </div>
       <div class="panel log-panel">
@@ -94,32 +99,75 @@ function field(label: string, name: string, value: string, type = "text", note =
   return `<label><span>${label}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" />${note ? `<small>${note}</small>` : ""}</label>`;
 }
 
+function botField(bot: BotConfig, label: string, fieldName: keyof BotConfig, type = "text"): string {
+  return `<label><span>${label}</span><input data-bot="${bot.id}" data-field="${fieldName}" type="${type}" value="${escapeHtml(bot[fieldName])}" /></label>`;
+}
+
+function renderBot(bot: BotConfig): string {
+  return `
+    <div class="panel config-panel bot-card">
+      <div class="panel-title">
+        <span>${escapeHtml(bot.name || "未命名机器人")}</span>
+        <div><button type="button" class="ghost oauth-bot" data-id="${bot.id}">用户态 OAuth</button><button type="button" class="danger remove-bot" data-id="${bot.id}">删除</button></div>
+      </div>
+      <div class="field-row">
+        ${botField(bot, "机器人名称", "name")}
+        <label><span>启用</span><select data-bot="${bot.id}" data-field="enabled"><option value="true" ${bot.enabled ? "selected" : ""}>启用</option><option value="false" ${!bot.enabled ? "selected" : ""}>停用</option></select></label>
+      </div>
+      ${botField(bot, "App ID", "appId")}
+      ${botField(bot, "App Secret", "appSecret", "password")}
+      <div class="field-row">
+        <label><span>接收身份</span><select data-bot="${bot.id}" data-field="receiveIdentity"><option value="bot" ${bot.receiveIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.receiveIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
+        <label><span>回复身份</span><select data-bot="${bot.id}" data-field="replyIdentity"><option value="bot" ${bot.replyIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.replyIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
+      </div>
+      ${botField(bot, "查询中提示", "pendingReply")}
+      <div class="skill-access">
+        <span>允许访问的 Skills</span>
+        ${snapshot.skills.map((skill) => `<label class="check"><input type="checkbox" data-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes("*") || bot.skillNames.includes(skill.name) ? "checked" : ""}/>${escapeHtml(skill.name)}</label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
+      </div>
+    </div>
+  `;
+}
+
 function renderConfig(): string {
   const c = snapshot.config;
   return `
     <form id="config-form">
       <section class="config-grid">
         <div class="panel config-panel">
-          <div class="panel-title"><span>FEISHU CONNECTION</span><small>内置 lark-cli</small></div>
-          ${field("App ID", "appId", c.lark.appId, "text", "飞书开放平台应用 App ID")}
-          ${field("App Secret", "appSecret", c.lark.appSecret, "password", "仅保存在本机配置目录")}
-          <div class="field-row">
-            <label><span>接收身份</span><select name="receiveIdentity"><option value="bot" ${c.lark.receiveIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${c.lark.receiveIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
-            <label><span>回复身份</span><select name="replyIdentity"><option value="bot" ${c.lark.replyIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${c.lark.replyIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
-          </div>
-        </div>
-        <div class="panel config-panel">
           <div class="panel-title"><span>MODEL PROVIDER</span><small>Claude Messages API compatible</small></div>
           ${field("Provider 名称", "providerName", c.model.providerName)}
           ${field("Claude Base URL", "baseUrl", c.model.baseUrl, "url", "服务商提供的 Claude / Anthropic 兼容地址")}
           ${field("模型", "model", c.model.model)}
-          ${field("API Key", "apiKey", c.model.apiKey, "password", "第三方模型必须兼容 Claude Messages API 与工具调用")}
+          ${field("API Key", "apiKey", c.model.apiKey, "password")}
+        </div>
+        <div class="panel config-panel">
+          <div class="panel-title"><span>BOT ISOLATION</span><small>每个机器人独立凭据、监听和 Skill 权限</small></div>
+          <div class="empty">启用的机器人会各自建立独立飞书 CLI 与 Claude 状态目录。未勾选的 Skill 不会暴露给该机器人。</div>
+          <div class="form-actions"><button type="button" class="ghost" id="add-bot">新增机器人</button></div>
         </div>
       </section>
+      <section class="bot-grid">${c.bots.map(renderBot).join("")}</section>
       <div class="form-actions"><button type="submit" class="primary">保存配置</button></div>
-      <div class="form-actions"><button type="button" class="ghost" id="login-user">飞书用户态 OAuth 登录</button></div>
     </form>
   `;
+}
+
+function newBot(): BotConfig {
+  return {
+    id: crypto.randomUUID(),
+    name: `机器人 ${snapshot.config.bots.length + 1}`,
+    enabled: true,
+    cliPath: "",
+    profile: "",
+    appId: "",
+    appSecret: "",
+    receiveIdentity: "bot",
+    replyIdentity: "bot",
+    eventTypes: ["im.message.receive_v1"],
+    skillNames: [],
+    pendingReply: "正在查询，请稍候…"
+  };
 }
 
 function bindEvents(): void {
@@ -129,7 +177,10 @@ function bindEvents(): void {
       render();
     };
   });
-  document.querySelector<HTMLButtonElement>("#open-skills")!.onclick = () => void window.quarkfanTools.openSkills();
+  document.querySelector<HTMLButtonElement>("#import-skill")!.onclick = async () => {
+    snapshot = await window.quarkfanTools.importSkill();
+    render();
+  };
   document.querySelector<HTMLButtonElement>("#start")?.addEventListener("click", async () => {
     snapshot = await window.quarkfanTools.start();
     render();
@@ -138,26 +189,39 @@ function bindEvents(): void {
     snapshot = await window.quarkfanTools.stop();
     render();
   });
+  document.querySelector<HTMLButtonElement>("#add-bot")?.addEventListener("click", () => {
+    snapshot.config.bots.push(newBot());
+    render();
+  });
+  document.querySelectorAll<HTMLButtonElement>(".remove-bot").forEach((button) => {
+    button.onclick = () => {
+      snapshot.config.bots = snapshot.config.bots.filter((bot) => bot.id !== button.dataset.id);
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".oauth-bot").forEach((button) => {
+    button.onclick = () => void window.quarkfanTools.loginLarkUser(String(button.dataset.id));
+  });
   document.querySelector<HTMLFormElement>("#config-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const next: AppConfig = structuredClone(snapshot.config);
-    next.lark.appId = String(data.get("appId") ?? "");
-    next.lark.appSecret = String(data.get("appSecret") ?? "");
-    next.lark.receiveIdentity = String(data.get("receiveIdentity")) as "user" | "bot";
-    next.lark.replyIdentity = String(data.get("replyIdentity")) as "user" | "bot";
-    next.model.providerName = String(data.get("providerName") ?? "");
-    next.model.baseUrl = String(data.get("baseUrl") ?? "");
-    next.model.model = String(data.get("model") ?? "");
-    next.model.apiKey = String(data.get("apiKey") ?? "");
-    next.model.providerId = "anthropic";
-    next.model.apiKeyEnv = "ANTHROPIC_AUTH_TOKEN";
+    const form = new FormData(event.currentTarget);
+    const next = structuredClone(snapshot.config);
+    next.model.providerName = String(form.get("providerName") ?? "");
+    next.model.baseUrl = String(form.get("baseUrl") ?? "");
+    next.model.model = String(form.get("model") ?? "");
+    next.model.apiKey = String(form.get("apiKey") ?? "");
+    document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-bot][data-field]").forEach((input) => {
+      const bot = next.bots.find((item) => item.id === input.dataset.bot);
+      if (!bot) return;
+      const fieldName = input.dataset.field as keyof BotConfig;
+      (bot as unknown as Record<string, unknown>)[fieldName] = fieldName === "enabled" ? input.value === "true" : input.value;
+    });
+    next.bots.forEach((bot) => {
+      bot.skillNames = [...document.querySelectorAll<HTMLInputElement>(`[data-bot-skill="${bot.id}"]:checked`)].map((input) => input.value);
+    });
     snapshot = await window.quarkfanTools.saveConfig(next);
     activeView = "console";
     render();
-  });
-  document.querySelector<HTMLButtonElement>("#login-user")?.addEventListener("click", async () => {
-    await window.quarkfanTools.loginLarkUser();
   });
 }
 

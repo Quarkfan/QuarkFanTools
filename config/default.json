@@ -1,13 +1,5 @@
 {
-  "lark": {
-    "cliPath": "",
-    "profile": "",
-    "appId": "",
-    "appSecret": "",
-    "receiveIdentity": "bot",
-    "replyIdentity": "bot",
-    "eventTypes": ["im.message.receive_v1"]
-  },
+  "bots": [],
   "model": {
     "providerId": "anthropic",
     "providerName": "Claude Compatible",

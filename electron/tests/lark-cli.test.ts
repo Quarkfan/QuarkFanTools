@@ -6,7 +6,8 @@ test("normalizes a Feishu message event", () => {
   const message = normalizeLarkEvent({
     header: {
       event_id: "evt_1",
-      event_type: "im.message.receive_v1"
+      event_type: "im.message.receive_v1",
+      create_time: "1781330000000"
     },
     event: {
       sender: {
@@ -25,6 +26,8 @@ test("normalizes a Feishu message event", () => {
   assert.equal(message?.messageId, "om_1");
   assert.equal(message?.senderId, "ou_1");
   assert.equal(message?.text, "帮我查一下加盟费用");
+  assert.ok(message?.receivedAt);
+  assert.equal(message?.createdAt, "1781330000000");
 });
 
 test("ignores unrelated event types", () => {

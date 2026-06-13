@@ -58,17 +58,24 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .empty { padding: 35px 18px; color: #56655d; font-size: 12px; text-align: center; }
 
 .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.bot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
 .config-panel { padding-bottom: 17px; }
 .config-panel .panel-title { margin-bottom: 17px; }
+.bot-card .panel-title > div { display: flex; gap: 6px; }
+.bot-card .panel-title button { padding: 5px 8px; font-size: 9px; }
 label { display: grid; gap: 7px; padding: 8px 17px; color: #8ea097; font-size: 11px; }
 input, select { width: 100%; border: 1px solid #304039; border-radius: 3px; padding: 10px; outline: none; color: #dce6e1; background: #0c1210; }
 input:focus, select:focus { border-color: #77f2a1; box-shadow: 0 0 0 2px rgba(119,242,161,.08); }
 label small { color: #536159; line-height: 1.5; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; }
 .form-actions { justify-content: flex-end; margin-top: 18px; }
+.skill-access { margin: 10px 17px 0; padding: 12px; border: 1px solid #27332d; color: #8ea097; font-size: 11px; }
+.skill-access > span { display: block; margin-bottom: 8px; }
+.skill-access .check { display: flex; align-items: center; gap: 8px; padding: 5px 0; color: #c8d4ce; }
+.skill-access .check input { width: auto; }
 
 @media (max-width: 1100px) {
   main { padding-left: 28px; padding-right: 28px; }
-  .workspace, .config-grid { grid-template-columns: 1fr; }
+  .workspace, .config-grid, .bot-grid { grid-template-columns: 1fr; }
   .skill-list, .logs { max-height: 300px; }
 }

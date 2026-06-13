@@ -27,6 +27,8 @@ export function normalizeLarkEvent(payload: any): LarkMessage | null {
     chatType: String(message?.chat_type ?? message?.chatType ?? ""),
     senderId: String(sender?.open_id ?? sender?.user_id ?? sender?.union_id ?? ""),
     text,
+    createdAt: payload?.header?.create_time ? String(payload.header.create_time) : undefined,
+    receivedAt: new Date().toISOString(),
     raw: payload
   };
 }

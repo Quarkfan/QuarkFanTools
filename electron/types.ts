@@ -1,15 +1,22 @@
 export type LarkIdentity = "user" | "bot";
 
+export interface BotConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  cliPath: string;
+  profile: string;
+  appId: string;
+  appSecret: string;
+  receiveIdentity: LarkIdentity;
+  replyIdentity: LarkIdentity;
+  eventTypes: string[];
+  skillNames: string[];
+  pendingReply: string;
+}
+
 export interface AppConfig {
-  lark: {
-    cliPath: string;
-    profile: string;
-    appId: string;
-    appSecret: string;
-    receiveIdentity: LarkIdentity;
-    replyIdentity: LarkIdentity;
-    eventTypes: string[];
-  };
+  bots: BotConfig[];
   model: {
     providerId: string;
     providerName: string;
@@ -39,12 +46,14 @@ export interface LarkMessage {
   chatType: string;
   senderId: string;
   text: string;
+  createdAt?: string;
+  receivedAt: string;
   raw: unknown;
 }
 
 export interface RuntimeSnapshot {
   running: boolean;
-  larkConnected: boolean;
+  connectedBotIds: string[];
   activeTasks: number;
   skills: SkillSummary[];
   config: AppConfig;

@@ -6,8 +6,8 @@ contextBridge.exposeInMainWorld("quarkfanTools", {
   start: () => ipcRenderer.invoke("runtime:start"),
   stop: () => ipcRenderer.invoke("runtime:stop"),
   saveConfig: (config) => ipcRenderer.invoke("config:save", config),
-  openSkills: () => ipcRenderer.invoke("skills:open"),
-  loginLarkUser: () => ipcRenderer.invoke("lark:login-user"),
+  importSkill: () => ipcRenderer.invoke("skills:import"),
+  loginLarkUser: (botId) => ipcRenderer.invoke("lark:login-user", botId),
   onSnapshot: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on("runtime:snapshot", listener);

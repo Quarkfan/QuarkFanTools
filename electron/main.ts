@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { QuarkfanToolsRuntime } from "./runtime.js";
 import { saveConfig } from "./config.js";
-import { migrateLegacyData, skillsRoot } from "./paths.js";
+import { migrateLegacyData } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
+import { importSkillFolder } from "./skills.js";
 import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
@@ -71,12 +72,23 @@ ipcMain.handle("config:save", async (_event, config: AppConfig) => {
   await runtime.initialize();
   return runtime.snapshot();
 });
-ipcMain.handle("skills:open", () => shell.openPath(skillsRoot()));
-ipcMain.handle("lark:login-user", async () => {
+ipcMain.handle("skills:import", async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: "选择包含 SKILL.md 的 Skill 文件夹",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
+  await importSkillFolder(result.filePaths[0]);
+  await runtime.initialize();
+  return runtime.snapshot();
+});
+ipcMain.handle("lark:login-user", async (_event, botId: string) => {
   try {
-    await runtime.logger.write("info", "正在打开飞书用户态授权页面");
-    const result = await loginLarkUser(runtime.snapshot().config);
-    await runtime.logger.write("success", "飞书用户态授权完成", result);
+    const bot = runtime.snapshot().config.bots.find((item) => item.id === botId);
+    if (!bot) throw new Error("机器人不存在");
+    await runtime.logger.write("info", "正在打开飞书用户态授权页面", bot.name);
+    const result = await loginLarkUser(bot);
+    await runtime.logger.write("success", "飞书用户态授权完成", `${bot.name}: ${result}`);
   } catch (error) {
     await runtime.logger.write("error", "飞书用户态授权失败", String(error));
     throw error;

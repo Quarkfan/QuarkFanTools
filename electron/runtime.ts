@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { runClaude } from "./claude.js";
@@ -7,34 +7,28 @@ import { LarkEventStream, replyToMessage } from "./lark-cli.js";
 import { Logger } from "./logger.js";
 import { discoverSkills } from "./skills.js";
 import { stateRoot } from "./paths.js";
-import type { AppConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
+import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
   readonly logger = new Logger();
-  private stream = new LarkEventStream();
+  private streams = new Map<string, LarkEventStream>();
+  private connectedBotIds = new Set<string>();
+  private processed = new Map<string, Set<string>>();
+  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private running = false;
-  private connected = false;
   private activeTasks = 0;
   private config!: AppConfig;
   private skills: SkillSummary[] = [];
-  private processed = new Set<string>();
 
   constructor() {
     super();
-    this.stream.on("message", (message: LarkMessage) => void this.handleMessage(message));
-    this.stream.on("stderr", (text: string) => void this.logger.write("warn", "飞书连接输出", text));
-    this.stream.on("exit", ({ code, signal }) => {
-      this.connected = false;
-      this.emitSnapshot();
-      if (this.running) void this.logger.write("error", "飞书事件订阅已退出", `code=${code} signal=${signal}`);
-    });
     this.logger.on("entry", (entry) => this.emit("log", entry));
   }
 
   async initialize(): Promise<void> {
     this.config = await loadConfig();
     this.skills = await discoverSkills();
-    await this.loadProcessed();
+    await Promise.all(this.config.bots.map((bot) => this.loadProcessed(bot.id)));
     this.emitSnapshot();
   }
 
@@ -42,25 +36,33 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (this.running) return;
     this.config = await loadConfig();
     this.skills = await discoverSkills();
+    const bots = this.config.bots.filter((bot) => bot.enabled && bot.appId && bot.appSecret);
     this.running = true;
-    await this.logger.write("info", "正在启动 QuarkfanTools", `${this.skills.length} 个 Skill`);
-    try {
-      await this.stream.start(this.config);
-      this.connected = true;
-      await this.logger.write("success", "飞书事件订阅已启动", `身份：${this.config.lark.receiveIdentity}`);
-    } catch (error) {
-      this.running = false;
-      await this.logger.write("error", "启动失败", String(error));
-      throw error;
-    } finally {
-      this.emitSnapshot();
+    await this.logger.write("info", "正在启动 QuarkfanTools", `${bots.length} 个机器人，${this.skills.length} 个 Skill`);
+
+    for (const bot of bots) {
+      const stream = this.createStream(bot);
+      this.streams.set(bot.id, stream);
+      try {
+        await this.loadProcessed(bot.id);
+        await stream.start(bot);
+        await this.logger.write("info", "机器人事件订阅正在连接", `${bot.name} / ${bot.receiveIdentity}`);
+      } catch (error) {
+        this.streams.delete(bot.id);
+        await this.logger.write("error", "机器人启动失败", `${bot.name}: ${String(error)}`);
+      }
     }
+    if (this.streams.size === 0) this.running = false;
+    this.emitSnapshot();
   }
 
   async stop(): Promise<void> {
     this.running = false;
-    this.connected = false;
-    await this.stream.stop();
+    await Promise.all([...this.streams.values()].map((stream) => stream.stop()));
+    this.streams.clear();
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.reconnectTimers.clear();
+    this.connectedBotIds.clear();
     await this.logger.write("info", "QuarkfanTools 已停止");
     this.emitSnapshot();
   }
@@ -68,47 +70,116 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   snapshot(): RuntimeSnapshot {
     return {
       running: this.running,
-      larkConnected: this.connected,
+      connectedBotIds: [...this.connectedBotIds],
       activeTasks: this.activeTasks,
       skills: this.skills,
       config: this.config
     };
   }
 
+  private createStream(bot: BotConfig): LarkEventStream {
+    const stream = new LarkEventStream();
+    stream.on("message", (message: LarkMessage) => void this.handleMessage(bot, message));
+    stream.on("connected", () => {
+      this.connectedBotIds.add(bot.id);
+      void this.logger.write("success", "机器人事件订阅已连接", bot.name);
+      this.emitSnapshot();
+    });
+    stream.on("stderr", (text: string) => void this.logger.write("warn", "飞书连接输出", `${bot.name}: ${text}`));
+    stream.on("exit", ({ code, signal }) => {
+      this.connectedBotIds.delete(bot.id);
+      this.streams.delete(bot.id);
+      this.emitSnapshot();
+      if (this.running) {
+        void this.logger.write("error", "机器人事件订阅已退出，5 秒后重连", `${bot.name}: code=${code} signal=${signal}`);
+        const timer = setTimeout(() => void this.reconnect(bot), 5000);
+        this.reconnectTimers.set(bot.id, timer);
+      }
+    });
+    return stream;
+  }
+
+  private async reconnect(bot: BotConfig): Promise<void> {
+    this.reconnectTimers.delete(bot.id);
+    if (!this.running) return;
+    const stream = this.createStream(bot);
+    this.streams.set(bot.id, stream);
+    try {
+      await stream.start(bot);
+      await this.logger.write("info", "机器人事件订阅正在重连", bot.name);
+    } catch (error) {
+      await this.logger.write("error", "机器人重连失败，5 秒后重试", `${bot.name}: ${String(error)}`);
+      const timer = setTimeout(() => void this.reconnect(bot), 5000);
+      this.reconnectTimers.set(bot.id, timer);
+    }
+  }
+
   private emitSnapshot(): void {
     if (this.config) this.emit("snapshot", this.snapshot());
   }
 
-  private async handleMessage(message: LarkMessage): Promise<void> {
-    if (this.processed.has(message.eventId)) return;
-    this.processed.add(message.eventId);
-    await this.saveProcessed();
+  private async handleMessage(bot: BotConfig, message: LarkMessage): Promise<void> {
+    const processed = this.processed.get(bot.id) ?? new Set<string>();
+    if (processed.has(message.eventId)) return;
+    processed.add(message.eventId);
+    this.processed.set(bot.id, processed);
+
+    const delay = eventDelayMs(message);
+    await this.logger.write(
+      "info",
+      "收到飞书消息",
+      `${bot.name}${delay === null ? "" : ` / 投递延迟 ${formatDelay(delay)}`}: ${message.text}`
+    );
+    void this.saveProcessed(bot.id);
     this.activeTasks += 1;
     this.emitSnapshot();
-    await this.logger.write("info", "收到飞书消息", message.text);
+
     try {
-      const response = await runClaude(this.config, message, this.skills);
-      await replyToMessage(this.config, message.messageId, response);
-      await this.logger.write("success", "消息处理并回复完成", response);
+      await replyToMessage(bot, message.messageId, bot.pendingReply || "正在查询，请稍候…");
+      await this.logger.write("info", "已发送查询中提示", bot.name);
+      const allowed = new Set(bot.skillNames);
+      const botSkills = allowed.has("*") ? this.skills : this.skills.filter((skill) => allowed.has(skill.name));
+      const response = await runClaude(this.config, bot, message, botSkills);
+      await replyToMessage(bot, message.messageId, response);
+      await this.logger.write("success", "消息处理并回复完成", `${bot.name}: ${response}`);
     } catch (error) {
-      await this.logger.write("error", "消息处理失败", String(error));
+      await this.logger.write("error", "消息处理失败", `${bot.name}: ${String(error)}`);
     } finally {
       this.activeTasks -= 1;
       this.emitSnapshot();
     }
   }
 
-  private async loadProcessed(): Promise<void> {
+  private async loadProcessed(botId: string): Promise<void> {
     try {
-      const values = JSON.parse(await readFile(path.join(stateRoot(), "processed.json"), "utf8")) as string[];
-      this.processed = new Set(values);
+      const values = JSON.parse(await readFile(processedPath(botId), "utf8")) as string[];
+      this.processed.set(botId, new Set(values));
     } catch {
-      this.processed = new Set();
+      this.processed.set(botId, new Set());
     }
   }
 
-  private async saveProcessed(): Promise<void> {
-    await mkdir(stateRoot(), { recursive: true });
-    await writeFile(path.join(stateRoot(), "processed.json"), `${JSON.stringify([...this.processed].slice(-5000), null, 2)}\n`, "utf8");
+  private async saveProcessed(botId: string): Promise<void> {
+    const values = [...(this.processed.get(botId) ?? [])].slice(-5000);
+    await mkdir(path.dirname(processedPath(botId)), { recursive: true });
+    await writeFile(processedPath(botId), `${JSON.stringify(values, null, 2)}\n`, "utf8");
   }
+}
+
+function processedPath(botId: string): string {
+  return path.join(stateRoot(), "bots", botId, "processed.json");
+}
+
+function eventDelayMs(message: LarkMessage): number | null {
+  if (!message.createdAt) return null;
+  const raw = Number(message.createdAt);
+  const created = Number.isFinite(raw)
+    ? raw < 10_000_000_000 ? raw * 1000 : raw
+    : Date.parse(message.createdAt);
+  if (!Number.isFinite(created)) return null;
+  return Math.max(0, Date.parse(message.receivedAt) - created);
+}
+
+function formatDelay(ms: number): string {
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
