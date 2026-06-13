@@ -1,0 +1,47 @@
+# 当前状态
+
+最后更新：2026-06-14
+
+## 当前基线
+
+- 产品版本：`1.3.0`
+- Git 分支：`main`
+- 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
+- 运行平台：macOS Apple Silicon 与 Intel
+- Agent 内核：`@anthropic-ai/claude-agent-sdk`
+- 当前阶段：核心功能可用，正在完善交付质量与持续演进能力
+
+## 已实现
+
+- 多飞书机器人配置、独立监听和权限隔离。
+- 按机器人选择可访问的 Skills。
+- 飞书消息处理中表情、最终回复、消息去重和断线重连。
+- 24 小时连续会话、主动重置、私聊与群聊用户隔离。
+- 图片消息多模态输入，Agent 可调用隔离身份下的 `lark-cli`。
+- 内置 Word、PowerPoint、Excel Skills 和 Office 文件预处理。
+- 用户 Skill 导入与 HTTPS Git Skill 市场。
+- 会话存储统计、过期清理、选择性清理和全部会话清理。
+- arm64 与 x64 独立安装包构建。
+
+## 已知限制与风险
+
+- macOS 安装包尚未签名和公证。
+- Skill 市场只支持 HTTPS Git，不支持 SSH。
+- 会话固定以 24 小时无活动为过期标准，暂不能在 UI 中调整。
+- Agent 使用 `bypassPermissions`，安全主要依赖 Claude sandbox、目录隔离和 Skill 授权边界。
+- PowerPoint 视觉预览依赖 macOS 自带 Quick Look；预览质量受系统支持影响。
+- 自动化测试目前集中在配置迁移、飞书事件解析、Office 提取和会话键，端到端飞书与 UI 覆盖仍有限。
+
+## 后续优先事项
+
+1. 增加真实飞书事件、机器人隔离和会话清理的集成测试。
+2. 补充签名、公证和发布自动化。
+3. 评估会话过期时间和磁盘配额的用户配置能力。
+4. 增强 Skill 市场来源校验、版本展示和更新可见性。
+
+## 最近验证
+
+- 2026-06-14：`npm test` 通过，9 个测试全部通过。
+- `v1.3.0` 已生成 arm64 与 x64 的 DMG 和 ZIP。
+
+执行新验证后，应更新本节日期、命令和结果。
