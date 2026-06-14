@@ -11,6 +11,10 @@ import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
 let mainWindow: BrowserWindow | null = null;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+let quittingAfterRuntimeStop = false;
+
+if (!hasSingleInstanceLock) app.quit();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -35,18 +39,36 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(async () => {
-  await migrateLegacyData();
-  await runtime.initialize();
-  createWindow();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+if (hasSingleInstanceLock) {
+  app.whenReady().then(async () => {
+    await migrateLegacyData();
+    await runtime.initialize();
+    createWindow();
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   });
-});
+
+  app.on("second-instance", () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
 
 app.on("window-all-closed", () => {
   void runtime.stop();
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", (event) => {
+  if (quittingAfterRuntimeStop) return;
+  event.preventDefault();
+  void runtime.stop().finally(() => {
+    quittingAfterRuntimeStop = true;
+    app.quit();
+  });
 });
 
 function sendToRenderer(channel: string, payload: unknown): void {

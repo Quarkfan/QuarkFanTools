@@ -21,7 +21,7 @@ flowchart LR
 
 ## 2. 消息处理流程
 
-每个启用且配置完整的机器人维护一个 `LarkEventStream`。事件断开后等待 5 秒重连。同一连续对话内任务串行，不同对话按 `runtime.maxConcurrentTasks` 并发。
+每个启用且配置完整的机器人维护一个 `LarkEventStream`。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话按 `runtime.maxConcurrentTasks` 并发。
 
 ```mermaid
 sequenceDiagram

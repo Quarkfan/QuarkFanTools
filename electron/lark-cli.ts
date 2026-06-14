@@ -2,11 +2,12 @@ import { app, shell } from "electron";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import path from "node:path";
-import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { projectRoot, stateRoot } from "./paths.js";
 import type { BotConfig, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
+import { isLarkEventSubscribeCommand, larkEventSubscribeArgs } from "./lark-commands.js";
 
 function bundledLarkBinary(): string {
   return app.isPackaged
@@ -79,30 +80,32 @@ export class LarkEventStream extends EventEmitter {
   private buffer = "";
   private stopping: Promise<void> | null = null;
   private connected = false;
+  private bot: BotConfig | null = null;
 
   async start(bot: BotConfig): Promise<void> {
     if (this.stopping) await this.stopping;
     if (this.child) throw new Error("飞书事件监听已在运行");
     await prepareLarkConfig(bot);
+    await stopRecordedSubscriber(bot);
     const { command, prefix } = await resolveLarkCommand(bot);
-    const args = [
-      ...prefix,
-      ...profileArgs(bot),
-      "event",
-      "+subscribe",
-      "--as",
-      bot.receiveIdentity,
-      "--event-types",
-      bot.eventTypes.join(","),
-      "--format",
-      "ndjson"
-    ];
+    const args = [...prefix, ...larkEventSubscribeArgs(bot)];
     const child = spawn(command, args, {
       cwd: projectRoot(),
       env: larkEnv(bot),
       stdio: ["ignore", "pipe", "pipe"]
     });
+    this.bot = bot;
     this.child = child;
+    if (child.pid) {
+      try {
+        await writeFile(subscriberPidPath(bot), `${child.pid}\n`, { encoding: "utf8", mode: 0o600 });
+      } catch (error) {
+        child.kill("SIGKILL");
+        this.child = null;
+        this.bot = null;
+        throw error;
+      }
+    }
     child.stdout?.on("data", (chunk) => this.consume(String(chunk)));
     child.stderr?.on("data", (chunk) => {
       const text = String(chunk).trim();
@@ -115,6 +118,7 @@ export class LarkEventStream extends EventEmitter {
     child.on("exit", (code, signal) => {
       this.child = null;
       this.connected = false;
+      void removeRecordedSubscriber(bot, child.pid);
       this.emit("exit", { code, signal });
     });
   }
@@ -122,16 +126,22 @@ export class LarkEventStream extends EventEmitter {
   async stop(): Promise<void> {
     if (this.stopping) return this.stopping;
     const child = this.child;
-    if (!child) return;
-    this.stopping = new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => child.kill("SIGKILL"), 5000);
-      child.once("exit", () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-      child.kill("SIGTERM");
-    }).finally(() => {
-      if (this.child === child) this.child = null;
+    const bot = this.bot;
+    this.stopping = (async () => {
+      if (child) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => child.kill("SIGKILL"), 5000);
+          child.once("exit", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+          child.kill("SIGTERM");
+        });
+      }
+      if (bot) await removeRecordedSubscriber(bot, child?.pid);
+    })().finally(() => {
+      if (!child || this.child === child) this.child = null;
+      if (this.bot === bot) this.bot = null;
       this.stopping = null;
     });
     return this.stopping;
@@ -151,6 +161,60 @@ export class LarkEventStream extends EventEmitter {
       }
     }
   }
+}
+
+function subscriberPidPath(bot: BotConfig): string {
+  return path.join(botStateRoot(bot), "lark-event-subscriber.pid");
+}
+
+async function removeRecordedSubscriber(bot: BotConfig, expectedPid?: number): Promise<void> {
+  if (expectedPid) {
+    const recorded = Number((await readFile(subscriberPidPath(bot), "utf8").catch(() => "")).trim());
+    if (recorded && recorded !== expectedPid) return;
+  }
+  await rm(subscriberPidPath(bot), { force: true });
+}
+
+async function stopRecordedSubscriber(bot: BotConfig): Promise<void> {
+  const pid = Number((await readFile(subscriberPidPath(bot), "utf8").catch(() => "")).trim());
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) {
+    await removeRecordedSubscriber(bot);
+    return;
+  }
+  const command = await processCommand(pid);
+  if (!isLarkEventSubscribeCommand(command)) {
+    await removeRecordedSubscriber(bot);
+    return;
+  }
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    await removeRecordedSubscriber(bot);
+    return;
+  }
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (!(await processCommand(pid))) {
+      await removeRecordedSubscriber(bot);
+      return;
+    }
+  }
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    // The subscriber exited between the last check and the kill.
+  }
+  await removeRecordedSubscriber(bot);
+}
+
+async function processCommand(pid: number): Promise<string> {
+  return new Promise<string>((resolve) => {
+    const child = spawn("/bin/ps", ["-p", String(pid), "-o", "command="], { stdio: ["ignore", "pipe", "ignore"] });
+    let output = "";
+    child.stdout?.on("data", (chunk) => (output += String(chunk)));
+    child.on("error", () => resolve(""));
+    child.on("exit", (code) => resolve(code === 0 ? output.trim() : ""));
+  });
 }
 
 export async function replyToMessage(bot: BotConfig, messageId: string, text: string): Promise<void> {

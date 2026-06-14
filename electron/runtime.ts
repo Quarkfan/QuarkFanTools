@@ -101,29 +101,36 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     stream.on("stderr", (text: string) => void this.logger.write("warn", "飞书连接输出", `${bot.name}: ${text}`));
     stream.on("exit", ({ code, signal }) => {
       this.connectedBotIds.delete(bot.id);
-      this.streams.delete(bot.id);
+      if (this.streams.get(bot.id) === stream) this.streams.delete(bot.id);
       this.emitSnapshot();
       if (this.running) {
         void this.logger.write("error", "机器人事件订阅已退出，5 秒后重连", `${bot.name}: code=${code} signal=${signal}`);
-        const timer = setTimeout(() => void this.reconnect(bot), 5000);
-        this.reconnectTimers.set(bot.id, timer);
+        this.scheduleReconnect(bot);
       }
     });
     return stream;
   }
 
+  private scheduleReconnect(bot: BotConfig): void {
+    const existing = this.reconnectTimers.get(bot.id);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => void this.reconnect(bot), 5000);
+    this.reconnectTimers.set(bot.id, timer);
+  }
+
   private async reconnect(bot: BotConfig): Promise<void> {
     this.reconnectTimers.delete(bot.id);
     if (!this.running) return;
+    if (this.streams.has(bot.id)) return;
     const stream = this.createStream(bot);
     this.streams.set(bot.id, stream);
     try {
       await stream.start(bot);
       await this.logger.write("info", "机器人事件订阅正在重连", bot.name);
     } catch (error) {
+      if (this.streams.get(bot.id) === stream) this.streams.delete(bot.id);
       await this.logger.write("error", "机器人重连失败，5 秒后重试", `${bot.name}: ${String(error)}`);
-      const timer = setTimeout(() => void this.reconnect(bot), 5000);
-      this.reconnectTimers.set(bot.id, timer);
+      this.scheduleReconnect(bot);
     }
   }
 

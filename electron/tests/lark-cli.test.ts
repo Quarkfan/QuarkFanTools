@@ -1,6 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeLarkEvent } from "../lark-event.js";
+import { isLarkEventSubscribeCommand, larkEventSubscribeArgs } from "../lark-commands.js";
+import type { BotConfig } from "../types.js";
+
+const bot: BotConfig = {
+  id: "mentor",
+  name: "人生导师",
+  enabled: true,
+  cliPath: "",
+  profile: "",
+  appId: "cli_test",
+  appSecret: "secret",
+  receiveIdentity: "bot",
+  replyIdentity: "bot",
+  eventTypes: ["im.message.receive_v1"],
+  skillNames: [],
+  pendingReaction: "OnIt"
+};
+
+test("event subscription does not use unsafe parallel subscription mode", () => {
+  assert.deepEqual(larkEventSubscribeArgs(bot), [
+    "event",
+    "+subscribe",
+    "--as",
+    "bot",
+    "--event-types",
+    "im.message.receive_v1",
+    "--format",
+    "ndjson"
+  ]);
+});
+
+test("recognizes only lark event subscriber processes for stale PID cleanup", () => {
+  assert.equal(isLarkEventSubscribeCommand("/Applications/QuarkfanTools.app/runtime/lark-cli event +subscribe --as bot"), true);
+  assert.equal(isLarkEventSubscribeCommand("/Applications/QuarkfanTools.app/runtime/lark-cli event stop --force"), false);
+  assert.equal(isLarkEventSubscribeCommand("/usr/bin/node other-process.js"), false);
+});
 
 test("normalizes a Feishu message event", () => {
   const message = normalizeLarkEvent({
