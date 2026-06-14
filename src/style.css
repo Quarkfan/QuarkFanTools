@@ -11,7 +11,10 @@ button, input, select { font: inherit; }
 button { cursor: pointer; }
 #app { display: grid; grid-template-columns: 180px 1fr; height: 100vh; }
 
+.window-drag-strip { position: fixed; z-index: 20; top: 0; left: 74px; right: 0; height: 38px; -webkit-app-region: drag; display: flex; align-items: center; justify-content: center; color: #435249; font: 600 9px/1 "Menlo", monospace; letter-spacing: 2px; user-select: none; }
+.window-drag-strip span { opacity: .55; }
 .rail { padding: 64px 18px 20px; border-right: 1px solid #27302c; background: rgba(8, 12, 11, .88); display: flex; flex-direction: column; }
+.brand, .rail-label { -webkit-app-region: drag; user-select: none; }
 .brand { font: 800 16px/1.15 "Menlo", monospace; letter-spacing: -.8px; color: #f3f7f5; }
 .brand span { color: #77f2a1; }
 .rail-label, .eyebrow { font: 600 10px/1.4 "Menlo", monospace; letter-spacing: 1.8px; color: #6f8279; }
@@ -23,9 +26,10 @@ nav button.active { color: #e8f0ec; border-color: #77f2a1; background: linear-gr
 .rail-foot small { color: #506057; }
 
 main { min-width: 0; overflow: auto; padding: 62px 44px 42px; }
-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
+header { -webkit-app-region: drag; display: flex; align-items: flex-end; justify-content: space-between; min-height: 62px; margin-bottom: 30px; user-select: none; }
 h1 { margin: 6px 0 0; font-size: 31px; letter-spacing: -.8px; color: #f0f5f2; }
 .actions, .form-actions { display: flex; gap: 10px; }
+button, input, select, label, nav, .actions, .form-actions, .panel, .notice { -webkit-app-region: no-drag; }
 button.primary, button.ghost, button.danger { border-radius: 4px; padding: 10px 16px; border: 1px solid #34433b; color: #dce8e1; background: #151c19; }
 button.primary { color: #07110b; border-color: #77f2a1; background: #77f2a1; font-weight: 700; }
 button.danger { border-color: #a84b4b; color: #ffb2ac; }

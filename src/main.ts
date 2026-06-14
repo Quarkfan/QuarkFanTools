@@ -31,6 +31,7 @@ function statusDot(ok: boolean): string {
 function render(): void {
   const isConfigured = configured(snapshot.config);
   app.innerHTML = `
+    <div class="window-drag-strip" title="拖动窗口"><span>QUARKFANTOOLS</span></div>
     <aside class="rail">
       <div class="brand">QUARK<span>FAN</span>TOOLS</div>
       <div class="rail-label">LOCAL SKILL AGENT</div>
