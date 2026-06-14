@@ -2,7 +2,7 @@
 
 QuarkfanTools 是运行在 macOS 上的本地飞书 Skill Agent。安装包内置 Electron、Claude Agent SDK、飞书 CLI，以及 Word、PowerPoint、Excel 基础 Skills；支持多个相互隔离、可独立启停的飞书机器人。
 
-当前版本为 `1.3.2`。项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+当前版本为 `1.4.0`。项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 核心能力
 

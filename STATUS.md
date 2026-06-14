@@ -4,7 +4,7 @@
 
 ## 当前基线
 
-- 产品版本：`1.3.2`
+- 产品版本：`1.4.0`
 - Git 分支：`main`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
@@ -46,6 +46,6 @@
 ## 最近验证
 
 - 2026-06-14：`npm test` 通过，12 个测试全部通过。
-- `v1.3.2` 已生成 arm64 与 x64 的 DMG 和 ZIP。
+- `v1.4.0` 尚未生成 arm64 与 x64 的 DMG 和 ZIP；最近已打包版本为 `v1.3.2`。
 
 执行新验证后，应更新本节日期、命令和结果。
