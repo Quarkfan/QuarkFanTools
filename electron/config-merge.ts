@@ -17,12 +17,13 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
         receiveIdentity: override.lark.receiveIdentity ?? "bot",
         replyIdentity: override.lark.replyIdentity ?? "bot",
         eventTypes: override.lark.eventTypes ?? ["im.message.receive_v1"],
-        skillNames: ["*"],
+        skillNames: [],
         pendingReaction: "OnIt"
       } satisfies BotConfig]
     : [];
   const bots = (override.bots ?? legacyBot).map((bot) => ({
     ...bot,
+    skillNames: (bot.skillNames ?? []).filter((name) => name !== "*"),
     pendingReaction: bot.pendingReaction || "OnIt"
   }));
   return {

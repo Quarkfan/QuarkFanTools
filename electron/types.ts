@@ -69,6 +69,7 @@ export interface LarkMessageResource {
 
 export interface RuntimeSnapshot {
   running: boolean;
+  runningBotIds: string[];
   connectedBotIds: string[];
   activeTasks: number;
   skills: SkillSummary[];
@@ -98,4 +99,5 @@ export interface LogEntry {
   level: "info" | "warn" | "error" | "success";
   message: string;
   detail?: string;
+  botId?: string;
 }

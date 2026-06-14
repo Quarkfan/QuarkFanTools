@@ -6,6 +6,8 @@ let snapshot: RuntimeSnapshot;
 let logs: LogEntry[] = [];
 let storage: StorageStats;
 let activeView: "console" | "config" | "storage" = "console";
+let selectedBotId = "";
+let logLevel: "all" | LogEntry["level"] = "all";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -21,6 +23,17 @@ function configured(config: AppConfig): boolean {
     config.model.model &&
     config.model.apiKey &&
     config.bots.some((bot) => bot.enabled && bot.appId && bot.appSecret)
+  );
+}
+
+function botCanStart(bot: BotConfig): boolean {
+  return Boolean(
+    bot.enabled &&
+    bot.appId &&
+    bot.appSecret &&
+    snapshot.config.model.baseUrl &&
+    snapshot.config.model.model &&
+    snapshot.config.model.apiKey
   );
 }
 
@@ -52,10 +65,7 @@ function render(): void {
           <h1>${activeView === "console" ? "运行控制台" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
         </div>
         <div class="actions">
-          <button class="ghost" id="import-skill">导入 Skill 文件夹</button>
-          ${snapshot.running
-            ? `<button class="danger" id="stop">停止监听</button>`
-            : `<button class="primary" id="start" ${isConfigured ? "" : "disabled"}>启动监听</button>`}
+          <button class="ghost" id="import-skill">导入到本地 Skill 市场</button>
         </div>
       </header>
       ${!isConfigured ? `<div class="notice">至少配置一个启用的飞书机器人，并填写 Claude 兼容模型连接信息。</div>` : ""}
@@ -107,6 +117,11 @@ function renderStorage(): string {
 }
 
 function renderConsole(): string {
+  const selectedBot = snapshot.config.bots.find((bot) => bot.id === selectedBotId) ?? snapshot.config.bots[0];
+  if (selectedBot && selectedBotId !== selectedBot.id) selectedBotId = selectedBot.id;
+  const botLogs = selectedBot
+    ? logs.filter((entry) => entry.botId === selectedBot.id && (logLevel === "all" || entry.level === logLevel))
+    : [];
   return `
     <section class="metrics">
       <article><span>在线机器人</span><strong>${statusDot(snapshot.connectedBotIds.length > 0)}${snapshot.connectedBotIds.length}/${snapshot.config.bots.filter((bot) => bot.enabled).length}</strong></article>
@@ -117,22 +132,40 @@ function renderConsole(): string {
     <section class="workspace">
       <div class="panel skill-panel">
         <div class="panel-title"><span>BOT REGISTRY</span><small>${snapshot.config.bots.length} configured</small></div>
-        <div class="skill-list">
+        <div class="skill-list bot-registry">
           ${snapshot.config.bots.map((bot) => `
-            <div class="skill">
+            <div class="skill bot-runtime-card ${selectedBot?.id === bot.id ? "selected" : ""}" data-select-bot="${escapeHtml(bot.id)}">
               <div class="skill-glyph">${escapeHtml(bot.name.slice(0, 2).toUpperCase())}</div>
-              <div><strong>${statusDot(snapshot.connectedBotIds.includes(bot.id))}${escapeHtml(bot.name)}</strong><p>${bot.skillNames.length} 个授权 Skill / ${bot.enabled ? "启用" : "停用"}</p></div>
+              <div class="bot-runtime-main">
+                <strong>${statusDot(snapshot.connectedBotIds.includes(bot.id))}${escapeHtml(bot.name)}</strong>
+                <p>${bot.skillNames.length} 个授权 Skill / ${snapshot.runningBotIds.includes(bot.id) ? "监听中" : bot.enabled ? "未启动" : "已停用"}</p>
+              </div>
+              ${snapshot.runningBotIds.includes(bot.id)
+                ? `<button class="danger bot-stop" data-id="${escapeHtml(bot.id)}">停止</button>`
+                : `<button class="primary bot-start" data-id="${escapeHtml(bot.id)}" ${botCanStart(bot) ? "" : "disabled"}>启动</button>`}
             </div>`).join("") || `<div class="empty">前往配置页添加机器人。</div>`}
         </div>
       </div>
       <div class="panel log-panel">
-        <div class="panel-title"><span>LIVE EXECUTION LOG</span><small>${logs.length} events</small></div>
+        <div class="panel-title log-title">
+          <span>${selectedBot ? `${escapeHtml(selectedBot.name)} / EXECUTION LOG` : "EXECUTION LOG"}</span>
+          <div class="log-controls">
+            <select id="log-level">
+              <option value="all" ${logLevel === "all" ? "selected" : ""}>全部等级</option>
+              <option value="info" ${logLevel === "info" ? "selected" : ""}>信息</option>
+              <option value="success" ${logLevel === "success" ? "selected" : ""}>成功</option>
+              <option value="warn" ${logLevel === "warn" ? "selected" : ""}>警告</option>
+              <option value="error" ${logLevel === "error" ? "selected" : ""}>错误</option>
+            </select>
+            <small>${botLogs.length} events</small>
+          </div>
+        </div>
         <div class="logs">
-          ${logs.slice().reverse().map((entry) => `
+          ${botLogs.slice().reverse().map((entry) => `
             <div class="log ${entry.level}">
               <time>${new Date(entry.time).toLocaleTimeString()}</time>
               <div><strong>${escapeHtml(entry.message)}</strong>${entry.detail ? `<pre>${escapeHtml(entry.detail)}</pre>` : ""}</div>
-            </div>`).join("") || `<div class="empty">启动监听后，飞书消息与 Agent 执行过程会显示在这里。</div>`}
+            </div>`).join("") || `<div class="empty">${selectedBot ? "当前筛选条件下没有该机器人的日志。" : "请先配置机器人。"}</div>`}
         </div>
       </div>
     </section>
@@ -167,7 +200,8 @@ function renderBot(bot: BotConfig): string {
       ${botField(bot, "处理中表情", "pendingReaction")}
       <div class="skill-access">
         <span>允许访问的 Skills</span>
-        ${snapshot.skills.map((skill) => `<label class="check"><input type="checkbox" data-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes("*") || bot.skillNames.includes(skill.name) ? "checked" : ""}/>${escapeHtml(skill.name)}</label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
+        <small>本地 Skill 市场中的 Skill 默认不授权，必须在此明确勾选。</small>
+        ${snapshot.skills.map((skill) => `<label class="check"><input type="checkbox" data-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes(skill.name) ? "checked" : ""}/>${escapeHtml(skill.name)}</label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
       </div>
     </div>
   `;
@@ -235,6 +269,32 @@ function bindEvents(): void {
     snapshot = await window.quarkfanTools.importSkill();
     render();
   };
+  document.querySelectorAll<HTMLElement>("[data-select-bot]").forEach((card) => {
+    card.onclick = () => {
+      selectedBotId = String(card.dataset.selectBot);
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".bot-start").forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      selectedBotId = String(button.dataset.id);
+      snapshot = await window.quarkfanTools.startBot(selectedBotId);
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".bot-stop").forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      selectedBotId = String(button.dataset.id);
+      snapshot = await window.quarkfanTools.stopBot(selectedBotId);
+      render();
+    };
+  });
+  document.querySelector<HTMLSelectElement>("#log-level")?.addEventListener("change", (event) => {
+    logLevel = (event.currentTarget as HTMLSelectElement).value as typeof logLevel;
+    render();
+  });
   document.querySelector<HTMLButtonElement>("#clear-expired")?.addEventListener("click", async () => {
     storage = await window.quarkfanTools.clearExpiredStorage();
     render();
@@ -258,14 +318,6 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#clear-all-storage")?.addEventListener("click", async () => {
     if (!window.confirm("确认清理全部会话上下文、workspace 和消息附件？此操作不可恢复。")) return;
     storage = await window.quarkfanTools.clearAllSessionStorage();
-    render();
-  });
-  document.querySelector<HTMLButtonElement>("#start")?.addEventListener("click", async () => {
-    snapshot = await window.quarkfanTools.start();
-    render();
-  });
-  document.querySelector<HTMLButtonElement>("#stop")?.addEventListener("click", async () => {
-    snapshot = await window.quarkfanTools.stop();
     render();
   });
   document.querySelector<HTMLButtonElement>("#add-bot")?.addEventListener("click", () => {
@@ -317,12 +369,14 @@ async function bootstrap(): Promise<void> {
   ]);
   window.quarkfanTools.onSnapshot((value) => {
     snapshot = value;
+    if (!selectedBotId && snapshot.config.bots[0]) selectedBotId = snapshot.config.bots[0].id;
     render();
   });
   window.quarkfanTools.onLog((entry) => {
-    logs.push(entry);
+    logs = [...logs.slice(-499), entry];
     render();
   });
+  if (snapshot.config.bots[0]) selectedBotId = snapshot.config.bots[0].id;
   render();
 }
 

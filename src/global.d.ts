@@ -9,8 +9,8 @@ declare global {
       clearExpiredStorage(): Promise<StorageStats>;
       clearSelectedStorage(ids: string[]): Promise<StorageStats>;
       clearAllSessionStorage(): Promise<StorageStats>;
-      start(): Promise<RuntimeSnapshot>;
-      stop(): Promise<RuntimeSnapshot>;
+      startBot(botId: string): Promise<RuntimeSnapshot>;
+      stopBot(botId: string): Promise<RuntimeSnapshot>;
       saveConfig(config: AppConfig): Promise<RuntimeSnapshot>;
       importSkill(): Promise<RuntimeSnapshot>;
       syncSkillMarket(): Promise<RuntimeSnapshot>;

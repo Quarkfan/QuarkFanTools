@@ -32,10 +32,11 @@ function createWindow(): void {
     }
   });
 
+  const builtIndex = path.join(import.meta.dirname, "..", "dist", "index.html");
   if (!app.isPackaged) {
-    void mainWindow.loadURL("http://localhost:5173");
+    void mainWindow.loadURL("http://localhost:5173").catch(() => mainWindow?.loadFile(builtIndex));
   } else {
-    void mainWindow.loadFile(path.join(import.meta.dirname, "..", "dist", "index.html"));
+    void mainWindow.loadFile(builtIndex);
   }
 }
 
@@ -104,12 +105,12 @@ ipcMain.handle("storage:clear-all", async () => {
   await runtime.logger.write("success", "已清理全部会话存储", "机器人配置、飞书授权和用户 Skills 已保留");
   return storageStats();
 });
-ipcMain.handle("runtime:start", async () => {
-  await runtime.start();
+ipcMain.handle("runtime:start-bot", async (_event, botId: string) => {
+  await runtime.startBot(botId);
   return runtime.snapshot();
 });
-ipcMain.handle("runtime:stop", async () => {
-  await runtime.stop();
+ipcMain.handle("runtime:stop-bot", async (_event, botId: string) => {
+  await runtime.stopBot(botId);
   return runtime.snapshot();
 });
 ipcMain.handle("config:save", async (_event, config: AppConfig) => {
@@ -124,8 +125,9 @@ ipcMain.handle("skills:import", async () => {
     properties: ["openDirectory"]
   });
   if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
-  await importSkillFolder(result.filePaths[0]);
+  const imported = await importSkillFolder(result.filePaths[0]);
   await runtime.initialize(false);
+  await runtime.logger.write("success", "Skill 已复制到本地技能市场", imported);
   return runtime.snapshot();
 });
 ipcMain.handle("skills:market-sync", async () => {
@@ -140,11 +142,11 @@ ipcMain.handle("lark:login-user", async (_event, botId: string) => {
   try {
     const bot = runtime.snapshot().config.bots.find((item) => item.id === botId);
     if (!bot) throw new Error("机器人不存在");
-    await runtime.logger.write("info", "正在打开飞书用户态授权页面", bot.name);
+    await runtime.logger.write("info", "正在打开飞书用户态授权页面", bot.name, bot.id);
     const result = await loginLarkUser(bot);
-    await runtime.logger.write("success", "飞书用户态授权完成", `${bot.name}: ${result}`);
+    await runtime.logger.write("success", "飞书用户态授权完成", result, bot.id);
   } catch (error) {
-    await runtime.logger.write("error", "飞书用户态授权失败", String(error));
+    await runtime.logger.write("error", "飞书用户态授权失败", String(error), botId);
     throw error;
   }
 });

@@ -11,13 +11,14 @@ export class Logger extends EventEmitter {
     return [...this.entries];
   }
 
-  async write(level: LogEntry["level"], message: string, detail?: string): Promise<void> {
+  async write(level: LogEntry["level"], message: string, detail?: string, botId?: string): Promise<void> {
     const entry: LogEntry = {
       id: crypto.randomUUID(),
       time: new Date().toISOString(),
       level,
       message,
-      detail
+      detail,
+      botId
     };
     this.entries = [...this.entries.slice(-499), entry];
     this.emit("entry", entry);
