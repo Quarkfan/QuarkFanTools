@@ -11,24 +11,26 @@ async function syncSkillLinks(targetRoot: string, skills: SkillSummary[]): Promi
   await mkdir(targetRoot, { recursive: true });
 
   const expected = new Set(skills.map((skill) => skill.name));
-  for (const entry of await readdir(targetRoot).catch(() => [])) {
-    if (!expected.has(entry)) await rm(path.join(targetRoot, entry), { recursive: true, force: true });
-  }
-  for (const skill of skills) {
+  await Promise.all((await readdir(targetRoot).catch(() => []))
+    .filter((entry) => !expected.has(entry))
+    .map((entry) => rm(path.join(targetRoot, entry), { recursive: true, force: true })));
+  await Promise.all(skills.map(async (skill) => {
     const target = path.join(targetRoot, skill.name);
     try {
       await access(target);
     } catch {
       await symlink(path.dirname(skill.path), target, "dir");
     }
-  }
+  }));
 }
 
 async function ensureBotWorkspace(bot: BotConfig, conversationKey: string, skills: SkillSummary[]): Promise<{ claudeHome: string; workspace: string }> {
   const claudeHome = path.join(stateRoot(), "bots", bot.id, "claude-home");
   const workspace = path.join(workspaceRoot(), "bots", bot.id, "sessions", workspaceSessionId(conversationKey));
-  await syncSkillLinks(path.join(claudeHome, "skills"), skills);
-  await syncSkillLinks(path.join(workspace, "skills"), skills);
+  await Promise.all([
+    syncSkillLinks(path.join(claudeHome, "skills"), skills),
+    syncSkillLinks(path.join(workspace, "skills"), skills)
+  ]);
   return { claudeHome, workspace };
 }
 

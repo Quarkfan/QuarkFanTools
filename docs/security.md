@@ -13,6 +13,7 @@
 - 凭据、状态、workspace 和发布产物均不应提交到 Git。
 - 每个机器人使用独立飞书 CLI 配置、Claude home、会话状态和 workspace。
 - 每个机器人只映射明确授权的 Skills。
+- 删除本地导入 Skill 时同步撤销所有机器人对该名称的授权，避免同名市场或内置 Skill 自动继承权限。
 - Claude sandbox 默认拒绝其他机器人和全局 Skill 路径，只放行当前执行所需目录。
 - Skill 市场限制为 HTTPS，避免依赖系统 SSH/Git 配置。
 - Office ZIP 预处理限制为最多 5,000 个条目和 200 MB 解压体积。

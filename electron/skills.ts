@@ -1,4 +1,4 @@
-import { access, cp, mkdir, readdir, readFile } from "node:fs/promises";
+import { access, cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { builtinSkillsRoot, marketSkillsRoot, skillsRoot } from "./paths.js";
 import type { SkillSummary } from "./types.js";
@@ -13,8 +13,13 @@ export async function discoverSkills(): Promise<SkillSummary[]> {
   const names = new Set<string>();
   const userRoot = skillsRoot();
   await mkdir(userRoot, { recursive: true });
-  for (const root of [userRoot, marketSkillsRoot(), builtinSkillsRoot()]) {
-    for (const skillDir of await skillDirectories(root)) {
+  const roots = [
+    { path: userRoot, source: "local" as const },
+    { path: marketSkillsRoot(), source: "market" as const },
+    { path: builtinSkillsRoot(), source: "builtin" as const }
+  ];
+  for (const root of roots) {
+    for (const skillDir of await skillDirectories(root.path)) {
       const entryName = path.basename(skillDir);
       const skillPath = path.join(skillDir, "SKILL.md");
       try {
@@ -26,7 +31,8 @@ export async function discoverSkills(): Promise<SkillSummary[]> {
           name,
           description: frontmatterValue(content, "description"),
           path: skillPath,
-          knowledgePath: path.join(skillDir, "knowledge")
+          knowledgePath: path.join(skillDir, "knowledge"),
+          source: root.source
         });
       } catch {
         // Ignore directories without a valid SKILL.md.
@@ -77,4 +83,13 @@ export async function importSkillFolder(source: string): Promise<string> {
   if (path.resolve(source) === path.resolve(target)) return target;
   await cp(source, target, { recursive: true, force: true });
   return target;
+}
+
+export async function removeLocalSkill(name: string): Promise<void> {
+  const skill = (await discoverSkills()).find((item) => item.name === name);
+  if (!skill || skill.source !== "local") throw new Error("只能删除导入到本地技能市场的 Skill");
+  const root = path.resolve(skillsRoot());
+  const target = path.resolve(path.dirname(skill.path));
+  if (target === root || !target.startsWith(`${root}${path.sep}`)) throw new Error("Skill 路径不在本地技能市场内");
+  await rm(target, { recursive: true, force: true });
 }

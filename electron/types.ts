@@ -44,6 +44,7 @@ export interface SkillSummary {
   description: string;
   path: string;
   knowledgePath: string | null;
+  source: "local" | "market" | "builtin";
 }
 
 export interface LarkMessage {

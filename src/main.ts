@@ -6,7 +6,7 @@ let snapshot: RuntimeSnapshot;
 let logs: LogEntry[] = [];
 let storage: StorageStats;
 let applicationInfo: AppInfo;
-let activeView: "console" | "config" | "storage" = "console";
+let activeView: "console" | "skills" | "config" | "storage" = "console";
 let selectedBotId = "";
 let logLevel: "all" | LogEntry["level"] = "all";
 let showReleaseNotes = false;
@@ -57,6 +57,7 @@ function render(): void {
       <div class="rail-label">LOCAL SKILL AGENT</div>
       <nav>
         <button class="${activeView === "console" ? "active" : ""}" data-view="console">运行台</button>
+        <button class="${activeView === "skills" ? "active" : ""}" data-view="skills">技能市场</button>
         <button class="${activeView === "config" ? "active" : ""}" data-view="config">配置</button>
         <button class="${activeView === "storage" ? "active" : ""}" data-view="storage">存储管理</button>
       </nav>
@@ -70,18 +71,55 @@ function render(): void {
       <header>
         <div>
           <p class="eyebrow">MACOS / FEISHU / CLAUDE</p>
-          <h1>${activeView === "console" ? "运行控制台" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
+          <h1>${activeView === "console" ? "运行控制台" : activeView === "skills" ? "本地技能市场" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
         </div>
         <div class="actions">
-          <button class="ghost" id="import-skill">导入到本地 Skill 市场</button>
+          ${activeView === "skills" ? `<button class="ghost" id="import-skill">导入 Skill</button>` : ""}
         </div>
       </header>
       ${!isConfigured ? `<div class="notice">至少配置一个启用的飞书机器人，并填写 Claude 兼容模型连接信息。</div>` : ""}
-      ${activeView === "console" ? renderConsole() : activeView === "config" ? renderConfig() : renderStorage()}
+      ${activeView === "console" ? renderConsole() : activeView === "skills" ? renderSkills() : activeView === "config" ? renderConfig() : renderStorage()}
     </main>
     ${showReleaseNotes ? renderReleaseNotes() : ""}
   `;
   bindEvents();
+}
+
+function skillSourceLabel(source: RuntimeSnapshot["skills"][number]["source"]): string {
+  return source === "local" ? "本地导入" : source === "market" ? "Git 市场" : "应用内置";
+}
+
+function renderSkills(): string {
+  const localCount = snapshot.skills.filter((skill) => skill.source === "local").length;
+  const marketCount = snapshot.skills.filter((skill) => skill.source === "market").length;
+  const builtinCount = snapshot.skills.filter((skill) => skill.source === "builtin").length;
+  return `
+    <section class="metrics">
+      <article><span>全部 Skills</span><strong>${snapshot.skills.length}</strong></article>
+      <article><span>本地导入</span><strong>${localCount}</strong></article>
+      <article><span>Git 市场</span><strong>${marketCount}</strong></article>
+      <article><span>应用内置</span><strong>${builtinCount}</strong></article>
+    </section>
+    <section class="panel market-panel">
+      <div class="panel-title"><span>LOCAL SKILL MARKET</span><small>${snapshot.skills.length} available</small></div>
+      <div class="market-toolbar">
+        <input id="market-search" type="search" placeholder="搜索 Skill 名称或描述" />
+        <button class="ghost" id="market-sync" ${snapshot.config.skillMarket.enabled && snapshot.config.skillMarket.repositoryUrl ? "" : "disabled"}>同步 Git 市场</button>
+      </div>
+      <div class="market-skill-list">
+        ${snapshot.skills.map((skill) => `
+          <article class="market-skill-row" data-market-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}">
+            <div class="skill-glyph">${escapeHtml(skill.name.slice(0, 2).toUpperCase())}</div>
+            <div>
+              <strong>${escapeHtml(skill.name)}</strong>
+              <p>${escapeHtml(skill.description || "未提供描述")}</p>
+            </div>
+            <span class="source-badge ${skill.source}">${skillSourceLabel(skill.source)}</span>
+            ${skill.source === "local" ? `<button class="danger remove-local-skill" data-name="${escapeHtml(skill.name)}">删除</button>` : ""}
+          </article>`).join("") || `<div class="empty">当前没有可用 Skill。</div>`}
+      </div>
+    </section>
+  `;
 }
 
 function renderReleaseNotes(): string {
@@ -231,9 +269,16 @@ function renderBot(bot: BotConfig): string {
       </div>
       ${botField(bot, "处理中表情", "pendingReaction")}
       <div class="skill-access">
-        <span>允许访问的 Skills</span>
-        <small>本地 Skill 市场中的 Skill 默认不授权，必须在此明确勾选。</small>
-        ${snapshot.skills.map((skill) => `<label class="check"><input type="checkbox" data-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes(skill.name) ? "checked" : ""}/>${escapeHtml(skill.name)}</label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
+        <div class="skill-access-heading"><span>允许访问的 Skills</span><small>${bot.skillNames.length} / ${snapshot.skills.length} 已授权</small></div>
+        <small>新增 Skill 默认不授权。可搜索后批量授权或取消当前筛选结果。</small>
+        <div class="skill-access-controls">
+          <input type="search" data-skill-filter="${bot.id}" placeholder="搜索名称或描述" />
+          <button type="button" class="ghost skill-select-visible" data-id="${bot.id}">授权筛选结果</button>
+          <button type="button" class="ghost skill-clear-visible" data-id="${bot.id}">取消筛选结果</button>
+        </div>
+        <div class="skill-check-list">
+          ${snapshot.skills.map((skill) => `<label class="check" data-bot-skill-row="${bot.id}" data-skill-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}"><input type="checkbox" data-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes(skill.name) ? "checked" : ""}/><span><strong>${escapeHtml(skill.name)}</strong><small>${escapeHtml(skill.description || skillSourceLabel(skill.source))}</small></span></label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
+        </div>
       </div>
     </div>
   `;
@@ -307,10 +352,28 @@ function bindEvents(): void {
       render();
     };
   });
-  document.querySelector<HTMLButtonElement>("#import-skill")!.onclick = async () => {
+  document.querySelector<HTMLButtonElement>("#import-skill")?.addEventListener("click", async () => {
     snapshot = await window.quarkfanTools.importSkill();
     render();
-  };
+  });
+  document.querySelector<HTMLInputElement>("#market-search")?.addEventListener("input", (event) => {
+    const query = (event.currentTarget as HTMLInputElement).value.trim().toLowerCase();
+    document.querySelectorAll<HTMLElement>("[data-market-search]").forEach((row) => {
+      row.hidden = !String(row.dataset.marketSearch).includes(query);
+    });
+  });
+  document.querySelector<HTMLButtonElement>("#market-sync")?.addEventListener("click", async () => {
+    snapshot = await window.quarkfanTools.syncSkillMarket();
+    render();
+  });
+  document.querySelectorAll<HTMLButtonElement>(".remove-local-skill").forEach((button) => {
+    button.onclick = async () => {
+      const name = String(button.dataset.name);
+      if (!window.confirm(`确认删除本地 Skill“${name}”？所有 Bot 对它的授权也会被撤销。`)) return;
+      snapshot = await window.quarkfanTools.removeLocalSkill(name);
+      render();
+    };
+  });
   document.querySelectorAll<HTMLElement>("[data-select-bot]").forEach((card) => {
     card.onclick = () => {
       selectedBotId = String(card.dataset.selectBot);
@@ -336,6 +399,15 @@ function bindEvents(): void {
   document.querySelector<HTMLSelectElement>("#log-level")?.addEventListener("change", (event) => {
     logLevel = (event.currentTarget as HTMLSelectElement).value as typeof logLevel;
     render();
+  });
+  document.querySelectorAll<HTMLInputElement>("[data-skill-filter]").forEach((input) => {
+    input.addEventListener("input", () => filterBotSkills(String(input.dataset.skillFilter), input.value));
+  });
+  document.querySelectorAll<HTMLButtonElement>(".skill-select-visible").forEach((button) => {
+    button.onclick = () => setVisibleBotSkills(String(button.dataset.id), true);
+  });
+  document.querySelectorAll<HTMLButtonElement>(".skill-clear-visible").forEach((button) => {
+    button.onclick = () => setVisibleBotSkills(String(button.dataset.id), false);
   });
   document.querySelector<HTMLButtonElement>("#clear-expired")?.addEventListener("click", async () => {
     storage = await window.quarkfanTools.clearExpiredStorage();
@@ -400,6 +472,21 @@ function bindEvents(): void {
     snapshot = await window.quarkfanTools.saveConfig(next);
     activeView = "console";
     render();
+  });
+}
+
+function filterBotSkills(botId: string, value: string): void {
+  const query = value.trim().toLowerCase();
+  document.querySelectorAll<HTMLElement>(`[data-bot-skill-row="${botId}"]`).forEach((row) => {
+    row.hidden = !String(row.dataset.skillSearch).includes(query);
+  });
+}
+
+function setVisibleBotSkills(botId: string, checked: boolean): void {
+  document.querySelectorAll<HTMLElement>(`[data-bot-skill-row="${botId}"]`).forEach((row) => {
+    if (row.hidden) return;
+    const input = row.querySelector<HTMLInputElement>(`[data-bot-skill="${botId}"]`);
+    if (input) input.checked = checked;
   });
 }
 

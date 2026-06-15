@@ -15,6 +15,7 @@ declare global {
       saveConfig(config: AppConfig): Promise<RuntimeSnapshot>;
       importSkill(): Promise<RuntimeSnapshot>;
       syncSkillMarket(): Promise<RuntimeSnapshot>;
+      removeLocalSkill(name: string): Promise<RuntimeSnapshot>;
       loginLarkUser(botId: string): Promise<void>;
       onSnapshot(callback: (snapshot: RuntimeSnapshot) => void): () => void;
       onLog(callback: (entry: LogEntry) => void): () => void;

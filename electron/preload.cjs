@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("quarkfanTools", {
   saveConfig: (config) => ipcRenderer.invoke("config:save", config),
   importSkill: () => ipcRenderer.invoke("skills:import"),
   syncSkillMarket: () => ipcRenderer.invoke("skills:market-sync"),
+  removeLocalSkill: (name) => ipcRenderer.invoke("skills:remove-local", name),
   loginLarkUser: (botId) => ipcRenderer.invoke("lark:login-user", botId),
   onSnapshot: (callback) => {
     const listener = (_event, snapshot) => callback(snapshot);

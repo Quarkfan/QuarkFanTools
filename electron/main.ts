@@ -4,7 +4,7 @@ import { QuarkfanToolsRuntime } from "./runtime.js";
 import { saveConfig } from "./config.js";
 import { migrateLegacyData } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
-import { importSkillFolder } from "./skills.js";
+import { importSkillFolder, removeLocalSkill } from "./skills.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
@@ -138,6 +138,16 @@ ipcMain.handle("skills:market-sync", async () => {
   await syncSkillMarket(config.skillMarket);
   await runtime.initialize(false);
   await runtime.logger.write("success", "技能市场同步完成", `${runtime.snapshot().skills.length} 个可用 Skill`);
+  return runtime.snapshot();
+});
+ipcMain.handle("skills:remove-local", async (_event, name: string) => {
+  await runtime.stop();
+  await removeLocalSkill(name);
+  const config = runtime.snapshot().config;
+  for (const bot of config.bots) bot.skillNames = bot.skillNames.filter((skillName) => skillName !== name);
+  await saveConfig(config);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "已从本地技能市场删除 Skill", name);
   return runtime.snapshot();
 });
 ipcMain.handle("lark:login-user", async (_event, botId: string) => {

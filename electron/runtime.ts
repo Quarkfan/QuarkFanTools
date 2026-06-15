@@ -191,15 +191,19 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     void this.saveProcessed(bot.id);
     this.activeTasks += 1;
     this.emitSnapshot();
-    let pendingReactionId = "";
+    const startedAt = Date.now();
+    const timings: string[] = [];
+    const pendingReaction = addMessageReaction(bot, message.messageId, bot.pendingReaction || "OnIt")
+      .then(async (reactionId) => {
+        await this.logger.write("info", "已添加处理中表情", `${bot.name} / ${formatDelay(Date.now() - startedAt)}`, bot.id);
+        return reactionId;
+      })
+      .catch(async (error) => {
+        await this.logger.write("warn", "添加处理中表情失败，继续处理消息", String(error), bot.id);
+        return "";
+      });
 
     try {
-      try {
-        pendingReactionId = await addMessageReaction(bot, message.messageId, bot.pendingReaction || "OnIt");
-        await this.logger.write("info", "已添加处理中表情", bot.name, bot.id);
-      } catch (error) {
-        await this.logger.write("warn", "添加处理中表情失败，继续处理消息", String(error), bot.id);
-      }
       const allowed = new Set(bot.skillNames);
       const botSkills = this.skills.filter((skill) => allowed.has(skill.name));
       const key = conversationKey(message);
@@ -211,6 +215,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       const resourcesDir = path.join(stateRoot(), "bots", bot.id, "messages", message.messageId);
       let enrichedMessage = message;
+      const resourceStartedAt = Date.now();
       try {
         enrichedMessage = await downloadMessageResources(bot, message, resourcesDir);
         enrichedMessage = await preprocessOfficeResources(enrichedMessage, resourcesDir, this.config.model.multimodalEnabled);
@@ -220,13 +225,20 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       } catch (error) {
         await this.logger.write("warn", "下载飞书消息资源失败，继续处理文本内容", String(error), bot.id);
       }
+      timings.push(`资源 ${formatDelay(Date.now() - resourceStartedAt)}`);
+      const agentStartedAt = Date.now();
       const result = await runClaude(this.config, bot, enrichedMessage, botSkills, key, this.sessionStore.get(bot, key));
+      timings.push(`Agent ${formatDelay(Date.now() - agentStartedAt)}`);
       if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId, message.messageId);
+      const replyStartedAt = Date.now();
       await replyToMessage(bot, message.messageId, result.response);
+      timings.push(`飞书回复 ${formatDelay(Date.now() - replyStartedAt)}`);
       await this.logger.write("success", "消息处理并回复完成", result.response, bot.id);
+      await this.logger.write("info", "消息处理耗时", `${timings.join(" / ")} / 总计 ${formatDelay(Date.now() - startedAt)}`, bot.id);
     } catch (error) {
       await this.logger.write("error", "消息处理失败", String(error), bot.id);
     } finally {
+      const pendingReactionId = await pendingReaction;
       if (pendingReactionId) {
         try {
           await removeMessageReaction(bot, message.messageId, pendingReactionId);
