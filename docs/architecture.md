@@ -76,6 +76,8 @@ Skill 来源按优先级发现：
 
 日志条目可包含结构化 `botId`。运行台使用该字段按机器人隔离展示详细日志，并可按等级筛选；不属于机器人的应用级日志仍保留为全局日志。
 
+应用版本从 Electron `app.getVersion()` 读取。面向用户的更新记录维护在 `electron/release-notes.ts`，通过受控 IPC 提供给渲染层版本弹窗；根 `CHANGELOG.md` 保留更完整的开发和发布记录。
+
 ## 6. Office 与多模态
 
 - `.docx`、`.pptx`、`.xlsx` 使用内置 ZIP/XML 解析器提取为 `content.txt`。

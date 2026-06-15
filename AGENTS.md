@@ -36,12 +36,14 @@
 - 重要技术取舍：`docs/decisions.md`
 - 当前进度、已知问题和下一步：`STATUS.md`
 - 已发布或待发布变更：`CHANGELOG.md`
+- 应用内面向用户的更新记录：`electron/release-notes.ts`
 - 文档入口变化：`docs/AI.md`
 
 ## 验证与发布
 
 - 常规验证：`npm test`
 - 打包验证：`npm run pack:mac`
-- 发布前确认版本号、根 `CHANGELOG.md`、`STATUS.md` 与产物名称一致。
+- 每次形成具体版本号并写入版本记录后，必须在同一轮执行 `npm run pack:mac`，生成并核对 arm64 与 x64 安装包；未打包的变化只能保留在 `Unreleased`。
+- 发布前确认版本号、根 `CHANGELOG.md`、应用内更新记录、`STATUS.md` 与产物名称一致。
 - `release/` 是本地产物目录，不提交到 Git。
 - 当前安装包未签名；不要把“成功打包”等同于“可无提示安装”。

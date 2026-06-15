@@ -101,3 +101,12 @@ export interface LogEntry {
   detail?: string;
   botId?: string;
 }
+
+export interface AppInfo {
+  version: string;
+  releases: Array<{
+    version: string;
+    date: string;
+    highlights: string[];
+  }>;
+}

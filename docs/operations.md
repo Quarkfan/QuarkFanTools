@@ -82,7 +82,7 @@ npm run dev
 
 `npm run dev` 使用 Vite 热更新；直接运行 `npm start` 或构建后运行 Electron 时，若 Vite 未启动，应用会自动加载本地构建页面。
 
-`npm test` 会先构建，再运行编译后的 Node 测试。当前测试覆盖配置迁移、飞书事件文本/图片/文件解析、Office XML 提取、连续对话键和 workspace 哈希。
+`npm test` 会先构建，再运行编译后的 Node 测试。当前测试覆盖配置迁移、飞书事件文本/图片/文件解析、Office XML 提取、连续对话键、workspace 哈希，以及当前版本是否存在对应的应用内用户更新记录。
 
 ## 6. 打包发布
 
@@ -108,10 +108,22 @@ release/x64/
 
 发布检查：
 
-1. 更新 `package.json` 版本、`CHANGELOG.md` 和 `STATUS.md`。
+1. 按版本规则更新 `package.json`、`package-lock.json`、根 `CHANGELOG.md`、`electron/release-notes.ts`、`README.md`、`docs/AI.md` 和 `STATUS.md`。
 2. 运行 `npm test`。
 3. 运行 `npm run pack:mac`。
 4. 在 arm64 与 x64 环境验证启动、配置、监听、消息、附件和清理流程。
 5. 创建与版本一致的 Git tag。
 
 当前没有配置代码签名和 Apple 公证，安装时可能出现系统安全提示。
+
+### 版本号规则
+
+版本号使用 `主版本.次版本.修订版本`：
+
+- **主版本**：出现大的应用能力变更、核心使用方式变化或不兼容调整时升级，例如 `1.x.x` 到 `2.0.0`。
+- **次版本**：新增用户能够明显感知的完整功能时升级，例如 `1.4.x` 到 `1.5.0`。
+- **修订版本**：修复问题、优化体验或增加轻量小能力时升级，例如 `1.4.0` 到 `1.4.1`。
+
+每次版本更新必须同步开发用根 `CHANGELOG.md` 和应用内面向用户的 `electron/release-notes.ts`。未完成打包验证时，`STATUS.md` 必须明确标记当前版本尚未生成安装包。
+
+形成具体版本号并写入版本记录后，必须在同一轮执行 `npm run pack:mac`，生成并核对 arm64 与 x64 的 DMG 和 ZIP。尚未准备打包的变化必须继续保留在 `Unreleased`，不得提前建立正式版本记录。

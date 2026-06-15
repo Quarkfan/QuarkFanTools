@@ -24,6 +24,8 @@ nav button { text-align: left; border: 0; border-left: 2px solid transparent; pa
 nav button.active { color: #e8f0ec; border-color: #77f2a1; background: linear-gradient(90deg, rgba(119,242,161,.12), transparent); }
 .rail-foot { margin-top: auto; font: 600 11px/1.8 "Menlo", monospace; color: #a7b4ad; }
 .rail-foot small { color: #506057; }
+.version-button { margin-top: 10px; padding: 0; border: 0; color: #77f2a1; background: transparent; font: 700 10px/1.5 "Menlo", monospace; letter-spacing: .8px; text-align: left; }
+.version-button:hover { color: #d8ffe5; text-decoration: underline; }
 
 main { min-width: 0; overflow: auto; padding: 62px 44px 42px; }
 header { -webkit-app-region: drag; display: flex; align-items: flex-end; justify-content: space-between; min-height: 62px; margin-bottom: 30px; user-select: none; }
@@ -68,6 +70,18 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .log-controls { display: flex; align-items: center; gap: 9px; }
 .log-controls select { width: auto; min-width: 92px; padding: 5px 7px; font-size: 10px; }
 .empty { padding: 35px 18px; color: #56655d; font-size: 12px; text-align: center; }
+.modal-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 42px; background: rgba(2, 6, 4, .78); backdrop-filter: blur(8px); -webkit-app-region: no-drag; }
+.release-modal { width: min(720px, 100%); max-height: min(720px, calc(100vh - 84px)); overflow: hidden; border: 1px solid #3b5145; background: #0d1511; box-shadow: 0 30px 120px rgba(0, 0, 0, .65); }
+.release-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 24px; border-bottom: 1px solid #27332d; }
+.release-modal-header h2 { margin: 7px 0 0; color: #f0f5f2; font-size: 26px; }
+.release-close { padding: 7px 11px !important; }
+.release-list { max-height: calc(min(720px, 100vh - 84px) - 96px); overflow: auto; }
+.release-entry { display: grid; grid-template-columns: 135px 1fr; gap: 24px; padding: 22px 24px; border-bottom: 1px solid #202a25; }
+.release-entry.current { background: linear-gradient(90deg, rgba(119, 242, 161, .08), transparent); box-shadow: inset 3px 0 #77f2a1; }
+.release-version { display: grid; align-content: start; gap: 7px; }
+.release-version strong { color: #77f2a1; font: 700 15px/1 "Menlo", monospace; }
+.release-version time { color: #617168; font: 10px/1.5 "Menlo", monospace; }
+.release-entry ul { margin: 0; padding-left: 18px; color: #b8c6be; font-size: 13px; line-height: 1.8; }
 
 .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .bot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }

@@ -1,10 +1,11 @@
-import type { AppConfig, LogEntry, RuntimeSnapshot, StorageStats } from "../electron/types";
+import type { AppConfig, AppInfo, LogEntry, RuntimeSnapshot, StorageStats } from "../electron/types";
 
 declare global {
   interface Window {
     quarkfanTools: {
       snapshot(): Promise<RuntimeSnapshot>;
       logs(): Promise<LogEntry[]>;
+      appInfo(): Promise<AppInfo>;
       storageStats(): Promise<StorageStats>;
       clearExpiredStorage(): Promise<StorageStats>;
       clearSelectedStorage(ids: string[]): Promise<StorageStats>;

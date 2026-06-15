@@ -1,13 +1,20 @@
 import "./style.css";
-import type { AppConfig, BotConfig, LogEntry, RuntimeSnapshot, StorageStats } from "../electron/types";
+import type { AppConfig, AppInfo, BotConfig, LogEntry, RuntimeSnapshot, StorageStats } from "../electron/types";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let snapshot: RuntimeSnapshot;
 let logs: LogEntry[] = [];
 let storage: StorageStats;
+let applicationInfo: AppInfo;
 let activeView: "console" | "config" | "storage" = "console";
 let selectedBotId = "";
 let logLevel: "all" | LogEntry["level"] = "all";
+let showReleaseNotes = false;
+
+function closeReleaseNotes(): void {
+  showReleaseNotes = false;
+  render();
+}
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -56,6 +63,7 @@ function render(): void {
       <div class="rail-foot">
         <div>${statusDot(snapshot.running)}${snapshot.running ? "RUNNING" : "STOPPED"}</div>
         <small>Claude Agent runtime embedded</small>
+        <button class="version-button" id="show-release-notes">VERSION ${escapeHtml(applicationInfo.version)}</button>
       </div>
     </aside>
     <main>
@@ -71,8 +79,32 @@ function render(): void {
       ${!isConfigured ? `<div class="notice">至少配置一个启用的飞书机器人，并填写 Claude 兼容模型连接信息。</div>` : ""}
       ${activeView === "console" ? renderConsole() : activeView === "config" ? renderConfig() : renderStorage()}
     </main>
+    ${showReleaseNotes ? renderReleaseNotes() : ""}
   `;
   bindEvents();
+}
+
+function renderReleaseNotes(): string {
+  return `
+    <div class="modal-backdrop" id="release-notes-backdrop">
+      <section class="release-modal" role="dialog" aria-modal="true" aria-labelledby="release-notes-title">
+        <div class="release-modal-header">
+          <div>
+            <p class="eyebrow">QUARKFANTOOLS / VERSION ${escapeHtml(applicationInfo.version)}</p>
+            <h2 id="release-notes-title">更新记录</h2>
+          </div>
+          <button class="ghost release-close" id="close-release-notes">关闭</button>
+        </div>
+        <div class="release-list">
+          ${applicationInfo.releases.map((release, index) => `
+            <article class="release-entry ${index === 0 ? "current" : ""}">
+              <div class="release-version"><strong>v${escapeHtml(release.version)}</strong><time>${escapeHtml(release.date)}</time></div>
+              <ul>${release.highlights.map((highlight) => `<li>${escapeHtml(highlight)}</li>`).join("")}</ul>
+            </article>`).join("")}
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 function formatBytes(bytes: number): string {
@@ -258,6 +290,16 @@ function newBot(): BotConfig {
 }
 
 function bindEvents(): void {
+  document.querySelector<HTMLButtonElement>("#show-release-notes")?.addEventListener("click", () => {
+    showReleaseNotes = true;
+    render();
+    document.querySelector<HTMLButtonElement>("#close-release-notes")?.focus();
+  });
+  document.querySelector<HTMLButtonElement>("#close-release-notes")?.addEventListener("click", closeReleaseNotes);
+  document.querySelector<HTMLElement>("#release-notes-backdrop")?.addEventListener("click", (event) => {
+    if (event.target !== event.currentTarget) return;
+    closeReleaseNotes();
+  });
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.onclick = async () => {
       activeView = button.dataset.view as typeof activeView;
@@ -362,10 +404,11 @@ function bindEvents(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  [snapshot, logs, storage] = await Promise.all([
+  [snapshot, logs, storage, applicationInfo] = await Promise.all([
     window.quarkfanTools.snapshot(),
     window.quarkfanTools.logs(),
-    window.quarkfanTools.storageStats()
+    window.quarkfanTools.storageStats(),
+    window.quarkfanTools.appInfo()
   ]);
   window.quarkfanTools.onSnapshot((value) => {
     snapshot = value;
@@ -375,6 +418,9 @@ async function bootstrap(): Promise<void> {
   window.quarkfanTools.onLog((entry) => {
     logs = [...logs.slice(-499), entry];
     render();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && showReleaseNotes) closeReleaseNotes();
   });
   if (snapshot.config.bots[0]) selectedBotId = snapshot.config.bots[0].id;
   render();

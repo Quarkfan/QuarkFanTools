@@ -7,6 +7,7 @@ import { loginLarkUser } from "./lark-cli.js";
 import { importSkillFolder } from "./skills.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageStats } from "./storage.js";
+import { appInfo } from "./release-notes.js";
 import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
@@ -83,6 +84,7 @@ runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
 
 ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
+ipcMain.handle("app:info", () => appInfo(app.getVersion()));
 ipcMain.handle("storage:stats", () => storageStats());
 ipcMain.handle("storage:clear-expired", async () => {
   await runtime.stop();
