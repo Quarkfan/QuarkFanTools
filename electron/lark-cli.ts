@@ -9,6 +9,8 @@ import type { BotConfig, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
 import { isLarkEventSubscribeCommand, larkEventSubscribeArgs } from "./lark-commands.js";
 
+const preparedCredentials = new Map<string, string>();
+
 function bundledLarkBinary(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, "runtime", "lark-cli", "bin", "lark-cli")
@@ -54,7 +56,17 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   if (!bot.appId) return;
   const markerPath = path.join(dir, ".quarkfantools-credential");
   const marker = createHash("sha256").update(`${bot.appId}:${bot.appSecret}`).digest("hex");
-  if ((await readFile(markerPath, "utf8").catch(() => "")) === marker) return;
+  if (preparedCredentials.get(bot.id) === marker) return;
+  if ((await readFile(markerPath, "utf8").catch(() => "")) === marker) {
+    try {
+      await runLarkCaptureRaw(bot, ["config", "show"]);
+      await prepareSandboxKeychain(bot);
+      preparedCredentials.set(bot.id, marker);
+      return;
+    } catch {
+      // The marker can outlive lark-cli keychain data. Reinitialize below.
+    }
+  }
   const { command, prefix } = await resolveLarkCommand(bot);
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, [...prefix, ...profileArgs(bot), "config", "init", "--app-id", bot.appId, "--app-secret-stdin", "--brand", "feishu"], {
@@ -69,6 +81,13 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
     child.stdin?.end(`${bot.appSecret}\n`);
   });
   await writeFile(markerPath, marker, { encoding: "utf8", mode: 0o600 });
+  await prepareSandboxKeychain(bot);
+  preparedCredentials.set(bot.id, marker);
+}
+
+async function prepareSandboxKeychain(bot: BotConfig): Promise<void> {
+  if (process.platform !== "darwin") return;
+  await runLarkCaptureRaw(bot, ["config", "keychain-downgrade"]);
 }
 
 function profileArgs(bot: BotConfig): string[] {
@@ -242,6 +261,26 @@ export async function replyToMessage(bot: BotConfig, messageId: string, text: st
   });
 }
 
+export async function sendCardToUser(bot: BotConfig, userOpenId: string, card: unknown, idempotencyKey: string): Promise<void> {
+  await prepareLarkConfig(bot);
+  await runLarkCapture(bot, [
+    "im",
+    "+messages-send",
+    "--as",
+    bot.replyIdentity,
+    "--user-id",
+    userOpenId,
+    "--msg-type",
+    "interactive",
+    "--content",
+    JSON.stringify(card),
+    "--idempotency-key",
+    idempotencyKey,
+    "--format",
+    "json"
+  ]);
+}
+
 export async function addMessageReaction(bot: BotConfig, messageId: string, emojiType: string): Promise<string> {
   await prepareLarkConfig(bot);
   const output = await runLarkCapture(bot, [
@@ -307,6 +346,11 @@ export async function downloadMessageResources(bot: BotConfig, message: LarkMess
 }
 
 async function runLarkCapture(bot: BotConfig, args: string[], cwd = projectRoot()): Promise<string> {
+  await prepareLarkConfig(bot);
+  return runLarkCaptureRaw(bot, args, cwd);
+}
+
+async function runLarkCaptureRaw(bot: BotConfig, args: string[], cwd = projectRoot()): Promise<string> {
   const { command, prefix } = await resolveLarkCommand(bot);
   return new Promise<string>((resolve, reject) => {
     const child = spawn(command, [...prefix, ...profileArgs(bot), ...args], {

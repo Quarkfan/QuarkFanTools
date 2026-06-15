@@ -63,6 +63,9 @@ export async function runClaude(
     "你可以默认通过 Bash 调用 lark-cli，命令会自动使用当前机器人隔离的飞书身份与凭据。",
     "需要读取飞书文档时，先执行 `lark-cli skills read lark-doc`，再使用 `lark-cli docs +fetch`、`lark-cli docs +search`、`lark-cli wiki` 或 `lark-cli drive`。",
     "需要将生成的图片或文件回复给用户时，可执行 `lark-cli im +messages-reply --message-id <消息ID> --image <工作区相对路径> --as <回复身份>` 或对应的 --file。",
+    bot.ownerOpenId
+      ? "如果确实无法解决，或执行操作前必须取得人工授权，最终只输出一行 `OWNER_ESCALATION: {\"type\":\"help|approval\",\"summary\":\"给 Owner 的清晰说明\"}`，不要同时输出普通回复。仅在必要时升级。"
+      : "当前未配置 Owner；无法解决或需要人工授权时，直接向提问人说明。",
     "最终只输出应回复给飞书用户的内容，不要输出运行日志或内部推理。",
     "",
     "可用 Skills：",

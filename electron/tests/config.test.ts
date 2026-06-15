@@ -61,9 +61,30 @@ test("removes wildcard skill access so new skills require explicit authorization
       replyIdentity: "bot",
       eventTypes: ["im.message.receive_v1"],
       skillNames: ["*", "approved-skill"],
-      pendingReaction: "OnIt"
+      pendingReaction: "OnIt",
+      ownerOpenId: ""
     }]
   });
 
   assert.deepEqual(config.bots[0]?.skillNames, ["approved-skill"]);
+});
+
+test("adds an empty owner to older bot configs", () => {
+  const config = mergeConfig(base, {
+    bots: [{
+      id: "bot-1",
+      name: "Bot 1",
+      enabled: true,
+      cliPath: "",
+      profile: "",
+      appId: "cli_test",
+      appSecret: "secret",
+      receiveIdentity: "bot",
+      replyIdentity: "bot",
+      eventTypes: ["im.message.receive_v1"],
+      skillNames: [],
+      pendingReaction: "OnIt"
+    } as never]
+  });
+  assert.equal(config.bots[0]?.ownerOpenId, "");
 });

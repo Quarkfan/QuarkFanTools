@@ -21,7 +21,7 @@ flowchart LR
 
 ## 2. 消息处理流程
 
-每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 `LarkEventStream`。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话按 `runtime.maxConcurrentTasks` 并发。
+每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 `LarkEventStream`。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话通过全局 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。
 
 ```mermaid
 sequenceDiagram
@@ -76,11 +76,15 @@ Skill 来源按优先级发现：
 
 Skill 摘要标记为本地导入、Git 市场或应用内置。用户只能从 GUI 删除本地导入的 Skill；删除时会停止监听并撤销所有机器人对该名称的授权，避免同名低优先级 Skill 意外继承权限。
 
+机器人可配置 Owner open_id。Agent 仅通过结构化 `OWNER_ESCALATION` 结果发起人工升级；Runtime 将请求持久化并私聊 Owner 发送卡片。只有配置的 Owner 本人发出的 `/owner` 处理指令会被接受，处理结果回复到原消息。
+
 日志条目可包含结构化 `botId`。运行台使用该字段按机器人隔离展示详细日志，并可按等级筛选；不属于机器人的应用级日志仍保留为全局日志。
 
 消息处理启动后，添加处理中表情与资源准备、Agent 启动并行执行，不再阻塞模型调用。授权 Skill 到机器人 Claude home 和会话 workspace 的链接同步也并行执行。每条成功回复额外记录资源处理、Agent、飞书回复与总耗时，用于区分本机准备、模型服务和飞书 API 延迟。
 
 应用版本从 Electron `app.getVersion()` 读取。面向用户的更新记录维护在 `electron/release-notes.ts`，通过受控 IPC 提供给渲染层版本弹窗；根 `CHANGELOG.md` 保留更完整的开发和发布记录。
+
+lark-cli 凭据 marker 只用于避免重复初始化；应用进程首次使用机器人身份时仍执行 `config show` 校验。若实际配置或密钥链状态丢失，会使用已保存的 App ID 与 App Secret 自动重新初始化。主进程随后执行官方 `keychain-downgrade`，将密钥物化为 Claude sandbox 内的 lark-cli 也能读取的本地文件。
 
 ## 6. Office 与多模态
 

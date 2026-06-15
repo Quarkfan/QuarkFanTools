@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { runClaude } from "./claude.js";
-import { addMessageReaction, downloadMessageResources, LarkEventStream, removeMessageReaction, replyToMessage } from "./lark-cli.js";
+import { addMessageReaction, downloadMessageResources, LarkEventStream, removeMessageReaction, replyToMessage, sendCardToUser } from "./lark-cli.js";
 import { Logger } from "./logger.js";
 import { preprocessOfficeResources } from "./office.js";
 import { discoverSkills } from "./skills.js";
@@ -11,6 +11,8 @@ import { stateRoot } from "./paths.js";
 import { conversationKey } from "./conversation.js";
 import { SessionStore } from "./sessions.js";
 import { syncSkillMarket } from "./skill-market.js";
+import { addEscalation, completeEscalation, escalationCard, getEscalation, ownerDecision, parseEscalation } from "./escalations.js";
+import { TaskLimiter } from "./task-limiter.js";
 import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
@@ -22,7 +24,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private conversationTasks = new Map<string, Promise<void>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private runningBotIds = new Set<string>();
-  private activeTasks = 0;
+  private taskLimiter = new TaskLimiter();
   private config!: AppConfig;
   private skills: SkillSummary[] = [];
 
@@ -109,7 +111,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       running: this.runningBotIds.size > 0,
       runningBotIds: [...this.runningBotIds],
       connectedBotIds: [...this.connectedBotIds],
-      activeTasks: this.activeTasks,
+      activeTasks: this.taskLimiter.active,
+      queuedTasks: this.taskLimiter.queued,
       skills: this.skills,
       config: this.config
     };
@@ -168,14 +171,34 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     const previous = this.conversationTasks.get(key) ?? Promise.resolve();
     const task = previous
       .catch(() => undefined)
-      .then(() => this.handleMessage(bot, message))
+      .then(() => this.runWithTaskSlot(bot, message))
       .finally(() => {
         if (this.conversationTasks.get(key) === task) this.conversationTasks.delete(key);
       });
     this.conversationTasks.set(key, task);
   }
 
-  private async handleMessage(bot: BotConfig, message: LarkMessage): Promise<void> {
+  private async runWithTaskSlot(bot: BotConfig, message: LarkMessage): Promise<void> {
+    if (this.processed.get(bot.id)?.has(message.eventId)) return;
+    const limit = Math.max(1, Math.floor(this.config.runtime.maxConcurrentTasks || 1));
+    const wasQueued = this.taskLimiter.active >= limit;
+    const pendingRelease = this.taskLimiter.acquire(limit);
+    const queuedReaction = wasQueued ? this.addPendingReaction(bot, message, Date.now()) : undefined;
+    if (wasQueued) {
+      this.emitSnapshot();
+      await this.logger.write("info", "消息已进入处理队列", `${message.text} / 当前运行 ${this.taskLimiter.active}，排队 ${this.taskLimiter.queued}`, bot.id);
+    }
+    const release = await pendingRelease;
+    this.emitSnapshot();
+    try {
+      await this.handleMessage(bot, message, queuedReaction);
+    } finally {
+      release();
+      this.emitSnapshot();
+    }
+  }
+
+  private async handleMessage(bot: BotConfig, message: LarkMessage, existingReaction?: Promise<string>): Promise<void> {
     const processed = this.processed.get(bot.id) ?? new Set<string>();
     if (processed.has(message.eventId)) return;
     processed.add(message.eventId);
@@ -189,21 +212,24 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       bot.id
     );
     void this.saveProcessed(bot.id);
-    this.activeTasks += 1;
-    this.emitSnapshot();
     const startedAt = Date.now();
     const timings: string[] = [];
-    const pendingReaction = addMessageReaction(bot, message.messageId, bot.pendingReaction || "OnIt")
-      .then(async (reactionId) => {
-        await this.logger.write("info", "已添加处理中表情", `${bot.name} / ${formatDelay(Date.now() - startedAt)}`, bot.id);
-        return reactionId;
-      })
-      .catch(async (error) => {
-        await this.logger.write("warn", "添加处理中表情失败，继续处理消息", String(error), bot.id);
-        return "";
-      });
+    const pendingReaction = existingReaction ?? this.addPendingReaction(bot, message, startedAt);
 
     try {
+      const decision = ownerDecision(message);
+      if (decision && bot.ownerOpenId && message.senderId === bot.ownerOpenId) {
+        const escalation = await getEscalation(bot, decision.id);
+        if (!escalation) {
+          await replyToMessage(bot, message.messageId, `未找到待处理请求 ${decision.id}，可能已处理或编号有误。`);
+          return;
+        }
+        await replyToMessage(bot, escalation.messageId, decision.response);
+        await replyToMessage(bot, message.messageId, `已将处理结果发送给原提问人（请求 ${decision.id}）。`);
+        await completeEscalation(bot, decision.id);
+        await this.logger.write("success", "Owner 已处理人工请求", `${decision.id} / ${decision.response}`, bot.id);
+        return;
+      }
       const allowed = new Set(bot.skillNames);
       const botSkills = this.skills.filter((skill) => allowed.has(skill.name));
       const key = conversationKey(message);
@@ -231,7 +257,21 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       timings.push(`Agent ${formatDelay(Date.now() - agentStartedAt)}`);
       if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId, message.messageId);
       const replyStartedAt = Date.now();
-      await replyToMessage(bot, message.messageId, result.response);
+      const escalation = parseEscalation(result.response);
+      if (escalation && bot.ownerOpenId) {
+        const pending = await addEscalation(bot, escalation, message);
+        try {
+          await sendCardToUser(bot, bot.ownerOpenId, escalationCard(bot, pending), `owner-${bot.id}-${pending.id}`);
+          await replyToMessage(bot, message.messageId, `这个问题需要人工${pending.type === "approval" ? "授权" : "协助"}，我已私聊 Owner 跟进（请求 ${pending.id}）。`);
+          await this.logger.write("info", "已向 Owner 发送人工请求", `${pending.id} / ${pending.summary}`, bot.id);
+        } catch (error) {
+          await replyToMessage(bot, message.messageId, "这个问题需要人工协助，但目前无法联系配置的 Owner。请管理员确认 Owner open_id 正确，并且该用户有应用使用权限。");
+          await completeEscalation(bot, pending.id);
+          await this.logger.write("error", "向 Owner 发送人工请求失败", String(error), bot.id);
+        }
+      } else {
+        await replyToMessage(bot, message.messageId, result.response);
+      }
       timings.push(`飞书回复 ${formatDelay(Date.now() - replyStartedAt)}`);
       await this.logger.write("success", "消息处理并回复完成", result.response, bot.id);
       await this.logger.write("info", "消息处理耗时", `${timings.join(" / ")} / 总计 ${formatDelay(Date.now() - startedAt)}`, bot.id);
@@ -247,9 +287,19 @@ export class QuarkfanToolsRuntime extends EventEmitter {
           await this.logger.write("warn", "移除处理中表情失败", String(error), bot.id);
         }
       }
-      this.activeTasks -= 1;
-      this.emitSnapshot();
     }
+  }
+
+  private addPendingReaction(bot: BotConfig, message: LarkMessage, startedAt: number): Promise<string> {
+    return addMessageReaction(bot, message.messageId, bot.pendingReaction || "OnIt")
+      .then(async (reactionId) => {
+        await this.logger.write("info", "已添加处理中表情", `${bot.name} / ${formatDelay(Date.now() - startedAt)}`, bot.id);
+        return reactionId;
+      })
+      .catch(async (error) => {
+        await this.logger.write("warn", "添加处理中表情失败，继续处理消息", String(error), bot.id);
+        return "";
+      });
   }
 
   private async loadProcessed(botId: string): Promise<void> {

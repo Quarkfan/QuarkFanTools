@@ -10,6 +10,7 @@ let activeView: "console" | "skills" | "config" | "storage" = "console";
 let selectedBotId = "";
 let logLevel: "all" | LogEntry["level"] = "all";
 let showReleaseNotes = false;
+let marketSource = "all";
 
 function closeReleaseNotes(): void {
   showReleaseNotes = false;
@@ -104,15 +105,23 @@ function renderSkills(): string {
       <div class="panel-title"><span>LOCAL SKILL MARKET</span><small>${snapshot.skills.length} available</small></div>
       <div class="market-toolbar">
         <input id="market-search" type="search" placeholder="搜索 Skill 名称或描述" />
+        <select id="market-source">
+          <option value="all" ${marketSource === "all" ? "selected" : ""}>全部来源</option>
+          <option value="local" ${marketSource === "local" ? "selected" : ""}>本地导入</option>
+          <option value="market" ${marketSource === "market" ? "selected" : ""}>Git 市场</option>
+          <option value="builtin" ${marketSource === "builtin" ? "selected" : ""}>应用内置</option>
+          <option value="unused" ${marketSource === "unused" ? "selected" : ""}>未授权给任何 Bot</option>
+        </select>
         <button class="ghost" id="market-sync" ${snapshot.config.skillMarket.enabled && snapshot.config.skillMarket.repositoryUrl ? "" : "disabled"}>同步 Git 市场</button>
       </div>
       <div class="market-skill-list">
         ${snapshot.skills.map((skill) => `
-          <article class="market-skill-row" data-market-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}">
+          <article class="market-skill-row" data-market-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}" data-market-source="${skill.source}" data-market-unused="${snapshot.config.bots.some((bot) => bot.skillNames.includes(skill.name)) ? "false" : "true"}">
             <div class="skill-glyph">${escapeHtml(skill.name.slice(0, 2).toUpperCase())}</div>
             <div>
               <strong>${escapeHtml(skill.name)}</strong>
               <p>${escapeHtml(skill.description || "未提供描述")}</p>
+              <small>${escapeHtml(snapshot.config.bots.filter((bot) => bot.skillNames.includes(skill.name)).map((bot) => bot.name).join("、") || "未授权给任何 Bot")}</small>
             </div>
             <span class="source-badge ${skill.source}">${skillSourceLabel(skill.source)}</span>
             ${skill.source === "local" ? `<button class="danger remove-local-skill" data-name="${escapeHtml(skill.name)}">删除</button>` : ""}
@@ -197,7 +206,7 @@ function renderConsole(): string {
       <article><span>在线机器人</span><strong>${statusDot(snapshot.connectedBotIds.length > 0)}${snapshot.connectedBotIds.length}/${snapshot.config.bots.filter((bot) => bot.enabled).length}</strong></article>
       <article><span>可用 Skills</span><strong>${snapshot.skills.length}</strong></article>
       <article><span>运行中任务</span><strong>${snapshot.activeTasks}</strong></article>
-      <article><span>模型</span><strong>${escapeHtml(snapshot.config.model.model || "未配置")}</strong></article>
+      <article><span>排队任务 / 模型</span><strong>${snapshot.queuedTasks} / ${escapeHtml(snapshot.config.model.model || "未配置")}</strong></article>
     </section>
     <section class="workspace">
       <div class="panel skill-panel">
@@ -268,6 +277,8 @@ function renderBot(bot: BotConfig): string {
         <label><span>回复身份</span><select data-bot="${bot.id}" data-field="replyIdentity"><option value="bot" ${bot.replyIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.replyIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
       </div>
       ${botField(bot, "处理中表情", "pendingReaction")}
+      ${botField(bot, "Owner 飞书 open_id", "ownerOpenId")}
+      <small class="bot-note">Agent 无法解决或需要人工授权时，会私聊此用户发送卡片。Owner 必须在飞书中有该应用的使用权限。</small>
       <div class="skill-access">
         <div class="skill-access-heading"><span>允许访问的 Skills</span><small>${bot.skillNames.length} / ${snapshot.skills.length} 已授权</small></div>
         <small>新增 Skill 默认不授权。可搜索后批量授权或取消当前筛选结果。</small>
@@ -295,6 +306,7 @@ function renderConfig(): string {
           ${field("Claude Base URL", "baseUrl", c.model.baseUrl, "url", "服务商提供的 Claude / Anthropic 兼容地址")}
           ${field("模型", "model", c.model.model)}
           ${field("API Key", "apiKey", c.model.apiKey, "password")}
+          <label><span>最大并发任务数</span><input name="maxConcurrentTasks" type="number" min="1" max="20" value="${c.runtime.maxConcurrentTasks}" /><small>不同会话最多同时运行的 Agent 数量；同一会话仍按顺序处理。</small></label>
           <label><span>多模态视觉能力</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
         </div>
         <div class="panel config-panel">
@@ -330,7 +342,8 @@ function newBot(): BotConfig {
     replyIdentity: "bot",
     eventTypes: ["im.message.receive_v1"],
     skillNames: [],
-    pendingReaction: "OnIt"
+    pendingReaction: "OnIt",
+    ownerOpenId: ""
   };
 }
 
@@ -356,11 +369,10 @@ function bindEvents(): void {
     snapshot = await window.quarkfanTools.importSkill();
     render();
   });
-  document.querySelector<HTMLInputElement>("#market-search")?.addEventListener("input", (event) => {
-    const query = (event.currentTarget as HTMLInputElement).value.trim().toLowerCase();
-    document.querySelectorAll<HTMLElement>("[data-market-search]").forEach((row) => {
-      row.hidden = !String(row.dataset.marketSearch).includes(query);
-    });
+  document.querySelector<HTMLInputElement>("#market-search")?.addEventListener("input", filterMarketSkills);
+  document.querySelector<HTMLSelectElement>("#market-source")?.addEventListener("change", (event) => {
+    marketSource = (event.currentTarget as HTMLSelectElement).value;
+    filterMarketSkills();
   });
   document.querySelector<HTMLButtonElement>("#market-sync")?.addEventListener("click", async () => {
     snapshot = await window.quarkfanTools.syncSkillMarket();
@@ -456,6 +468,7 @@ function bindEvents(): void {
     next.model.model = String(form.get("model") ?? "");
     next.model.apiKey = String(form.get("apiKey") ?? "");
     next.model.multimodalEnabled = String(form.get("multimodalEnabled") ?? "true") === "true";
+    next.runtime.maxConcurrentTasks = Math.max(1, Math.min(20, Number(form.get("maxConcurrentTasks") ?? 2) || 2));
     next.skillMarket.enabled = String(form.get("marketEnabled") ?? "false") === "true";
     next.skillMarket.repositoryUrl = String(form.get("marketRepositoryUrl") ?? "");
     next.skillMarket.branch = String(form.get("marketBranch") ?? "main");
@@ -479,6 +492,16 @@ function filterBotSkills(botId: string, value: string): void {
   const query = value.trim().toLowerCase();
   document.querySelectorAll<HTMLElement>(`[data-bot-skill-row="${botId}"]`).forEach((row) => {
     row.hidden = !String(row.dataset.skillSearch).includes(query);
+  });
+}
+
+function filterMarketSkills(): void {
+  const query = document.querySelector<HTMLInputElement>("#market-search")?.value.trim().toLowerCase() ?? "";
+  document.querySelectorAll<HTMLElement>("[data-market-search]").forEach((row) => {
+    const sourceMatches = marketSource === "all"
+      || row.dataset.marketSource === marketSource
+      || (marketSource === "unused" && row.dataset.marketUnused === "true");
+    row.hidden = !sourceMatches || !String(row.dataset.marketSearch).includes(query);
   });
 }
 

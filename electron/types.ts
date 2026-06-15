@@ -13,6 +13,7 @@ export interface BotConfig {
   eventTypes: string[];
   skillNames: string[];
   pendingReaction: string;
+  ownerOpenId: string;
 }
 
 export interface AppConfig {
@@ -73,6 +74,7 @@ export interface RuntimeSnapshot {
   runningBotIds: string[];
   connectedBotIds: string[];
   activeTasks: number;
+  queuedTasks: number;
   skills: SkillSummary[];
   config: AppConfig;
 }

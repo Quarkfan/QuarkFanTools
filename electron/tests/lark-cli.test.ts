@@ -16,7 +16,8 @@ const bot: BotConfig = {
   replyIdentity: "bot",
   eventTypes: ["im.message.receive_v1"],
   skillNames: [],
-  pendingReaction: "OnIt"
+  pendingReaction: "OnIt",
+  ownerOpenId: ""
 };
 
 test("event subscription does not use unsafe parallel subscription mode", () => {

@@ -89,6 +89,7 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .config-panel .panel-title { margin-bottom: 17px; }
 .bot-card .panel-title > div { display: flex; gap: 6px; }
 .bot-card .panel-title button { padding: 5px 8px; font-size: 9px; }
+.bot-note { display: block; margin: -2px 17px 8px; color: #627269; font-size: 10px; line-height: 1.5; }
 label { display: grid; gap: 7px; padding: 8px 17px; color: #8ea097; font-size: 11px; }
 input, select { width: 100%; border: 1px solid #304039; border-radius: 3px; padding: 10px; outline: none; color: #dce6e1; background: #0c1210; }
 input:focus, select:focus { border-color: #77f2a1; box-shadow: 0 0 0 2px rgba(119,242,161,.08); }
@@ -109,12 +110,13 @@ label small { color: #536159; line-height: 1.5; }
 .skill-access .check strong { color: #c8d4ce; font-size: 11px; }
 .skill-access .check small { overflow: hidden; color: #617168; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .market-panel { min-height: 420px; }
-.market-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 10px; padding: 14px; border-bottom: 1px solid #27332d; }
+.market-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) 180px auto; gap: 10px; padding: 14px; border-bottom: 1px solid #27332d; }
 .market-toolbar button { padding: 8px 12px; }
 .market-skill-list { max-height: calc(100vh - 320px); overflow: auto; }
 .market-skill-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid #202a25; }
 .market-skill-row strong { color: #dbe6e0; font-size: 13px; }
 .market-skill-row p { margin: 5px 0 0; color: #718178; font-size: 11px; line-height: 1.55; }
+.market-skill-row small { display: block; margin-top: 5px; color: #536159; font-size: 9px; }
 .market-skill-row button { padding: 6px 9px; font-size: 10px; }
 .source-badge { padding: 4px 7px; border: 1px solid #34433b; color: #8fa198; font: 700 9px/1 "Menlo", monospace; white-space: nowrap; }
 .source-badge.local { border-color: #557a64; color: #77f2a1; }

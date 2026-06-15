@@ -14,6 +14,7 @@
 - 每个机器人使用独立飞书 CLI 配置、Claude home、会话状态和 workspace。
 - 每个机器人只映射明确授权的 Skills。
 - 删除本地导入 Skill 时同步撤销所有机器人对该名称的授权，避免同名市场或内置 Skill 自动继承权限。
+- Owner 人工请求只接受配置的 Owner open_id 发出的处理指令；待处理请求按机器人隔离保存。
 - Claude sandbox 默认拒绝其他机器人和全局 Skill 路径，只放行当前执行所需目录。
 - Skill 市场限制为 HTTPS，避免依赖系统 SSH/Git 配置。
 - Office ZIP 预处理限制为最多 5,000 个条目和 200 MB 解压体积。
@@ -32,6 +33,10 @@ Claude Agent 允许 `Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`、`Skil
 ### 本机明文凭据
 
 配置以受限文件权限保存在本机，但尚未使用 macOS Keychain。拥有用户账户或磁盘读取能力的攻击者仍可能取得凭据。
+
+### Owner 人工授权
+
+当前 Owner 授权代表人工给出处理结论，不会自动扩大 Agent sandbox、Skill 权限或执行任意待授权命令。Owner 必须具有飞书应用使用权限；错误配置或权限不足会导致卡片发送失败并向原提问人明确报错。
 
 ### 第三方模型
 
