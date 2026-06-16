@@ -59,7 +59,7 @@ sequenceDiagram
 
 ## 4. 会话模型
 
-- 会话记录包含 Claude `sessionId`、最近更新时间和最近最多 100 个消息 ID。
+- 会话记录包含 Claude `sessionId`、最近更新时间、最近最多 100 个消息 ID，以及最近最多 50 轮用户输入与机器人回复正文。
 - 状态保存于 `state/bots/<bot-id>/sessions.json`。
 - 无活动 24 小时后视为过期；过期会话不会恢复。
 - `/new`、`新对话`、`重置会话` 会主动丢弃当前上下文。

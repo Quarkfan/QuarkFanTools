@@ -51,7 +51,7 @@ skills/
     └── scripts/
 ```
 
-仓库中的魔介问答内容位于 `skills/moje-qa-assistant/`，仅供开发参考，不会打入安装包。
+仓库中的魔介问答参考 Skill 拆分为 `skills/moje-qa-assistant-basic/` 和 `skills/moje-qa-assistant-adv/`，仅供开发参考，不会打入安装包。
 
 ## 开发
 

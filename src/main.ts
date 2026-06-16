@@ -275,7 +275,7 @@ function renderManual(): string {
           </section>
           <section>
             <h3>存储管理</h3>
-            <p>存储管理用于查看和清理连续会话 workspace、Claude 会话记录和消息附件。点击会话可查看 Claude session、关联消息和文件清单。</p>
+            <p>存储管理用于查看和清理连续会话 workspace、Claude 会话记录和消息附件。点击会话可查看 Claude session、最近对话记录、关联消息和文件清单。</p>
             <p>清理会话不会删除应用配置、飞书授权、Skill 市场配置或用户导入 Skills。</p>
           </section>
           <section>
