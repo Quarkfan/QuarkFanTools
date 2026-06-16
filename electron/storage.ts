@@ -2,7 +2,7 @@ import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
 import { stateRoot, workspaceRoot } from "./paths.js";
-import type { StorageSession, StorageStats } from "./types.js";
+import type { StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
 
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 
@@ -10,6 +10,12 @@ interface SessionRecord {
   sessionId: string;
   updatedAt: string;
   messageIds?: string[];
+  transcript?: Array<{
+    time: string;
+    messageId: string;
+    user: string;
+    assistant: string;
+  }>;
 }
 
 export async function storageStats(): Promise<StorageStats> {
@@ -45,6 +51,32 @@ export async function storageStats(): Promise<StorageStats> {
     botCount: bots.length,
     sessions: sessionEntries.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
   };
+}
+
+export async function storageSessionDetail(id: string): Promise<StorageSessionDetail> {
+  const session = (await storageStats()).sessions.find((item) => item.id === id);
+  if (!session) throw new Error("会话不存在");
+  const record = (await readSessions(session.botId))[session.conversationKey];
+  if (!record) throw new Error("会话记录不存在");
+  const workspace = path.join(workspaceRoot(), "bots", session.botId, "sessions", workspaceSessionId(session.conversationKey));
+  return {
+    ...session,
+    sessionId: record.sessionId,
+    messageIds: record.messageIds ?? [],
+    transcript: record.transcript ?? [],
+    files: await listSessionFiles(workspace, workspace)
+  };
+}
+
+async function listSessionFiles(root: string, current: string): Promise<Array<{ path: string; bytes: number }>> {
+  const result: Array<{ path: string; bytes: number }> = [];
+  for (const entry of await readdir(current, { withFileTypes: true }).catch(() => [])) {
+    const target = path.join(current, entry.name);
+    if (entry.isDirectory()) result.push(...await listSessionFiles(root, target));
+    else result.push({ path: path.relative(root, target), bytes: await fileSize(target) });
+    if (result.length >= 300) break;
+  }
+  return result;
 }
 
 async function fileSize(target: string): Promise<number> {

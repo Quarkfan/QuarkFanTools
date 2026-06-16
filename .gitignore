@@ -8,3 +8,4 @@ bots/
 config/local.json
 *.log
 .DS_Store
+.claude/settings.local.json

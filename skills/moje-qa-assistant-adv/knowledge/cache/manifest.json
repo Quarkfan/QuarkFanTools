@@ -1,0 +1,7 @@
+{
+  "version": "1.0",
+  "description": "飞书大文件本地缓存清单。PPT/Word/Excel 等大文件提取后缓存于此，避免重复拉取。",
+  "cache_dir": "knowledge/cache/",
+  "ttl_days": 7,
+  "files": []
+}

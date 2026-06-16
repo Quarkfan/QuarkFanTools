@@ -4,9 +4,9 @@ import { QuarkfanToolsRuntime } from "./runtime.js";
 import { saveConfig } from "./config.js";
 import { migrateLegacyData } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
-import { importSkillFolder, removeLocalSkill } from "./skills.js";
+import { importSkillFolder, removeLocalSkill, skillPreview } from "./skills.js";
 import { syncSkillMarket } from "./skill-market.js";
-import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageStats } from "./storage.js";
+import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
 import type { AppConfig } from "./types.js";
 
@@ -86,6 +86,8 @@ ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
 ipcMain.handle("app:info", () => appInfo(app.getVersion()));
 ipcMain.handle("storage:stats", () => storageStats());
+ipcMain.handle("storage:session-detail", (_event, id: string) => storageSessionDetail(id));
+ipcMain.handle("skills:preview", (_event, name: string) => skillPreview(name));
 ipcMain.handle("storage:clear-expired", async () => {
   await runtime.stop();
   const removed = await clearExpiredStorage();
@@ -141,6 +143,10 @@ ipcMain.handle("skills:market-sync", async () => {
   return runtime.snapshot();
 });
 ipcMain.handle("skills:remove-local", async (_event, name: string) => {
+  const inUseBy = runtime.snapshot().config.bots.filter((bot) => bot.skillNames.includes(name)).map((bot) => bot.name || bot.id);
+  if (inUseBy.length > 0) {
+    throw new Error(`Skill 正在被 ${inUseBy.join("、")} 使用，请先在 Bot 配置中取消授权`);
+  }
   await runtime.stop();
   await removeLocalSkill(name);
   const config = runtime.snapshot().config;

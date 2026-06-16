@@ -13,6 +13,8 @@ import { SessionStore } from "./sessions.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { addEscalation, completeEscalation, escalationCard, getEscalation, ownerDecision, parseEscalation } from "./escalations.js";
 import { TaskLimiter } from "./task-limiter.js";
+import { addDeferredTask, continueTaskId, getDeferredTask, parseDeferredTask, updateDeferredTask, type DeferredTask } from "./deferred-tasks.js";
+import { cacheMessageResources } from "./file-cache.js";
 import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
@@ -199,6 +201,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   }
 
   private async handleMessage(bot: BotConfig, message: LarkMessage, existingReaction?: Promise<string>): Promise<void> {
+    const originalUserText = message.text;
     const processed = this.processed.get(bot.id) ?? new Set<string>();
     if (processed.has(message.eventId)) return;
     processed.add(message.eventId);
@@ -232,7 +235,21 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       const allowed = new Set(bot.skillNames);
       const botSkills = this.skills.filter((skill) => allowed.has(skill.name));
-      const key = conversationKey(message);
+      let key = conversationKey(message);
+      let resumedTask: DeferredTask | null = null;
+      const requestedTaskId = continueTaskId(message.text);
+      if (requestedTaskId) {
+        resumedTask = await getDeferredTask(bot, requestedTaskId);
+        if (!resumedTask || resumedTask.status === "completed") {
+          await replyToMessage(bot, message.messageId, `未找到可继续的任务 ${requestedTaskId}，可能已完成或编号有误。`);
+          return;
+        }
+        key = resumedTask.conversationKey;
+        resumedTask.status = "scheduled";
+        await updateDeferredTask(bot, resumedTask);
+        message = { ...message, text: resumedTask.followUpPrompt };
+        await replyToMessage(bot, message.messageId, `已调度任务 ${resumedTask.id}，我会等待文件下载和分析完成后回复。`);
+      }
       if (["/new", "新对话", "重置会话"].includes(message.text.trim())) {
         await this.sessionStore.clear(bot, key);
         await replyToMessage(bot, message.messageId, "已开启新对话，后续消息不会沿用之前的上下文。");
@@ -245,6 +262,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       try {
         enrichedMessage = await downloadMessageResources(bot, message, resourcesDir);
         enrichedMessage = await preprocessOfficeResources(enrichedMessage, resourcesDir, this.config.model.multimodalEnabled);
+        await cacheMessageResources(bot, enrichedMessage);
         if (enrichedMessage.resources.length > 0) {
           await this.logger.write("info", "已下载飞书消息资源", `${enrichedMessage.resources.length} 个`, bot.id);
         }
@@ -253,30 +271,63 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       timings.push(`资源 ${formatDelay(Date.now() - resourceStartedAt)}`);
       const agentStartedAt = Date.now();
-      const result = await runClaude(this.config, bot, enrichedMessage, botSkills, key, this.sessionStore.get(bot, key));
+      let lastProgressKey = "";
+      let lastLoggedProgressKey = "";
+      let lastProgressAt = 0;
+      const result = await runClaude(this.config, bot, enrichedMessage, botSkills, key, this.sessionStore.get(bot, key), (progress) => {
+        if (progress.key !== lastLoggedProgressKey) {
+          lastLoggedProgressKey = progress.key;
+          void this.logger.write("info", "Agent 工作过程", progress.text, bot.id);
+        }
+        if (!bot.showProgress || progress.key === lastProgressKey || Date.now() - lastProgressAt < 8000) return;
+        lastProgressKey = progress.key;
+        lastProgressAt = Date.now();
+        void replyToMessage(bot, message.messageId, `工作进度：${progress.text}`).catch((error) => (
+          this.logger.write("warn", "发送工作进度失败", String(error), bot.id)
+        ));
+      });
       timings.push(`Agent ${formatDelay(Date.now() - agentStartedAt)}`);
-      if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId, message.messageId);
       const replyStartedAt = Date.now();
       const escalation = parseEscalation(result.response);
-      if (escalation && bot.ownerOpenId) {
+      const deferred = parseDeferredTask(result.response);
+      let finalReply = result.response;
+      if (deferred) {
+        const task = await addDeferredTask(bot, deferred, message, key);
+        finalReply = `${deferred.summary}\n\n如需继续等待下载并完成深度分析，请回复：/continue ${task.id}`;
+        await replyToMessage(bot, message.messageId, finalReply);
+        await this.logger.write("info", "已创建待确认下载任务", `${task.id} / ${deferred.summary}`, bot.id);
+      } else if (escalation && bot.ownerOpenId) {
         const pending = await addEscalation(bot, escalation, message);
         try {
           await sendCardToUser(bot, bot.ownerOpenId, escalationCard(bot, pending), `owner-${bot.id}-${pending.id}`);
-          await replyToMessage(bot, message.messageId, `这个问题需要人工${pending.type === "approval" ? "授权" : "协助"}，我已私聊 Owner 跟进（请求 ${pending.id}）。`);
+          finalReply = `这个问题需要人工${pending.type === "approval" ? "授权" : "协助"}，我已私聊 Owner 跟进（请求 ${pending.id}）。`;
+          await replyToMessage(bot, message.messageId, finalReply);
           await this.logger.write("info", "已向 Owner 发送人工请求", `${pending.id} / ${pending.summary}`, bot.id);
         } catch (error) {
-          await replyToMessage(bot, message.messageId, "这个问题需要人工协助，但目前无法联系配置的 Owner。请管理员确认 Owner open_id 正确，并且该用户有应用使用权限。");
+          finalReply = "这个问题需要人工协助，但目前无法联系配置的 Owner。请管理员确认 Owner open_id 正确，并且该用户有应用使用权限。";
+          await replyToMessage(bot, message.messageId, finalReply);
           await completeEscalation(bot, pending.id);
           await this.logger.write("error", "向 Owner 发送人工请求失败", String(error), bot.id);
         }
       } else {
         await replyToMessage(bot, message.messageId, result.response);
       }
+      if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId, message.messageId, {
+        user: originalUserText,
+        assistant: finalReply
+      });
+      if (resumedTask) {
+        resumedTask.status = "completed";
+        await updateDeferredTask(bot, resumedTask);
+      }
       timings.push(`飞书回复 ${formatDelay(Date.now() - replyStartedAt)}`);
       await this.logger.write("success", "消息处理并回复完成", result.response, bot.id);
       await this.logger.write("info", "消息处理耗时", `${timings.join(" / ")} / 总计 ${formatDelay(Date.now() - startedAt)}`, bot.id);
     } catch (error) {
       await this.logger.write("error", "消息处理失败", String(error), bot.id);
+      if (/maximum number of turns|Reached maximum number of turns/i.test(String(error))) {
+        await replyToMessage(bot, message.messageId, "这次检索和文件处理步骤超过了当前 Agent 最大步数限制，任务已停止。管理员可以在配置中调高“单次 Agent 最大步数”，或让问题更聚焦后重试。").catch(() => undefined);
+      }
     } finally {
       const pendingReactionId = await pendingReaction;
       if (pendingReactionId) {

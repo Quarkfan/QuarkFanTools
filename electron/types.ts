@@ -11,9 +11,11 @@ export interface BotConfig {
   receiveIdentity: LarkIdentity;
   replyIdentity: LarkIdentity;
   eventTypes: string[];
+  oauthScopes?: string[];
   skillNames: string[];
   pendingReaction: string;
   ownerOpenId: string;
+  showProgress?: boolean;
 }
 
 export interface AppConfig {
@@ -37,6 +39,7 @@ export interface AppConfig {
     sandbox: "read-only" | "workspace-write" | "danger-full-access";
     approvalPolicy: "untrusted" | "on-request" | "never";
     maxConcurrentTasks: number;
+    maxAgentTurns?: number;
   };
 }
 
@@ -94,6 +97,26 @@ export interface StorageSession {
   updatedAt: string;
   bytes: number;
   expired: boolean;
+}
+
+export interface StorageSessionDetail extends StorageSession {
+  sessionId: string;
+  messageIds: string[];
+  transcript: Array<{
+    time: string;
+    messageId: string;
+    user: string;
+    assistant: string;
+  }>;
+  files: Array<{ path: string; bytes: number }>;
+}
+
+export interface SkillPreview {
+  name: string;
+  description: string;
+  source: SkillSummary["source"];
+  content: string;
+  files: string[];
 }
 
 export interface LogEntry {

@@ -1,7 +1,7 @@
 import { access, cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { builtinSkillsRoot, marketSkillsRoot, skillsRoot } from "./paths.js";
-import type { SkillSummary } from "./types.js";
+import type { SkillPreview, SkillSummary } from "./types.js";
 
 function frontmatterValue(content: string, key: string): string {
   const match = content.match(new RegExp(`^${key}:\\s*(.+)$`, "m"));
@@ -24,8 +24,11 @@ export async function discoverSkills(): Promise<SkillSummary[]> {
       const skillPath = path.join(skillDir, "SKILL.md");
       try {
         const content = await readFile(skillPath, "utf8");
-        const name = frontmatterValue(content, "name") || entryName;
-        if (names.has(name)) continue;
+        let name = frontmatterValue(content, "name") || entryName;
+        if (names.has(name)) {
+          if (entryName && !names.has(entryName)) name = entryName;
+          else continue;
+        }
         names.add(name);
         skills.push({
           name,
@@ -76,13 +79,41 @@ async function skillDirectories(root: string): Promise<string[]> {
 }
 
 export async function importSkillFolder(source: string): Promise<string> {
-  await access(path.join(source, "SKILL.md"));
+  const sourceContent = await readFile(path.join(source, "SKILL.md"), "utf8");
+  const declaredName = frontmatterValue(sourceContent, "name") || path.basename(source);
   const root = skillsRoot();
   await mkdir(root, { recursive: true });
   const target = path.join(root, path.basename(source));
   if (path.resolve(source) === path.resolve(target)) return target;
   await cp(source, target, { recursive: true, force: true });
+  const imported = (await discoverSkills()).find((skill) => path.resolve(path.dirname(skill.path)) === path.resolve(target));
+  if (!imported) throw new Error(`Skill 已复制，但无法发现“${declaredName}”；请检查 SKILL.md frontmatter`);
   return target;
+}
+
+export async function skillPreview(name: string): Promise<SkillPreview> {
+  const skill = (await discoverSkills()).find((item) => item.name === name);
+  if (!skill) throw new Error("Skill 不存在");
+  const root = path.dirname(skill.path);
+  return {
+    name: skill.name,
+    description: skill.description,
+    source: skill.source,
+    content: await readFile(skill.path, "utf8"),
+    files: await listFiles(root, root)
+  };
+}
+
+async function listFiles(root: string, current: string): Promise<string[]> {
+  const result: string[] = [];
+  for (const entry of await readdir(current, { withFileTypes: true }).catch(() => [])) {
+    if (entry.name === ".git") continue;
+    const target = path.join(current, entry.name);
+    if (entry.isDirectory()) result.push(...await listFiles(root, target));
+    else result.push(path.relative(root, target));
+    if (result.length >= 200) break;
+  }
+  return result;
 }
 
 export async function removeLocalSkill(name: string): Promise<void> {

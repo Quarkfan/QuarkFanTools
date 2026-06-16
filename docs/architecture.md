@@ -52,7 +52,8 @@ sequenceDiagram
 - 每个机器人独立 Claude home 和会话状态。
 - 每个连续对话独立 workspace。
 - 只把机器人获授权的 Skills 映射到当前 workspace 和 Claude home。
-- Sandbox 默认拒绝访问其他机器人和全局 Skills，再放行当前 workspace、机器人状态与授权 Skills。
+- Sandbox 默认拒绝访问其他机器人和全局 Skills，再放行当前 workspace、当前机器人状态与授权 Skills；当前机器人 lark-cli 的 `locks/`、`cache/` 和日志目录必须可写。
+- lark-cli 的用户态 OAuth 加密材料和 `keychain-downgrade` 主密钥由官方 CLI 固定存放在 `~/Library/Application Support/lark-cli/`，Agent sandbox 需要额外允许读写该全局目录。
 
 私聊连续会话键为 `chat_id`；群聊连续会话键为 `chat_id + sender_id`。workspace 目录名使用会话键 SHA-256 的前 24 个字符，避免将飞书标识直接作为路径。
 
@@ -74,17 +75,21 @@ Skill 来源按优先级发现：
 
 同名 Skill 采用第一个发现的版本。支持来源根目录自身、直接子目录和一层嵌套目录中的 `SKILL.md`。发现或导入 Skill 不会授予任何机器人访问权，机器人只能使用配置中明确列出的 Skill。开发仓库的 `skills/` 只放参考内容，不进入安装包。
 
-Skill 摘要标记为本地导入、Git 市场或应用内置。用户只能从 GUI 删除本地导入的 Skill；删除时会停止监听并撤销所有机器人对该名称的授权，避免同名低优先级 Skill 意外继承权限。
+Skill 摘要标记为本地导入、Git 市场或应用内置。本地多个目录声明相同 frontmatter `name` 时，后续目录使用目录名作为显示名，避免被去重隐藏。用户只能从 GUI 删除本地导入且未被任何机器人授权使用的 Skill；已授权 Skill 必须先在 Bot 配置中取消授权。
 
 机器人可配置 Owner open_id。Agent 仅通过结构化 `OWNER_ESCALATION` 结果发起人工升级；Runtime 将请求持久化并私聊 Owner 发送卡片。只有配置的 Owner 本人发出的 `/owner` 处理指令会被接受，处理结果回复到原消息。
 
 日志条目可包含结构化 `botId`。运行台使用该字段按机器人隔离展示详细日志，并可按等级筛选；不属于机器人的应用级日志仍保留为全局日志。
 
+飞书应用可能向同一 Bot 长连接投递已在开放平台启用、但当前 `lark-cli event +subscribe` 未注册处理器的表情事件。应用自身添加和移除处理中表情时也会触发这类事件。Runtime 只消费 `im.message.receive_v1`，并过滤 reaction created/deleted 的 `not found handler` SDK 噪声；其他连接错误仍写入日志。
+
 消息处理启动后，添加处理中表情与资源准备、Agent 启动并行执行，不再阻塞模型调用。授权 Skill 到机器人 Claude home 和会话 workspace 的链接同步也并行执行。每条成功回复额外记录资源处理、Agent、飞书回复与总耗时，用于区分本机准备、模型服务和飞书 API 延迟。
 
 应用版本从 Electron `app.getVersion()` 读取。面向用户的更新记录维护在 `electron/release-notes.ts`，通过受控 IPC 提供给渲染层版本弹窗；根 `CHANGELOG.md` 保留更完整的开发和发布记录。
 
-lark-cli 凭据 marker 只用于避免重复初始化；应用进程首次使用机器人身份时仍执行 `config show` 校验。若实际配置或密钥链状态丢失，会使用已保存的 App ID 与 App Secret 自动重新初始化。主进程随后执行官方 `keychain-downgrade`，将密钥物化为 Claude sandbox 内的 lark-cli 也能读取的本地文件。
+lark-cli 凭据 marker 只用于避免重复初始化；应用进程首次使用机器人身份时仍执行 `config show` 校验。若实际配置或密钥链状态丢失，会使用已保存的 App ID 与 App Secret 自动重新初始化。主进程随后执行官方 `keychain-downgrade`，将密钥物化为 Claude sandbox 内的 lark-cli 也能读取的本地文件。用户态 OAuth 只能从应用配置页发起，Agent 不在会话内执行 `auth login` 或要求普通用户扫码。
+
+事件监听、消息回复和表情操作分别使用机器人配置的接收与回复身份。Agent 查找和读取飞书文档、Wiki、云盘与云 PPT 时固定使用已 OAuth 授权的用户态；云 PPT 使用 `drive +export` 导出为 PPTX，而不是按普通文件下载。用户态 OAuth 默认申请文档搜索权限，并按 Bot 合并用户配置的额外 scope。macOS Claude sandbox 使用网络代理限制外部访问，同时允许访问系统 trustd，使 Go 编写的 lark-cli 能校验代理 TLS 证书。文件隔离按 Bot 目录精确拒绝其他 Bot，而不是拒绝整个 `state/bots` 后再回放行当前 Bot，避免 lark-cli 锁文件写入被拦截。由于官方 lark-cli 没有提供可验证的独立安全存储目录配置，sandbox 同时允许 `~/Library/Application Support/lark-cli/` 读写，以读取用户态 OAuth 加密凭据和降级后的主密钥。
 
 ## 6. Office 与多模态
 
@@ -100,9 +105,11 @@ lark-cli 凭据 marker 只用于避免重复初始化；应用进程首次使用
 ```text
 config.json
 state/
+├── file-cache/<sha256>/
 └── bots/<bot-id>/
     ├── lark-cli/
     ├── claude-home/
+    ├── deferred-tasks.json
     └── sessions.json
 workspace/
 ├── skills/
@@ -111,6 +118,10 @@ workspace/
 ```
 
 首次运行会从旧目录 `~/Library/Application Support/qah/` 迁移配置、Skills 和状态。
+
+延后下载任务由 Agent 使用结构化 `DEFERRED_DOWNLOAD` 结果创建，Runtime 按机器人持久化。用户回复 `/continue <id>` 后，任务进入现有会话串行队列并沿用原 Claude 会话继续处理。消息附件和 Agent 在会话 workspace 中下载或生成的文件会进入全局文件缓存，使用内容 SHA-256 去重，只由应用主进程管理；元数据记录获准使用该缓存内容的 Bot，Agent 不直接获得全局缓存目录访问权。
+
+用户可见工作过程仅从 SDK 的工具调用和重试事件生成，并限频发送。模型的 thinking block、隐藏推理和原始工具参数不向用户输出。
 
 ## 8. 关键依赖
 

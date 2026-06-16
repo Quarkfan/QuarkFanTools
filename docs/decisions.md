@@ -56,11 +56,11 @@
 - 决策：版本号使用 `主版本.次版本.修订版本`。大的应用能力或不兼容变化升级主版本；新增明显完整功能升级次版本；修复、优化和轻量小能力升级修订版本。根 `CHANGELOG.md` 面向开发与发布，应用内 `electron/release-notes.ts` 面向用户。每次形成具体版本号后必须在同一轮完成 arm64 与 x64 打包；未打包变化只保留在 `Unreleased`。
 - 原因：让版本变化能够表达影响范围，同时让普通用户在应用内直接理解更新内容。
 
-## D-010 删除本地 Skill 时撤销同名授权
+## D-010 本地 Skill 删除必须先取消授权
 
 - 状态：已采用
-- 决策：用户从本地技能市场删除导入 Skill 时，停止监听并撤销所有机器人对该 Skill 名称的授权。Git 市场与应用内置 Skill 不提供单项删除。
-- 原因：Skill 授权当前按名称保存；删除高优先级本地 Skill 后可能暴露同名低优先级 Skill，自动保留授权会扩大未经确认的能力范围。
+- 决策：用户只能删除未被任何机器人授权使用的本地 Skill；已授权 Skill 必须先在 Bot 配置中取消授权。Git 市场与应用内置 Skill 不提供单项删除。
+- 原因：Skill 授权按名称保存；删除仍在使用的 Skill 容易让机器人能力突然缺失或暴露同名低优先级 Skill。
 
 ## D-011 跨会话使用全局并发队列
 
@@ -73,3 +73,27 @@
 - 状态：已采用
 - 决策：Bot 配置单个 Owner open_id；Agent 通过结构化结果发起升级，Runtime 私聊发送卡片并持久化请求，仅接受 Owner 本人的处理指令。
 - 原因：无需部署公网卡片回调服务即可形成可审计、重启可恢复的人工协作闭环。
+
+## D-013 飞书文档能力使用用户态并允许 sandbox trustd
+
+- 状态：已采用
+- 决策：事件监听与回复继续使用机器人配置身份；Agent 查找、读取和导出飞书文档、Wiki、云盘及云 PPT 固定使用用户态。macOS Claude sandbox 允许访问系统 trustd，以便内置 Go lark-cli 校验 sandbox 网络代理的 TLS 证书，但继续禁止 unsandboxed 命令。
+- 原因：飞书文档搜索依赖用户态权限；sandbox 网络代理是 Agent 外部访问边界，而 Go TLS 在默认 macOS sandbox 中无法访问 trustd，会导致所有飞书文档请求在到达 API 前失败。
+
+## D-014 延后下载使用持久化确认任务
+
+- 状态：已采用
+- 决策：Agent 通过结构化结果创建待确认任务，用户使用 `/continue <id>` 确认后在原会话队列继续。已下载附件按内容哈希全局去重，但全局缓存只由主进程访问并记录 Bot 授权。
+- 原因：先回复已有答案可降低等待感；持久化任务可跨重启保留，同时避免向 Agent 开放跨机器人共享目录。
+
+## D-015 思考开关只展示可观察工作进度
+
+- 状态：已采用
+- 决策：Bot 的工作过程开关只展示 SDK 可观察的工具调用类别、检索状态和重试状态，不展示模型隐藏推理。
+- 原因：原始思维链不适合作为用户进度信息，且可能包含敏感上下文；可观察事件足以解释当前工作阶段。
+
+## D-016 lark-cli 全局安全存储作为 sandbox 例外
+
+- 状态：已采用
+- 决策：Agent sandbox 在拒绝其他 Bot 状态与 workspace 的同时，允许读写 `~/Library/Application Support/lark-cli/`。用户态 OAuth 统一由 QuarkfanTools 配置页发起，Agent 不在聊天会话内执行 `lark-cli auth login`。
+- 原因：官方 lark-cli 即使设置了 `LARKSUITE_CLI_CONFIG_DIR`，仍会把 OAuth 加密材料和 `keychain-downgrade` 的 `master.key.file` 存放在全局 Application Support 目录。若不放行该目录，Agent 在 sandbox 内无法使用已完成的用户态授权读取飞书资料。

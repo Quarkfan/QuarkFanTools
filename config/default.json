@@ -18,6 +18,7 @@
   "runtime": {
     "sandbox": "workspace-write",
     "approvalPolicy": "never",
-    "maxConcurrentTasks": 2
+    "maxConcurrentTasks": 2,
+    "maxAgentTurns": 60
   }
 }

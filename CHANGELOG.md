@@ -1,9 +1,59 @@
 # Changelog
 
 本文件记录 QuarkfanTools 应用变更。示例 Skill 的独立历史见
-[`skills/moje-qa-assistant/CHANGELOG.md`](skills/moje-qa-assistant/CHANGELOG.md)。
+`skills/moje-qa-assistant-basic/CHANGELOG.md` 和
+`skills/moje-qa-assistant-adv/CHANGELOG.md`。
 
 ## Unreleased
+
+## v1.6.6 - 2026-06-16
+
+- 左上角 Logo 新增应用内使用手册入口，弹窗说明快速开始、模型配置、Bot、Skill 市场、运行台、飞书权限和存储管理。
+- 左下角状态从全局 RUNNING/STOPPED 改为多 Bot 在线数量、监听数量和排队任务数。
+- 存储管理会话详情新增最近对话记录展示，并修复会话行“查看”按钮换行问题。
+- 运行台日志默认记录 Agent 可观察工作过程；飞书用户是否收到进度消息仍由 Bot 的工作过程开关控制。
+
+## v1.6.5 - 2026-06-16
+
+- Bot 配置新增用户态 OAuth 额外权限列表；发起授权时会与默认 `search:docs:read` 合并，便于按需申请 `drive:export:readonly`、`docs:document:export` 等飞书权限。
+- 配置页的机器人区域改为列表展示；点击机器人后在弹窗中编辑和保存详细配置，并为配置项提供 `?` 说明弹窗。
+
+## v1.6.4 - 2026-06-16
+
+- 修复 Agent sandbox 拦截 `~/Library/Application Support/lark-cli/`，导致已完成用户态 OAuth 后仍无法读取全局加密凭据的问题。
+- Agent 不再在飞书会话内引导用户执行 `lark-cli auth login` 或扫码授权；用户态 OAuth 统一通过应用配置页完成。
+
+## v1.6.3 - 2026-06-16
+
+- 修复 Agent sandbox 将当前 Bot 的 lark-cli 状态目录误拦截，导致飞书资料查询时无法创建 `locks/` 文件的问题。
+- 保持多 Bot 隔离规则：仅拒绝其他 Bot 的状态与 workspace，允许当前 Bot 的飞书 CLI 状态目录读写。
+
+## v1.6.2 - 2026-06-16
+
+- 将单次 Agent 最大步数提升为可配置项，默认从 20 调整为 60，适配复杂 Skill 和飞书资料检索。
+- Agent 达到最大步数时会向用户回复明确原因，不再只在运行台记录失败日志。
+
+## v1.6.1 - 2026-06-16
+
+- 修复本地导入多个同名 frontmatter Skill 时，后导入目录在技能市场不可见的问题；本地目录名会作为冲突时的显示名。
+- 正在被任一 Bot 授权使用的本地 Skill 不允许删除，需先取消 Bot 授权。
+
+## v1.6.0 - 2026-06-15
+
+- 过滤飞书长连接中 reaction created/deleted 未注册处理器产生的无害 SDK 错误日志。
+- 更新 moje-qa-assistant：本地知识不足时继续搜索飞书资料，并对 Office 文件优先预览、必要时下载后进行多模态分析。
+- 新增飞书文件延后下载任务：先回复基本答案，用户确认后沿用原会话继续等待下载和分析。
+- 新增应用控制的内容哈希文件缓存，并保持 Bot 隔离。
+- Bot 可选择向用户展示限频的 Agent 工作进度，不输出模型私有推理。
+- Skill 市场支持点击预览，导入同名 Skill 会明确报错；市场筛选和 Bot Skill 授权筛选体验优化。
+- 存储管理支持点击查看会话详情和 workspace 文件清单。
+
+## v1.5.1 - 2026-06-15
+
+- 修复 macOS Agent sandbox 内 lark-cli 因无法访问 trustd 而不能读取或导出飞书文档的问题。
+- 用户态授权新增飞书文档搜索权限，并明确云 PPT 使用用户态搜索和导出。
+
+## v1.5.0 - 2026-06-15
 
 - 新增本地技能市场管理页，展示 Skill 来源和描述，并支持删除用户导入的 Skill。
 - Bot Skill 授权新增搜索，以及对当前筛选结果批量授权或取消。

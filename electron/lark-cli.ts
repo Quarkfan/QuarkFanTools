@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { projectRoot, stateRoot } from "./paths.js";
 import type { BotConfig, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
-import { isLarkEventSubscribeCommand, larkEventSubscribeArgs } from "./lark-commands.js";
+import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "./lark-commands.js";
 
 const preparedCredentials = new Map<string, string>();
 
@@ -132,7 +132,8 @@ export class LarkEventStream extends EventEmitter {
         this.connected = true;
         this.emit("connected");
       }
-      if (text) this.emit("stderr", text);
+      const relevant = filterLarkEventStderr(text);
+      if (relevant) this.emit("stderr", relevant);
     });
     child.on("exit", (code, signal) => {
       this.child = null;
@@ -382,7 +383,7 @@ function findString(value: unknown, predicate: (key: string, value: string) => b
 
 export async function loginLarkUser(bot: BotConfig): Promise<string> {
   await prepareLarkConfig(bot);
-  const initiated = await runLarkCapture(bot, ["auth", "login", "--recommend", "--no-wait", "--json"]);
+  const initiated = await runLarkCapture(bot, larkUserLoginArgs(bot.oauthScopes));
   const result = JSON.parse(initiated) as unknown;
   const verificationUrl = findString(result, (key, value) => /url|uri/i.test(key) && /^https?:\/\//.test(value));
   const deviceCode = findString(result, (key) => /device.?code/i.test(key));

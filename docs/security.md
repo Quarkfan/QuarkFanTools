@@ -16,15 +16,24 @@
 - 删除本地导入 Skill 时同步撤销所有机器人对该名称的授权，避免同名市场或内置 Skill 自动继承权限。
 - Owner 人工请求只接受配置的 Owner open_id 发出的处理指令；待处理请求按机器人隔离保存。
 - Claude sandbox 默认拒绝其他机器人和全局 Skill 路径，只放行当前执行所需目录。
+- 当前 Bot 的 lark-cli 状态目录需要读写以保存锁文件、缓存和日志；sandbox 仅拒绝其他 Bot 的状态与 workspace。
+- lark-cli 官方用户态 OAuth 加密材料和降级后的主密钥位于 `~/Library/Application Support/lark-cli/`；Agent sandbox 为飞书资料检索放行该全局目录。这是当前 CLI 存储模型下的例外，不代表 QuarkfanTools 放开其他 Bot 的状态或 workspace。
+- macOS Claude sandbox 允许访问系统 trustd，使内置 Go CLI 能校验受控网络代理的 TLS 证书；仍禁止 Agent 执行 unsandboxed 命令。
 - Skill 市场限制为 HTTPS，避免依赖系统 SSH/Git 配置。
 - Office ZIP 预处理限制为最多 5,000 个条目和 200 MB 解压体积。
 - 会话清理默认保留配置、飞书授权和用户 Skills。
+- 全局文件缓存由主进程管理并记录获准 Bot；Agent sandbox 不直接开放全局缓存目录。
+- 用户可见工作进度只展示工具类别和状态，不输出模型私有推理、原始工具参数或凭据。
 
 ## 3. 重要风险
 
 ### Agent 工具权限
 
 Claude Agent 允许 `Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`、`Skill`，并采用 `bypassPermissions`。这意味着交互确认不是主要安全边界，必须持续依赖 sandbox、目录授权和机器人隔离。任何扩大允许路径的修改都需要安全审查。
+
+macOS 上启用 `enableWeakerNetworkIsolation` 会开放对 `com.apple.trustd.agent` 的访问，以支持 lark-cli 等 Go CLI 在 sandbox 网络代理下验证 TLS。该能力比默认网络隔离更弱，存在额外数据外传面；不得同时允许 unsandboxed 命令，且应继续限制可访问目录和外部能力。
+
+`~/Library/Application Support/lark-cli/` 是官方 lark-cli 的全局安全存储目录，可能包含多个 profile 的加密凭据和 `master.key.file`。当前版本为了让 Agent 在 sandbox 内使用已授权的用户态文档能力放行该目录；后续若 lark-cli 支持按 Bot 指定安全存储目录，应优先迁移到 per-bot 存储。
 
 ### Skill 供应链
 

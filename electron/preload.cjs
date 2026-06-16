@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld("quarkfanTools", {
   logs: () => ipcRenderer.invoke("runtime:logs"),
   appInfo: () => ipcRenderer.invoke("app:info"),
   storageStats: () => ipcRenderer.invoke("storage:stats"),
+  storageSessionDetail: (id) => ipcRenderer.invoke("storage:session-detail", id),
+  skillPreview: (name) => ipcRenderer.invoke("skills:preview", name),
   clearExpiredStorage: () => ipcRenderer.invoke("storage:clear-expired"),
   clearSelectedStorage: (ids) => ipcRenderer.invoke("storage:clear-selected", ids),
   clearAllSessionStorage: () => ipcRenderer.invoke("storage:clear-all"),

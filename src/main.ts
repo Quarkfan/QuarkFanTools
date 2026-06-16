@@ -1,5 +1,5 @@
 import "./style.css";
-import type { AppConfig, AppInfo, BotConfig, LogEntry, RuntimeSnapshot, StorageStats } from "../electron/types";
+import type { AppConfig, AppInfo, BotConfig, LogEntry, RuntimeSnapshot, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let snapshot: RuntimeSnapshot;
@@ -11,9 +11,45 @@ let selectedBotId = "";
 let logLevel: "all" | LogEntry["level"] = "all";
 let showReleaseNotes = false;
 let marketSource = "all";
+let marketSearch = "";
+let preview: { title: string; body: string } | null = null;
+let editingBotId = "";
+let helpTopicKey = "";
+let showManual = false;
+
+const helpTopics: Record<string, { title: string; body: string }> = {
+  providerName: { title: "Provider 名称", body: "仅用于界面展示，方便区分当前配置的模型服务商。" },
+  baseUrl: { title: "Claude Base URL", body: "兼容 Claude Messages API 的服务地址。当前 Agent SDK 需要 Claude/Anthropic 兼容接口和工具调用能力。" },
+  model: { title: "模型", body: "发送给模型服务的模型名。复杂 Skill、飞书资料检索和多模态任务需要选择支持工具调用的模型。" },
+  apiKey: { title: "API Key", body: "模型服务认证密钥，仅保存在本机配置文件，不提交到 Git。" },
+  maxConcurrentTasks: { title: "最大并发任务数", body: "限制不同会话同时运行的 Agent 数量。同一会话始终串行处理，避免上下文交叉。" },
+  maxAgentTurns: { title: "单次 Agent 最大步数", body: "限制一次消息处理中 Agent 可执行的工具调用轮数。复杂检索可适当调高，范围 10-100。" },
+  multimodalEnabled: { title: "多模态视觉能力", body: "开启后图片消息和 PowerPoint 预览可作为视觉输入交给模型；关闭后只处理文本内容。" },
+  marketEnabled: { title: "启用技能市场", body: "启用后可从 HTTPS Git 仓库同步 Skill。同步后的 Skill 默认不授权给任何 Bot。" },
+  marketRepositoryUrl: { title: "HTTPS Git 仓库", body: "Skill 市场仓库地址。当前只支持 HTTPS，不依赖系统 Git 或 SSH Key。" },
+  marketBranch: { title: "分支", body: "同步 Skill 市场时使用的 Git 分支。" },
+  marketToken: { title: "访问 Token", body: "私有 Skill 市场仓库的访问 Token。仅保存在本机配置中。" },
+  botList: { title: "Bot 列表", body: "每个 Bot 拥有独立飞书 CLI 状态、Claude home、会话 workspace 和 Skill 授权。点击行可编辑详细配置。" },
+  botName: { title: "机器人名称", body: "界面和日志中展示的名称，不影响飞书开放平台配置。" },
+  botEnabled: { title: "启用", body: "停用后该 Bot 不会启动监听，也不会作为可运行机器人计入配置检查。" },
+  appId: { title: "App ID", body: "飞书开放平台应用的 App ID，例如 cli_xxx。不同 Bot 可使用不同应用。" },
+  appSecret: { title: "App Secret", body: "飞书开放平台应用密钥，用于初始化 Bot 态能力。仅保存在本机配置中。" },
+  receiveIdentity: { title: "接收身份", body: "飞书事件监听使用的身份。一般使用 Bot；只有明确需要用户态事件时再切换。" },
+  replyIdentity: { title: "回复身份", body: "机器人回复消息、表情和文件时使用的身份。Bot 态通常更稳定。" },
+  pendingReaction: { title: "处理中表情", body: "收到消息后添加到原消息上的反应名称，任务结束后会移除，用于替代“正在查询”文本。" },
+  ownerOpenId: { title: "Owner 飞书 open_id", body: "Agent 无法解决或需要人工处理时，会向该用户私聊发送处理卡片。" },
+  oauthScopes: { title: "用户态 OAuth 额外权限", body: "默认会申请 search:docs:read。这里填写额外 scope 后，保存并重新点击用户态 OAuth 才会生效；飞书开放平台也必须先开通对应权限。" },
+  showProgress: { title: "向用户展示工作过程", body: "开启后向用户展示工具调用、检索和重试等可观察进度，不展示模型隐藏推理或敏感参数。" },
+  skillAccess: { title: "允许访问的 Skills", body: "Bot 只能看到明确勾选的 Skills。新增或导入的 Skill 默认不授权，避免能力范围意外扩大。" }
+};
 
 function closeReleaseNotes(): void {
   showReleaseNotes = false;
+  render();
+}
+
+function closeManual(): void {
+  showManual = false;
   render();
 }
 
@@ -23,6 +59,10 @@ function escapeHtml(value: unknown): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function parseScopes(value: string): string[] {
+  return [...new Set(value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean))];
 }
 
 function configured(config: AppConfig): boolean {
@@ -49,12 +89,19 @@ function statusDot(ok: boolean): string {
   return `<span class="status-dot ${ok ? "ok" : ""}"></span>`;
 }
 
+function helpButton(topic: string): string {
+  return `<button type="button" class="help-button" data-help="${escapeHtml(topic)}" aria-label="查看配置说明">?</button>`;
+}
+
 function render(): void {
   const isConfigured = configured(snapshot.config);
+  const enabledBotCount = snapshot.config.bots.filter((bot) => bot.enabled).length;
+  const onlineBotCount = snapshot.connectedBotIds.length;
+  const botStatus = enabledBotCount > 0 ? `BOTS ${onlineBotCount}/${enabledBotCount} ONLINE` : "NO BOT ENABLED";
   app.innerHTML = `
     <div class="window-drag-strip" title="拖动窗口"><span>QUARKFANTOOLS</span></div>
     <aside class="rail">
-      <div class="brand">QUARK<span>FAN</span>TOOLS</div>
+      <button type="button" class="brand brand-button" id="show-manual" title="打开使用手册">QUARK<span>FAN</span>TOOLS</button>
       <div class="rail-label">LOCAL SKILL AGENT</div>
       <nav>
         <button class="${activeView === "console" ? "active" : ""}" data-view="console">运行台</button>
@@ -63,8 +110,8 @@ function render(): void {
         <button class="${activeView === "storage" ? "active" : ""}" data-view="storage">存储管理</button>
       </nav>
       <div class="rail-foot">
-        <div>${statusDot(snapshot.running)}${snapshot.running ? "RUNNING" : "STOPPED"}</div>
-        <small>Claude Agent runtime embedded</small>
+        <div>${statusDot(onlineBotCount > 0)}${botStatus}</div>
+        <small>${snapshot.runningBotIds.length} listening / ${snapshot.queuedTasks} queued</small>
         <button class="version-button" id="show-release-notes">VERSION ${escapeHtml(applicationInfo.version)}</button>
       </div>
     </aside>
@@ -82,6 +129,10 @@ function render(): void {
       ${activeView === "console" ? renderConsole() : activeView === "skills" ? renderSkills() : activeView === "config" ? renderConfig() : renderStorage()}
     </main>
     ${showReleaseNotes ? renderReleaseNotes() : ""}
+    ${preview ? renderPreview() : ""}
+    ${editingBotId ? renderBotEditor() : ""}
+    ${helpTopicKey ? renderHelpModal() : ""}
+    ${showManual ? renderManual() : ""}
   `;
   bindEvents();
 }
@@ -104,7 +155,7 @@ function renderSkills(): string {
     <section class="panel market-panel">
       <div class="panel-title"><span>LOCAL SKILL MARKET</span><small>${snapshot.skills.length} available</small></div>
       <div class="market-toolbar">
-        <input id="market-search" type="search" placeholder="搜索 Skill 名称或描述" />
+        <input id="market-search" type="search" value="${escapeHtml(marketSearch)}" placeholder="搜索 Skill 名称或描述" />
         <select id="market-source">
           <option value="all" ${marketSource === "all" ? "selected" : ""}>全部来源</option>
           <option value="local" ${marketSource === "local" ? "selected" : ""}>本地导入</option>
@@ -115,20 +166,39 @@ function renderSkills(): string {
         <button class="ghost" id="market-sync" ${snapshot.config.skillMarket.enabled && snapshot.config.skillMarket.repositoryUrl ? "" : "disabled"}>同步 Git 市场</button>
       </div>
       <div class="market-skill-list">
-        ${snapshot.skills.map((skill) => `
-          <article class="market-skill-row" data-market-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}" data-market-source="${skill.source}" data-market-unused="${snapshot.config.bots.some((bot) => bot.skillNames.includes(skill.name)) ? "false" : "true"}">
+        ${snapshot.skills.map((skill) => {
+          const inUseBy = snapshot.config.bots.filter((bot) => bot.skillNames.includes(skill.name)).map((bot) => bot.name).join("、");
+          return `
+          <article class="market-skill-row" data-preview-skill="${escapeHtml(skill.name)}" data-market-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}" data-market-source="${skill.source}" data-market-unused="${snapshot.config.bots.some((bot) => bot.skillNames.includes(skill.name)) ? "false" : "true"}">
             <div class="skill-glyph">${escapeHtml(skill.name.slice(0, 2).toUpperCase())}</div>
             <div>
               <strong>${escapeHtml(skill.name)}</strong>
               <p>${escapeHtml(skill.description || "未提供描述")}</p>
-              <small>${escapeHtml(snapshot.config.bots.filter((bot) => bot.skillNames.includes(skill.name)).map((bot) => bot.name).join("、") || "未授权给任何 Bot")}</small>
+              <small>${escapeHtml(inUseBy || "未授权给任何 Bot")}</small>
             </div>
             <span class="source-badge ${skill.source}">${skillSourceLabel(skill.source)}</span>
-            ${skill.source === "local" ? `<button class="danger remove-local-skill" data-name="${escapeHtml(skill.name)}">删除</button>` : ""}
-          </article>`).join("") || `<div class="empty">当前没有可用 Skill。</div>`}
+            ${skill.source === "local" ? `<button class="danger remove-local-skill" data-name="${escapeHtml(skill.name)}" ${inUseBy ? "disabled" : ""} title="${inUseBy ? `正在被 ${escapeHtml(inUseBy)} 使用，先取消 Bot 授权后才能删除` : "删除本地 Skill"}">删除</button>` : ""}
+          </article>`;
+        }).join("") || `<div class="empty">当前没有可用 Skill。</div>`}
       </div>
     </section>
   `;
+}
+
+function renderPreview(): string {
+  return `<div class="modal-backdrop" id="preview-backdrop"><section class="release-modal preview-modal" role="dialog" aria-modal="true">
+    <div class="release-modal-header"><h2>${escapeHtml(preview?.title)}</h2><button class="ghost" id="close-preview">关闭</button></div>
+    <pre class="preview-content">${escapeHtml(preview?.body)}</pre>
+  </section></div>`;
+}
+
+function renderHelpModal(): string {
+  const topic = helpTopics[helpTopicKey];
+  if (!topic) return "";
+  return `<div class="modal-backdrop" id="help-backdrop"><section class="release-modal help-modal" role="dialog" aria-modal="true">
+    <div class="release-modal-header"><h2>${escapeHtml(topic.title)}</h2><button class="ghost" id="close-help">关闭</button></div>
+    <div class="help-content">${escapeHtml(topic.body)}</div>
+  </section></div>`;
 }
 
 function renderReleaseNotes(): string {
@@ -148,6 +218,70 @@ function renderReleaseNotes(): string {
               <div class="release-version"><strong>v${escapeHtml(release.version)}</strong><time>${escapeHtml(release.date)}</time></div>
               <ul>${release.highlights.map((highlight) => `<li>${escapeHtml(highlight)}</li>`).join("")}</ul>
             </article>`).join("")}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderManual(): string {
+  return `
+    <div class="modal-backdrop" id="manual-backdrop">
+      <section class="release-modal manual-modal" role="dialog" aria-modal="true" aria-labelledby="manual-title">
+        <div class="release-modal-header">
+          <div>
+            <p class="eyebrow">QUARKFANTOOLS / USER MANUAL</p>
+            <h2 id="manual-title">使用手册</h2>
+          </div>
+          <button class="ghost release-close" id="close-manual">关闭</button>
+        </div>
+        <div class="manual-content">
+          <section>
+            <h3>快速开始</h3>
+            <ol>
+              <li>进入“配置”，填写模型服务的 Base URL、模型名和 API Key。</li>
+              <li>在 Bot 列表中新增机器人，填写飞书 App ID 和 App Secret。</li>
+              <li>按需点击“用户态 OAuth”，完成文档搜索、导出和读取所需的用户授权。</li>
+              <li>给 Bot 勾选允许访问的 Skills，保存后到“运行台”启动监听。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>模型配置</h3>
+            <p><strong>Provider 名称</strong>只用于界面展示。<strong>Claude Base URL</strong> 必须兼容 Claude Messages API 和工具调用。<strong>模型</strong>要填写服务商提供的模型名。<strong>API Key</strong>只保存在本机。</p>
+            <p><strong>最大并发任务数</strong>控制不同会话同时运行的 Agent 数量；同一会话仍串行。<strong>单次 Agent 最大步数</strong>用于复杂检索，默认 60。<strong>多模态视觉能力</strong>影响图片和 PPT 视觉预览是否传给模型。</p>
+          </section>
+          <section>
+            <h3>机器人配置</h3>
+            <p>配置页中的 Bot 以列表展示，点击行打开编辑弹窗。每个 Bot 拥有独立飞书 CLI 状态、Claude home、会话 workspace 和 Skill 授权。</p>
+            <p><strong>App ID / App Secret</strong>来自飞书开放平台。<strong>接收身份</strong>控制事件监听身份，通常用 Bot。<strong>回复身份</strong>控制消息、表情和文件回复身份，通常也用 Bot。</p>
+            <p><strong>用户态 OAuth 额外权限</strong>用于补充飞书 scope，例如 <code>drive:export:readonly</code>、<code>docs:document:export</code>。保存后需要重新点击“用户态 OAuth”，并且飞书开放平台也必须先开通对应应用权限。</p>
+            <p><strong>Owner open_id</strong>用于人工协助卡片。<strong>向用户展示工作过程</strong>只展示工具调用和检索进度，不展示模型隐藏推理。</p>
+          </section>
+          <section>
+            <h3>Skill 与技能市场</h3>
+            <p>Skill 必须包含 <code>SKILL.md</code>。本地导入或 Git 市场同步后默认不会授权给任何 Bot，需要在 Bot 编辑弹窗里显式勾选。</p>
+            <p>Git 技能市场只支持 HTTPS 仓库。仓库根目录、一级子目录、二级子目录中的 <code>SKILL.md</code> 会被发现；更深层级当前不会扫描。</p>
+            <p>技能市场列表可按来源筛选，点击 Skill 可预览说明和文件清单。正在被 Bot 使用的本地 Skill 不能直接删除，需要先取消授权。</p>
+          </section>
+          <section>
+            <h3>运行台</h3>
+            <p>运行台显示在线 Bot、可用 Skills、运行中任务和排队任务。点击 Bot 可查看该 Bot 的独立日志，并按日志等级筛选。</p>
+            <p>收到飞书消息后，应用会先给原消息添加处理中表情，处理完成后移除并回复结果。多人同时提问时，超出并发上限的任务会排队。</p>
+          </section>
+          <section>
+            <h3>飞书资料与文件</h3>
+            <p>搜索、读取飞书文档、Wiki、云盘和云 PPT 使用用户态授权。云 PPT 属于 slides 文档，需要导出为 PPTX 后再预览或分析。</p>
+            <p>如果日志或回复提示缺少 scope，把缺少的权限加入 Bot 的“用户态 OAuth 额外权限”，保存后重新授权；同时确认飞书开放平台已经给应用开通该权限。</p>
+          </section>
+          <section>
+            <h3>存储管理</h3>
+            <p>存储管理用于查看和清理连续会话 workspace、Claude 会话记录和消息附件。点击会话可查看 Claude session、关联消息和文件清单。</p>
+            <p>清理会话不会删除应用配置、飞书授权、Skill 市场配置或用户导入 Skills。</p>
+          </section>
+          <section>
+            <h3>版本与帮助</h3>
+            <p>左下角版本号可查看更新记录。配置项旁边的 <code>?</code> 可打开单项说明。左上角 Logo 可随时重新打开本手册。</p>
+          </section>
         </div>
       </section>
     </div>
@@ -174,10 +308,11 @@ function renderStorage(): string {
         <div class="panel-title"><span>SELECT SESSION CLEANUP</span><small>${storage.sessions.length} sessions</small></div>
         <div class="session-list">
           ${storage.sessions.map((session) => `
-            <label class="check session-row">
+            <div class="check session-row" data-view-session="${escapeHtml(session.id)}">
               <input type="checkbox" data-session-id="${escapeHtml(session.id)}" />
               <span><strong>${escapeHtml(snapshot.config.bots.find((bot) => bot.id === session.botId)?.name || session.botId)}</strong><small>${escapeHtml(session.conversationKey)} / ${new Date(session.updatedAt).toLocaleString()} / ${formatBytes(session.bytes)}${session.expired ? " / 已过期" : ""}</small></span>
-            </label>`).join("") || `<div class="empty">当前没有连续会话存储。</div>`}
+              <button class="ghost session-view" data-id="${escapeHtml(session.id)}">查看</button>
+            </div>`).join("") || `<div class="empty">当前没有连续会话存储。</div>`}
         </div>
         <button class="ghost" id="clear-selected" ${storage.sessions.length === 0 ? "disabled" : ""}>清理所选会话</button>
       </div>
@@ -251,46 +386,68 @@ function renderConsole(): string {
   `;
 }
 
-function field(label: string, name: string, value: string, type = "text", note = ""): string {
-  return `<label><span>${label}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" />${note ? `<small>${note}</small>` : ""}</label>`;
+function field(label: string, name: string, value: string, type = "text", note = "", helpTopic = name): string {
+  return `<label><span>${label}${helpButton(helpTopic)}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" />${note ? `<small>${note}</small>` : ""}</label>`;
 }
 
-function botField(bot: BotConfig, label: string, fieldName: keyof BotConfig, type = "text"): string {
-  return `<label><span>${label}</span><input data-bot="${bot.id}" data-field="${fieldName}" type="${type}" value="${escapeHtml(bot[fieldName])}" /></label>`;
+function botField(bot: BotConfig, label: string, fieldName: keyof BotConfig, type = "text", helpTopic = String(fieldName)): string {
+  return `<label><span>${label}${helpButton(helpTopic)}</span><input data-edit-bot-field="${fieldName}" type="${type}" value="${escapeHtml(bot[fieldName])}" /></label>`;
 }
 
-function renderBot(bot: BotConfig): string {
+function botTextarea(bot: BotConfig, label: string, fieldName: keyof BotConfig, note = "", helpTopic = String(fieldName)): string {
+  const value = Array.isArray(bot[fieldName]) ? (bot[fieldName] as string[]).join("\n") : String(bot[fieldName] ?? "");
+  return `<label><span>${label}${helpButton(helpTopic)}</span><textarea data-edit-bot-field="${fieldName}" rows="3">${escapeHtml(value)}</textarea>${note ? `<small>${note}</small>` : ""}</label>`;
+}
+
+function renderBotEditor(): string {
+  const bot = snapshot.config.bots.find((item) => item.id === editingBotId);
+  if (!bot) return "";
   return `
-    <div class="panel config-panel bot-card">
-      <div class="panel-title">
-        <span>${escapeHtml(bot.name || "未命名机器人")}</span>
-        <div><button type="button" class="ghost oauth-bot" data-id="${bot.id}">用户态 OAuth</button><button type="button" class="danger remove-bot" data-id="${bot.id}">删除</button></div>
-      </div>
+    <div class="modal-backdrop" id="bot-editor-backdrop">
+      <section class="release-modal bot-editor-modal" role="dialog" aria-modal="true">
+        <div class="release-modal-header">
+          <div>
+            <p class="eyebrow">BOT CONFIGURATION</p>
+            <h2>${escapeHtml(bot.name || "未命名机器人")}</h2>
+          </div>
+          <button type="button" class="ghost" id="close-bot-editor">关闭</button>
+        </div>
+        <form id="bot-editor-form" class="bot-editor-body">
       <div class="field-row">
-        ${botField(bot, "机器人名称", "name")}
-        <label><span>启用</span><select data-bot="${bot.id}" data-field="enabled"><option value="true" ${bot.enabled ? "selected" : ""}>启用</option><option value="false" ${!bot.enabled ? "selected" : ""}>停用</option></select></label>
+        ${botField(bot, "机器人名称", "name", "text", "botName")}
+        <label><span>启用${helpButton("botEnabled")}</span><select data-edit-bot-field="enabled"><option value="true" ${bot.enabled ? "selected" : ""}>启用</option><option value="false" ${!bot.enabled ? "selected" : ""}>停用</option></select></label>
       </div>
       ${botField(bot, "App ID", "appId")}
       ${botField(bot, "App Secret", "appSecret", "password")}
       <div class="field-row">
-        <label><span>接收身份</span><select data-bot="${bot.id}" data-field="receiveIdentity"><option value="bot" ${bot.receiveIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.receiveIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
-        <label><span>回复身份</span><select data-bot="${bot.id}" data-field="replyIdentity"><option value="bot" ${bot.replyIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.replyIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
+        <label><span>接收身份${helpButton("receiveIdentity")}</span><select data-edit-bot-field="receiveIdentity"><option value="bot" ${bot.receiveIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.receiveIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
+        <label><span>回复身份${helpButton("replyIdentity")}</span><select data-edit-bot-field="replyIdentity"><option value="bot" ${bot.replyIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.replyIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
       </div>
       ${botField(bot, "处理中表情", "pendingReaction")}
       ${botField(bot, "Owner 飞书 open_id", "ownerOpenId")}
+      ${botTextarea(bot, "用户态 OAuth 额外权限", "oauthScopes", "默认会申请 search:docs:read；这里可填写额外 scope，支持空格、逗号或换行分隔，例如 drive:export:readonly、docs:document:export。修改后需重新点击用户态 OAuth。")}
+      <label><span>向用户展示工作过程${helpButton("showProgress")}</span><select data-edit-bot-field="showProgress"><option value="false" ${!bot.showProgress ? "selected" : ""}>关闭</option><option value="true" ${bot.showProgress ? "selected" : ""}>开启</option></select><small>展示工具调用和检索进度，不泄露模型私有推理。</small></label>
       <small class="bot-note">Agent 无法解决或需要人工授权时，会私聊此用户发送卡片。Owner 必须在飞书中有该应用的使用权限。</small>
       <div class="skill-access">
-        <div class="skill-access-heading"><span>允许访问的 Skills</span><small>${bot.skillNames.length} / ${snapshot.skills.length} 已授权</small></div>
+        <div class="skill-access-heading"><span>允许访问的 Skills${helpButton("skillAccess")}</span><small>${bot.skillNames.length} / ${snapshot.skills.length} 已授权</small></div>
         <small>新增 Skill 默认不授权。可搜索后批量授权或取消当前筛选结果。</small>
         <div class="skill-access-controls">
           <input type="search" data-skill-filter="${bot.id}" placeholder="搜索名称或描述" />
+          <select data-skill-auth-filter="${bot.id}"><option value="all">全部 Skills</option><option value="authorized">仅已授权</option><option value="unauthorized">仅未授权</option></select>
           <button type="button" class="ghost skill-select-visible" data-id="${bot.id}">授权筛选结果</button>
           <button type="button" class="ghost skill-clear-visible" data-id="${bot.id}">取消筛选结果</button>
         </div>
         <div class="skill-check-list">
-          ${snapshot.skills.map((skill) => `<label class="check" data-bot-skill-row="${bot.id}" data-skill-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}"><input type="checkbox" data-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes(skill.name) ? "checked" : ""}/><span><strong>${escapeHtml(skill.name)}</strong><small>${escapeHtml(skill.description || skillSourceLabel(skill.source))}</small></span></label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
+          ${snapshot.skills.map((skill) => `<label class="check" data-bot-skill-row="${bot.id}" data-authorized="${bot.skillNames.includes(skill.name)}" data-skill-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}"><input type="checkbox" data-edit-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes(skill.name) ? "checked" : ""}/><span><strong>${escapeHtml(skill.name)}</strong><small>${escapeHtml(skill.description || skillSourceLabel(skill.source))} / ${skillSourceLabel(skill.source)}</small></span></label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
         </div>
       </div>
+      <div class="form-actions bot-editor-actions">
+        <button type="button" class="ghost oauth-bot" data-id="${bot.id}">用户态 OAuth</button>
+        <button type="button" class="danger remove-bot" data-id="${bot.id}">删除</button>
+        <button type="submit" class="primary">保存 Bot 配置</button>
+      </div>
+        </form>
+      </section>
     </div>
   `;
 }
@@ -306,24 +463,30 @@ function renderConfig(): string {
           ${field("Claude Base URL", "baseUrl", c.model.baseUrl, "url", "服务商提供的 Claude / Anthropic 兼容地址")}
           ${field("模型", "model", c.model.model)}
           ${field("API Key", "apiKey", c.model.apiKey, "password")}
-          <label><span>最大并发任务数</span><input name="maxConcurrentTasks" type="number" min="1" max="20" value="${c.runtime.maxConcurrentTasks}" /><small>不同会话最多同时运行的 Agent 数量；同一会话仍按顺序处理。</small></label>
-          <label><span>多模态视觉能力</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
+          <label><span>最大并发任务数${helpButton("maxConcurrentTasks")}</span><input name="maxConcurrentTasks" type="number" min="1" max="20" value="${c.runtime.maxConcurrentTasks}" /><small>不同会话最多同时运行的 Agent 数量；同一会话仍按顺序处理。</small></label>
+          <label><span>单次 Agent 最大步数${helpButton("maxAgentTurns")}</span><input name="maxAgentTurns" type="number" min="10" max="100" value="${c.runtime.maxAgentTurns ?? 60}" /><small>复杂 Skill 或飞书资料检索会消耗更多工具调用步数；默认 60。</small></label>
+          <label><span>多模态视觉能力${helpButton("multimodalEnabled")}</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
         </div>
         <div class="panel config-panel">
           <div class="panel-title"><span>SKILL MARKET</span><small>Built-in Git client / HTTPS</small></div>
-          <label><span>启用技能市场</span><select name="marketEnabled"><option value="true" ${c.skillMarket.enabled ? "selected" : ""}>启用</option><option value="false" ${!c.skillMarket.enabled ? "selected" : ""}>停用</option></select></label>
+          <label><span>启用技能市场${helpButton("marketEnabled")}</span><select name="marketEnabled"><option value="true" ${c.skillMarket.enabled ? "selected" : ""}>启用</option><option value="false" ${!c.skillMarket.enabled ? "selected" : ""}>停用</option></select></label>
           ${field("HTTPS Git 仓库", "marketRepositoryUrl", c.skillMarket.repositoryUrl, "url", "应用内置 Git 客户端，不依赖本机 Git；仅支持 HTTPS URL")}
           ${field("分支", "marketBranch", c.skillMarket.branch)}
           ${field("访问 Token（可选）", "marketToken", c.skillMarket.token, "password", "私有仓库使用；仅保存在本机配置")}
           <div class="form-actions"><button type="button" class="ghost" id="sync-market" ${c.skillMarket.enabled && c.skillMarket.repositoryUrl ? "" : "disabled"}>立即同步技能市场</button></div>
         </div>
         <div class="panel config-panel">
-          <div class="panel-title"><span>BOT ISOLATION</span><small>每个机器人独立凭据、监听和 Skill 权限</small></div>
-          <div class="empty">启用的机器人会各自建立独立飞书 CLI 与 Claude 状态目录。未勾选的 Skill 不会暴露给该机器人。</div>
+          <div class="panel-title"><span>BOT REGISTRY ${helpButton("botList")}</span><small>${c.bots.length} configured</small></div>
+          <div class="config-bot-list">
+            ${c.bots.map((bot) => `
+              <button type="button" class="config-bot-row" data-edit-bot="${escapeHtml(bot.id)}">
+                <span>${statusDot(bot.enabled)}<strong>${escapeHtml(bot.name || "未命名机器人")}</strong></span>
+                <small>${escapeHtml(bot.appId || "未配置 App ID")} / ${bot.skillNames.length} Skills / ${bot.oauthScopes?.length ?? 0} extra scopes</small>
+              </button>`).join("") || `<div class="empty">还没有机器人。点击下方按钮新增。</div>`}
+          </div>
           <div class="form-actions"><button type="button" class="ghost" id="add-bot">新增机器人</button></div>
         </div>
       </section>
-      <section class="bot-grid">${c.bots.map(renderBot).join("")}</section>
       <div class="form-actions"><button type="submit" class="primary">保存配置</button></div>
     </form>
   `;
@@ -341,13 +504,25 @@ function newBot(): BotConfig {
     receiveIdentity: "bot",
     replyIdentity: "bot",
     eventTypes: ["im.message.receive_v1"],
+    oauthScopes: [],
     skillNames: [],
     pendingReaction: "OnIt",
-    ownerOpenId: ""
+    ownerOpenId: "",
+    showProgress: false
   };
 }
 
 function bindEvents(): void {
+  document.querySelector<HTMLButtonElement>("#show-manual")?.addEventListener("click", () => {
+    showManual = true;
+    render();
+    document.querySelector<HTMLButtonElement>("#close-manual")?.focus();
+  });
+  document.querySelector<HTMLButtonElement>("#close-manual")?.addEventListener("click", closeManual);
+  document.querySelector<HTMLElement>("#manual-backdrop")?.addEventListener("click", (event) => {
+    if (event.target !== event.currentTarget) return;
+    closeManual();
+  });
   document.querySelector<HTMLButtonElement>("#show-release-notes")?.addEventListener("click", () => {
     showReleaseNotes = true;
     render();
@@ -369,7 +544,18 @@ function bindEvents(): void {
     snapshot = await window.quarkfanTools.importSkill();
     render();
   });
-  document.querySelector<HTMLInputElement>("#market-search")?.addEventListener("input", filterMarketSkills);
+  document.querySelector<HTMLInputElement>("#market-search")?.addEventListener("input", (event) => {
+    marketSearch = (event.currentTarget as HTMLInputElement).value;
+    filterMarketSkills();
+  });
+  document.querySelectorAll<HTMLElement>("[data-preview-skill]").forEach((row) => {
+    row.onclick = async (event) => {
+      if ((event.target as HTMLElement).closest("button")) return;
+      const value: SkillPreview = await window.quarkfanTools.skillPreview(String(row.dataset.previewSkill));
+      preview = { title: `${value.name} / ${skillSourceLabel(value.source)}`, body: `${value.content}\n\nFILES\n${value.files.join("\n")}` };
+      render();
+    };
+  });
   document.querySelector<HTMLSelectElement>("#market-source")?.addEventListener("change", (event) => {
     marketSource = (event.currentTarget as HTMLSelectElement).value;
     filterMarketSkills();
@@ -383,6 +569,24 @@ function bindEvents(): void {
       const name = String(button.dataset.name);
       if (!window.confirm(`确认删除本地 Skill“${name}”？所有 Bot 对它的授权也会被撤销。`)) return;
       snapshot = await window.quarkfanTools.removeLocalSkill(name);
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-help]").forEach((button) => {
+    button.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      helpTopicKey = String(button.dataset.help);
+      render();
+    };
+  });
+  document.querySelector<HTMLButtonElement>("#close-help")?.addEventListener("click", () => { helpTopicKey = ""; render(); });
+  document.querySelector<HTMLElement>("#help-backdrop")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) { helpTopicKey = ""; render(); }
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-edit-bot]").forEach((button) => {
+    button.onclick = () => {
+      editingBotId = String(button.dataset.editBot);
       render();
     };
   });
@@ -413,7 +617,28 @@ function bindEvents(): void {
     render();
   });
   document.querySelectorAll<HTMLInputElement>("[data-skill-filter]").forEach((input) => {
-    input.addEventListener("input", () => filterBotSkills(String(input.dataset.skillFilter), input.value));
+    input.addEventListener("input", () => filterBotSkills(String(input.dataset.skillFilter)));
+  });
+  document.querySelectorAll<HTMLSelectElement>("[data-skill-auth-filter]").forEach((input) => {
+    input.addEventListener("change", () => filterBotSkills(String(input.dataset.skillAuthFilter)));
+  });
+  document.querySelectorAll<HTMLButtonElement>(".session-view").forEach((button) => {
+    button.onclick = async () => {
+      const value: StorageSessionDetail = await window.quarkfanTools.storageSessionDetail(String(button.dataset.id));
+      const transcript = value.transcript.length > 0
+        ? value.transcript.map((turn, index) => [
+            `#${index + 1} ${new Date(turn.time).toLocaleString()} / ${turn.messageId}`,
+            `用户：${turn.user}`,
+            `机器人：${turn.assistant}`
+          ].join("\n")).join("\n\n")
+        : `暂无可回放对话记录。旧版本会话只保存消息 ID：${value.messageIds.join(", ") || "无"}`;
+      preview = { title: `会话 ${value.conversationKey}`, body: `Bot: ${value.botId}\nClaude session: ${value.sessionId}\n更新时间: ${value.updatedAt}\n\nCONVERSATION\n${transcript}\n\nFILES\n${value.files.map((file) => `${formatBytes(file.bytes)}  ${file.path}`).join("\n") || "无"}` };
+      render();
+    };
+  });
+  document.querySelector<HTMLButtonElement>("#close-preview")?.addEventListener("click", () => { preview = null; render(); });
+  document.querySelector<HTMLElement>("#preview-backdrop")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) { preview = null; render(); }
   });
   document.querySelectorAll<HTMLButtonElement>(".skill-select-visible").forEach((button) => {
     button.onclick = () => setVisibleBotSkills(String(button.dataset.id), true);
@@ -446,18 +671,51 @@ function bindEvents(): void {
     storage = await window.quarkfanTools.clearAllSessionStorage();
     render();
   });
-  document.querySelector<HTMLButtonElement>("#add-bot")?.addEventListener("click", () => {
-    snapshot.config.bots.push(newBot());
+  document.querySelector<HTMLButtonElement>("#add-bot")?.addEventListener("click", async () => {
+    const bot = newBot();
+    const next = structuredClone(snapshot.config);
+    next.bots.push(bot);
+    snapshot = await window.quarkfanTools.saveConfig(next);
+    editingBotId = bot.id;
     render();
   });
+  document.querySelector<HTMLButtonElement>("#close-bot-editor")?.addEventListener("click", () => {
+    editingBotId = "";
+    render();
+  });
+  document.querySelector<HTMLElement>("#bot-editor-backdrop")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) { editingBotId = ""; render(); }
+  });
   document.querySelectorAll<HTMLButtonElement>(".remove-bot").forEach((button) => {
-    button.onclick = () => {
-      snapshot.config.bots = snapshot.config.bots.filter((bot) => bot.id !== button.dataset.id);
+    button.onclick = async () => {
+      const bot = snapshot.config.bots.find((item) => item.id === button.dataset.id);
+      if (!window.confirm(`确认删除机器人“${bot?.name || button.dataset.id}”？`)) return;
+      const next = structuredClone(snapshot.config);
+      next.bots = next.bots.filter((item) => item.id !== button.dataset.id);
+      snapshot = await window.quarkfanTools.saveConfig(next);
+      editingBotId = "";
       render();
     };
   });
   document.querySelectorAll<HTMLButtonElement>(".oauth-bot").forEach((button) => {
     button.onclick = () => void window.quarkfanTools.loginLarkUser(String(button.dataset.id));
+  });
+  document.querySelector<HTMLFormElement>("#bot-editor-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const next = structuredClone(snapshot.config);
+    const bot = next.bots.find((item) => item.id === editingBotId);
+    if (!bot) return;
+    document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[data-edit-bot-field]").forEach((input) => {
+      const fieldName = input.dataset.editBotField as keyof BotConfig;
+      (bot as unknown as Record<string, unknown>)[fieldName] = fieldName === "oauthScopes"
+        ? parseScopes(input.value)
+        : ["enabled", "showProgress"].includes(fieldName) ? input.value === "true" : input.value;
+    });
+    bot.skillNames = [...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-skill="${editingBotId}"]:checked`)].map((input) => input.value);
+    snapshot = await window.quarkfanTools.saveConfig(next);
+    selectedBotId = bot.id;
+    editingBotId = "";
+    render();
   });
   document.querySelector<HTMLFormElement>("#config-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -469,34 +727,28 @@ function bindEvents(): void {
     next.model.apiKey = String(form.get("apiKey") ?? "");
     next.model.multimodalEnabled = String(form.get("multimodalEnabled") ?? "true") === "true";
     next.runtime.maxConcurrentTasks = Math.max(1, Math.min(20, Number(form.get("maxConcurrentTasks") ?? 2) || 2));
+    next.runtime.maxAgentTurns = Math.max(10, Math.min(100, Number(form.get("maxAgentTurns") ?? 60) || 60));
     next.skillMarket.enabled = String(form.get("marketEnabled") ?? "false") === "true";
     next.skillMarket.repositoryUrl = String(form.get("marketRepositoryUrl") ?? "");
     next.skillMarket.branch = String(form.get("marketBranch") ?? "main");
     next.skillMarket.token = String(form.get("marketToken") ?? "");
-    document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-bot][data-field]").forEach((input) => {
-      const bot = next.bots.find((item) => item.id === input.dataset.bot);
-      if (!bot) return;
-      const fieldName = input.dataset.field as keyof BotConfig;
-      (bot as unknown as Record<string, unknown>)[fieldName] = fieldName === "enabled" ? input.value === "true" : input.value;
-    });
-    next.bots.forEach((bot) => {
-      bot.skillNames = [...document.querySelectorAll<HTMLInputElement>(`[data-bot-skill="${bot.id}"]:checked`)].map((input) => input.value);
-    });
     snapshot = await window.quarkfanTools.saveConfig(next);
     activeView = "console";
     render();
   });
 }
 
-function filterBotSkills(botId: string, value: string): void {
-  const query = value.trim().toLowerCase();
+function filterBotSkills(botId: string): void {
+  const query = document.querySelector<HTMLInputElement>(`[data-skill-filter="${botId}"]`)?.value.trim().toLowerCase() ?? "";
+  const auth = document.querySelector<HTMLSelectElement>(`[data-skill-auth-filter="${botId}"]`)?.value ?? "all";
   document.querySelectorAll<HTMLElement>(`[data-bot-skill-row="${botId}"]`).forEach((row) => {
-    row.hidden = !String(row.dataset.skillSearch).includes(query);
+    const authMatches = auth === "all" || (auth === "authorized") === (row.dataset.authorized === "true");
+    row.hidden = !authMatches || !String(row.dataset.skillSearch).includes(query);
   });
 }
 
 function filterMarketSkills(): void {
-  const query = document.querySelector<HTMLInputElement>("#market-search")?.value.trim().toLowerCase() ?? "";
+  const query = marketSearch.trim().toLowerCase();
   document.querySelectorAll<HTMLElement>("[data-market-search]").forEach((row) => {
     const sourceMatches = marketSource === "all"
       || row.dataset.marketSource === marketSource
@@ -531,6 +783,7 @@ async function bootstrap(): Promise<void> {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && showReleaseNotes) closeReleaseNotes();
+    if (event.key === "Escape" && showManual) closeManual();
   });
   if (snapshot.config.bots[0]) selectedBotId = snapshot.config.bots[0].id;
   render();

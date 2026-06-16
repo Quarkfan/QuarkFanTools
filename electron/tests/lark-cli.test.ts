@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeLarkEvent } from "../lark-event.js";
-import { isLarkEventSubscribeCommand, larkEventSubscribeArgs } from "../lark-commands.js";
+import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "../lark-commands.js";
 import type { BotConfig } from "../types.js";
 
 const bot: BotConfig = {
@@ -37,6 +37,44 @@ test("recognizes only lark event subscriber processes for stale PID cleanup", ()
   assert.equal(isLarkEventSubscribeCommand("/Applications/QuarkfanTools.app/runtime/lark-cli event +subscribe --as bot"), true);
   assert.equal(isLarkEventSubscribeCommand("/Applications/QuarkfanTools.app/runtime/lark-cli event stop --force"), false);
   assert.equal(isLarkEventSubscribeCommand("/usr/bin/node other-process.js"), false);
+});
+
+test("user login requests the document search scope", () => {
+  assert.deepEqual(larkUserLoginArgs(), [
+    "auth",
+    "login",
+    "--recommend",
+    "--scope",
+    "search:docs:read",
+    "--no-wait",
+    "--json"
+  ]);
+});
+
+test("user login merges custom OAuth scopes", () => {
+  assert.deepEqual(larkUserLoginArgs(["drive:export:readonly", "docs:document:export,search:docs:read"]), [
+    "auth",
+    "login",
+    "--recommend",
+    "--scope",
+    "search:docs:read,drive:export:readonly,docs:document:export",
+    "--no-wait",
+    "--json"
+  ]);
+});
+
+test("filters benign reaction event handler noise but preserves real connection errors", () => {
+  assert.equal(
+    filterLarkEventStderr("[SDK Error] handle message failed, message_type: event, err: event type: im.message.reaction.deleted_v1, not found handler [conn_id=1]"),
+    ""
+  );
+  assert.equal(
+    filterLarkEventStderr([
+      "[SDK Error] handle message failed, message_type: event, err: event type: im.message.reaction.created_v1, not found handler [conn_id=1]",
+      "[SDK Error] websocket disconnected"
+    ].join("\n")),
+    "[SDK Error] websocket disconnected"
+  );
 });
 
 test("normalizes a Feishu message event", () => {

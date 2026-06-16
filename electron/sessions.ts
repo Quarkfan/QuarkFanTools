@@ -9,6 +9,12 @@ interface SessionRecord {
   sessionId: string;
   updatedAt: string;
   messageIds?: string[];
+  transcript?: Array<{
+    time: string;
+    messageId: string;
+    user: string;
+    assistant: string;
+  }>;
 }
 
 export class SessionStore {
@@ -31,13 +37,21 @@ export class SessionStore {
     return undefined;
   }
 
-  async set(bot: BotConfig, key: string, sessionId: string, messageId: string): Promise<void> {
+  async set(bot: BotConfig, key: string, sessionId: string, messageId: string, turn?: { user: string; assistant: string }): Promise<void> {
     const records = this.records.get(bot.id) ?? new Map<string, SessionRecord>();
     const previous = records.get(key);
     records.set(key, {
       sessionId,
       updatedAt: new Date().toISOString(),
-      messageIds: [...new Set([...(previous?.messageIds ?? []), messageId])].slice(-100)
+      messageIds: [...new Set([...(previous?.messageIds ?? []), messageId])].slice(-100),
+      transcript: turn
+        ? [...(previous?.transcript ?? []), {
+            time: new Date().toISOString(),
+            messageId,
+            user: turn.user,
+            assistant: turn.assistant
+          }].slice(-50)
+        : previous?.transcript
     });
     this.records.set(bot.id, records);
     await this.save(bot);

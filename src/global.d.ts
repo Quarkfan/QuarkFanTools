@@ -1,4 +1,4 @@
-import type { AppConfig, AppInfo, LogEntry, RuntimeSnapshot, StorageStats } from "../electron/types";
+import type { AppConfig, AppInfo, LogEntry, RuntimeSnapshot, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
 
 declare global {
   interface Window {
@@ -7,6 +7,8 @@ declare global {
       logs(): Promise<LogEntry[]>;
       appInfo(): Promise<AppInfo>;
       storageStats(): Promise<StorageStats>;
+      storageSessionDetail(id: string): Promise<StorageSessionDetail>;
+      skillPreview(name: string): Promise<SkillPreview>;
       clearExpiredStorage(): Promise<StorageStats>;
       clearSelectedStorage(ids: string[]): Promise<StorageStats>;
       clearAllSessionStorage(): Promise<StorageStats>;
