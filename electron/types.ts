@@ -277,10 +277,29 @@ export interface ChatMessage {
   createdAt?: string;
   receivedAt: string;
   provider?: ImProviderId;
+  sourceAppId?: string;
+  mentions?: LarkMention[];
   raw: unknown;
 }
 
 export type LarkMessage = ChatMessage;
+
+export interface LarkBotIdentity {
+  appName?: string;
+  openId: string;
+}
+
+export interface LarkMention {
+  key?: string;
+  name?: string;
+  tenantKey?: string;
+  id?: {
+    openId?: string;
+    userId?: string;
+    unionId?: string;
+    appId?: string;
+  };
+}
 
 export interface ChatMessageResource {
   key: string;

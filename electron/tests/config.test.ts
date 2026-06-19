@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { runningBotWithSameAppId } from "../bot-identity.js";
 import { mergeConfig } from "../config-merge.js";
 import type { AppConfig } from "../types.js";
 
@@ -180,6 +181,45 @@ test("normalizes custom OAuth scopes on bot configs", () => {
     }]
   });
   assert.deepEqual(config.bots[0].oauthScopes, ["drive:export:readonly", "docs:document:export"]);
+});
+
+test("detects running bots that share the same Feishu app id", () => {
+  const config = mergeConfig(base, {
+    bots: [{
+      id: "bot-1",
+      name: "Bot 1",
+      enabled: true,
+      provider: "lark",
+      cliPath: "",
+      profile: "",
+      appId: "cli_same",
+      appSecret: "secret-1",
+      receiveIdentity: "bot",
+      replyIdentity: "bot",
+      eventTypes: ["im.message.receive_v1"],
+      skillNames: [],
+      pendingReaction: "OnIt",
+      ownerOpenId: ""
+    }, {
+      id: "bot-2",
+      name: "Bot 2",
+      enabled: true,
+      provider: "lark",
+      cliPath: "",
+      profile: "",
+      appId: " CLI_SAME ",
+      appSecret: "secret-2",
+      receiveIdentity: "bot",
+      replyIdentity: "bot",
+      eventTypes: ["im.message.receive_v1"],
+      skillNames: [],
+      pendingReaction: "OnIt",
+      ownerOpenId: ""
+    }]
+  });
+
+  assert.equal(runningBotWithSameAppId(config.bots[1], config.bots, ["bot-1"])?.id, "bot-1");
+  assert.equal(runningBotWithSameAppId(config.bots[1], config.bots, []), null);
 });
 
 test("normalizes im provider, connectors, and delivery routes", () => {

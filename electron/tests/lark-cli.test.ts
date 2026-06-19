@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeLarkEvent } from "../lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "../lark-commands.js";
+import { messageTargetsBot } from "../message-target.js";
 import type { BotConfig } from "../types.js";
 
 const bot: BotConfig = {
@@ -22,6 +23,8 @@ const bot: BotConfig = {
 
 test("event subscription does not use unsafe parallel subscription mode", () => {
   assert.deepEqual(larkEventSubscribeArgs(bot), [
+    "--profile",
+    "qft-mentor",
     "event",
     "+subscribe",
     "--as",
@@ -92,6 +95,12 @@ test("normalizes a Feishu message event", () => {
         message_id: "om_1",
         chat_id: "oc_1",
         chat_type: "group",
+        mentions: [{
+          key: "@_user_1",
+          id: { open_id: "ou_bot", user_id: "bot_user", union_id: "on_bot", app_id: "cli_test" },
+          name: "人生导师",
+          tenant_key: "tenant_1"
+        }],
         content: JSON.stringify({ text: "帮我查一下加盟费用" })
       }
     }
@@ -102,9 +111,78 @@ test("normalizes a Feishu message event", () => {
   assert.equal(message?.senderId, "ou_1");
   assert.equal(message?.messageType, "text");
   assert.equal(message?.text, "帮我查一下加盟费用");
+  assert.equal(message?.sourceAppId, undefined);
+  assert.deepEqual(message?.mentions, [{
+    key: "@_user_1",
+    name: "人生导师",
+    tenantKey: "tenant_1",
+    id: {
+      openId: "ou_bot",
+      userId: "bot_user",
+      unionId: "on_bot",
+      appId: "cli_test"
+    }
+  }]);
   assert.deepEqual(message?.resources, []);
   assert.ok(message?.receivedAt);
   assert.equal(message?.createdAt, "1781330000000");
+});
+
+test("routes mentioned group messages by resolved bot open id", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_open_id",
+        chat_id: "oc_1",
+        chat_type: "group",
+        mentions: [{ id: { open_id: "ou_target_bot" }, name: "飞书里的展示名" }],
+        content: JSON.stringify({ text: "查一下订单状态" })
+      }
+    }
+  });
+
+  assert.ok(message);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot", appName: "真实机器人名" }, true), true);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_other_bot", appName: "其他机器人" }, true), false);
+});
+
+test("does not route ambiguous group messages in strict multi-bot mode", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_ambiguous",
+        chat_id: "oc_1",
+        chat_type: "group",
+        content: JSON.stringify({ text: "@_user_1 你好" })
+      }
+    }
+  });
+
+  assert.ok(message);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, true), false);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, false), true);
+});
+
+test("keeps private or legacy messages without mention metadata routable", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_private",
+        chat_id: "oc_1",
+        chat_type: "p2p",
+        content: JSON.stringify({ text: "你好" })
+      }
+    }
+  });
+
+  assert.ok(message);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, true), true);
 });
 
 test("normalizes image resources without text", () => {

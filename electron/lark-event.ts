@@ -1,4 +1,4 @@
-import type { LarkMessage, LarkMessageResource } from "./types.js";
+import type { LarkMention, LarkMessage, LarkMessageResource } from "./types.js";
 
 function extractText(payload: any): string {
   const content = payload?.event?.message?.content ?? payload?.message?.content ?? payload?.content ?? "";
@@ -43,6 +43,41 @@ function extractResources(value: unknown, resources: Map<string, LarkMessageReso
   }
 }
 
+function extractMentions(value: unknown): LarkMention[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => {
+      const id = typeof item.id === "object" && item.id !== null ? item.id as Record<string, unknown> : {};
+      return {
+        key: typeof item.key === "string" ? item.key : undefined,
+        name: typeof item.name === "string" ? item.name : undefined,
+        tenantKey: typeof item.tenant_key === "string" ? item.tenant_key : undefined,
+        id: {
+          openId: firstString(id.open_id, id.openId),
+          userId: firstString(id.user_id, id.userId),
+          unionId: firstString(id.union_id, id.unionId),
+          appId: firstString(id.app_id, id.appId, id.application_id, id.open_app_id)
+        }
+      };
+    });
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+function extractSourceAppId(payload: any): string | undefined {
+  return firstString(
+    payload?.header?.app_id,
+    payload?.header?.appId,
+    payload?.event?.app_id,
+    payload?.event?.appId,
+    payload?.app_id,
+    payload?.appId
+  );
+}
+
 export function normalizeLarkEvent(payload: any): LarkMessage | null {
   const event = payload?.event ?? payload;
   const message = event?.message ?? event;
@@ -71,6 +106,8 @@ export function normalizeLarkEvent(payload: any): LarkMessage | null {
     createdAt: payload?.header?.create_time ? String(payload.header.create_time) : undefined,
     receivedAt: new Date().toISOString(),
     provider: "lark",
+    sourceAppId: extractSourceAppId(payload),
+    mentions: extractMentions(message?.mentions),
     raw: payload
   };
 }

@@ -10,6 +10,8 @@
 
 ## v2.0.0 - 2026-06-19
 
+- 将 `v1.6.9` 多飞书 Bot 群聊艾特修复带入 2.0：飞书 Bot 启动时确认真实 `open_id`，群聊消息按 `mentions.id.open_id` 精确路由，避免多个飞书 Bot 同时回复。
+- 记录 `aid=552564` 调查结论：该值是飞书事件 WebSocket endpoint 的连接层参数，不是开放平台 `cli_...` App ID，不能用于 Bot 身份判断。
 - 新增 Bot 级 `/xxx` 命令映射，可将命令路由到已授权 Skill、已授权套件、套件派生 Workflow 或已授权自定义应用，并支持 `{{args}}` Prompt 模板。
 - 新增套件能力：支持导入包含 `suite.json` 的目录、在能力页预览、在 Bot 编辑弹窗中挂载授权，并可作为命令目标注入套件上下文执行。
 - 新增 Bot 级定时任务：支持 `interval/daily/weekly` 计划、`agent/command/capability` 目标、本机调度与运行记录，并可把结果投递到指定 `chat_id`。
