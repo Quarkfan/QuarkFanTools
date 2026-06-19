@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.11",
+    date: "2026-06-20",
+    highlights: [
+      "用户态 OAuth 完成日志改为摘要，运行台复制日志不再包含大段 scope 列表。",
+      "OAuth 完成后会提示：用户态授权只用于资料读取，不会开放飞书 Bot 给其他群成员。",
+      "使用手册补充飞书 Bot 可用范围排障，群成员看到需要机器人主人允许时应检查飞书开放平台发布状态和可用范围。"
+    ]
+  },
+  {
     version: "1.6.10",
     date: "2026-06-19",
     highlights: [

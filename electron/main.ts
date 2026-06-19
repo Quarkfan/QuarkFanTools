@@ -81,6 +81,24 @@ function sendToRenderer(channel: string, payload: unknown): void {
   }
 }
 
+function summarizeLarkOAuthResult(result: string): string {
+  try {
+    const parsed = JSON.parse(result) as {
+      user_name?: string;
+      user_open_id?: string;
+      granted?: string[];
+      already_granted?: string[];
+      missing?: string[];
+    };
+    const grantedCount = Array.isArray(parsed.granted) ? parsed.granted.length : 0;
+    const alreadyGrantedCount = Array.isArray(parsed.already_granted) ? parsed.already_granted.length : 0;
+    const missing = Array.isArray(parsed.missing) && parsed.missing.length ? ` / 缺失 ${parsed.missing.length} 个 scope` : "";
+    return `${parsed.user_name || "unknown user"} / ${parsed.user_open_id || "unknown open_id"} / 已授权 ${grantedCount} 个 scope / 已存在 ${alreadyGrantedCount} 个 scope${missing}`;
+  } catch {
+    return result.slice(0, 500);
+  }
+}
+
 runtime.on("snapshot", (snapshot) => sendToRenderer("runtime:snapshot", snapshot));
 runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
 
@@ -165,7 +183,13 @@ ipcMain.handle("lark:login-user", async (_event, botId: string) => {
     if (!bot) throw new Error("机器人不存在");
     await runtime.logger.write("info", "正在打开飞书用户态授权页面", bot.name, bot.id);
     const result = await loginLarkUser(bot);
-    await runtime.logger.write("success", "飞书用户态授权完成", result, bot.id);
+    await runtime.logger.write("success", "飞书用户态授权完成", summarizeLarkOAuthResult(result), bot.id);
+    await runtime.logger.write(
+      "warn",
+      "飞书 Bot 可用范围需单独配置",
+      "用户态 OAuth 只授权当前用户用于搜索和读取飞书资料，不会把机器人开放给群内其他成员。若其他成员 @ 机器人时看到“暂时还无法与我对话，需要机器人主人的允许”，请到飞书开放平台检查该应用的发布状态和可用范围。",
+      bot.id
+    );
   } catch (error) {
     await runtime.logger.write("error", "飞书用户态授权失败", String(error), botId);
     throw error;
