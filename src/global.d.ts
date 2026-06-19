@@ -5,6 +5,7 @@ declare global {
     quarkfanTools: {
       snapshot(): Promise<RuntimeSnapshot>;
       logs(): Promise<LogEntry[]>;
+      diagnosticLog(): Promise<string>;
       appInfo(): Promise<AppInfo>;
       storageStats(): Promise<StorageStats>;
       storageSessionDetail(id: string): Promise<StorageSessionDetail>;

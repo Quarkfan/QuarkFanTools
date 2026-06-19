@@ -59,10 +59,24 @@ export interface LarkMessage {
   senderId: string;
   messageType: string;
   text: string;
+  sourceAppId?: string;
+  mentions?: LarkMention[];
   resources: LarkMessageResource[];
   createdAt?: string;
   receivedAt: string;
   raw: unknown;
+}
+
+export interface LarkMention {
+  key?: string;
+  name?: string;
+  tenantKey?: string;
+  id?: {
+    openId?: string;
+    userId?: string;
+    unionId?: string;
+    appId?: string;
+  };
 }
 
 export interface LarkMessageResource {

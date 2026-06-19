@@ -16,6 +16,7 @@ let preview: { title: string; body: string } | null = null;
 let editingBotId = "";
 let helpTopicKey = "";
 let showManual = false;
+let logCopyState = "";
 
 const helpTopics: Record<string, { title: string; body: string }> = {
   providerName: { title: "Provider 名称", body: "仅用于界面展示，方便区分当前配置的模型服务商。" },
@@ -371,6 +372,7 @@ function renderConsole(): string {
               <option value="warn" ${logLevel === "warn" ? "selected" : ""}>警告</option>
               <option value="error" ${logLevel === "error" ? "selected" : ""}>错误</option>
             </select>
+            <button class="ghost compact" id="copy-diagnostic-log">${logCopyState ? escapeHtml(logCopyState) : "复制日志"}</button>
             <small>${botLogs.length} events</small>
           </div>
         </div>
@@ -615,6 +617,21 @@ function bindEvents(): void {
   document.querySelector<HTMLSelectElement>("#log-level")?.addEventListener("change", (event) => {
     logLevel = (event.currentTarget as HTMLSelectElement).value as typeof logLevel;
     render();
+  });
+  document.querySelector<HTMLButtonElement>("#copy-diagnostic-log")?.addEventListener("click", async () => {
+    try {
+      const text = await window.quarkfanTools.diagnosticLog();
+      await navigator.clipboard.writeText(text);
+      logCopyState = "已复制";
+    } catch (error) {
+      logCopyState = "复制失败";
+      console.error(error);
+    }
+    render();
+    window.setTimeout(() => {
+      logCopyState = "";
+      render();
+    }, 1600);
   });
   document.querySelectorAll<HTMLInputElement>("[data-skill-filter]").forEach((input) => {
     input.addEventListener("input", () => filterBotSkills(String(input.dataset.skillFilter)));

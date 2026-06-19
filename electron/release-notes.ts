@@ -2,6 +2,16 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.7",
+    date: "2026-06-19",
+    highlights: [
+      "修复多个机器人同时监听时，群聊艾特其中一个机器人可能被多个机器人同时回复的问题。",
+      "消息路由优先使用飞书事件来源 App ID；非目标机器人会在入队前忽略该消息，不会添加处理中表情、占用队列或影响后续艾特。",
+      "加载配置时会保护 Bot ID 唯一，避免手工配置重复 ID 后监听状态路径互相覆盖。",
+      "运行台复制日志会包含运行快照、Bot 状态路径、订阅 PID、lark-cli 日志尾部和应用持久化日志。"
+    ]
+  },
+  {
     version: "1.6.6",
     date: "2026-06-16",
     highlights: [

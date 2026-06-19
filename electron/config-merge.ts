@@ -24,14 +24,14 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
         showProgress: false
       } satisfies BotConfig]
     : [];
-  const bots = (override.bots ?? legacyBot).map((bot) => ({
+  const bots = normalizeBotIds((override.bots ?? legacyBot).map((bot) => ({
     ...bot,
     skillNames: (bot.skillNames ?? []).filter((name) => name !== "*"),
     oauthScopes: normalizeScopes(bot.oauthScopes),
     pendingReaction: bot.pendingReaction || "OnIt",
     ownerOpenId: bot.ownerOpenId || "",
     showProgress: bot.showProgress ?? false
-  }));
+  })));
   return {
     ...base,
     ...override,
@@ -44,6 +44,25 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
       maxAgentTurns: Math.max(10, Math.min(100, override.runtime?.maxAgentTurns ?? base.runtime.maxAgentTurns ?? 60))
     }
   };
+}
+
+function normalizeBotIds(bots: BotConfig[]): BotConfig[] {
+  const used = new Set<string>();
+  return bots.map((bot, index) => {
+    const base = normalizeBotId(bot.id || `bot-${index + 1}`) || `bot-${index + 1}`;
+    let id = base;
+    let suffix = 2;
+    while (used.has(id)) {
+      id = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    used.add(id);
+    return id === bot.id ? bot : { ...bot, id };
+  });
+}
+
+function normalizeBotId(value: string): string {
+  return value.trim().replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function normalizeScopes(scopes: unknown): string[] {

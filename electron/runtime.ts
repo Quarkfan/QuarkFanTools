@@ -15,6 +15,7 @@ import { addEscalation, completeEscalation, escalationCard, getEscalation, owner
 import { TaskLimiter } from "./task-limiter.js";
 import { addDeferredTask, continueTaskId, getDeferredTask, parseDeferredTask, updateDeferredTask, type DeferredTask } from "./deferred-tasks.js";
 import { cacheMessageResources } from "./file-cache.js";
+import { messageTargetDecision } from "./message-target.js";
 import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
@@ -122,7 +123,24 @@ export class QuarkfanToolsRuntime extends EventEmitter {
 
   private createStream(bot: BotConfig): LarkEventStream {
     const stream = new LarkEventStream();
-    stream.on("message", (message: LarkMessage) => void this.enqueueMessage(bot, message));
+    stream.on("message", (message: LarkMessage) => {
+      const decision = messageTargetDecision(bot, message);
+      if (!decision.targeted) {
+        void this.logger.write("info", "已忽略非当前机器人艾特消息", JSON.stringify({
+          reason: decision.reason,
+          text: message.text,
+          eventId: message.eventId,
+          messageId: message.messageId,
+          chatType: message.chatType,
+          sourceAppId: decision.sourceAppId,
+          mentions: message.mentions ?? [],
+          mentionValues: decision.mentionValues,
+          botMatchers: decision.botMatchers
+        }), bot.id);
+        return;
+      }
+      void this.enqueueMessage(bot, message);
+    });
     stream.on("connected", () => {
       this.connectedBotIds.add(bot.id);
       void this.logger.write("success", "机器人事件订阅已连接", bot.name, bot.id);

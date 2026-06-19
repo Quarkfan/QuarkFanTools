@@ -134,6 +134,45 @@ test("normalizes custom OAuth scopes on bot configs", () => {
   assert.deepEqual(config.bots[0].oauthScopes, ["drive:export:readonly", "docs:document:export"]);
 });
 
+test("keeps bot ids unique so listener state paths cannot collide", () => {
+  const config = mergeConfig(base, {
+    bots: [
+      {
+        id: "shared bot",
+        name: "Bot 1",
+        enabled: true,
+        cliPath: "",
+        profile: "",
+        appId: "cli_1",
+        appSecret: "secret",
+        receiveIdentity: "bot",
+        replyIdentity: "bot",
+        eventTypes: ["im.message.receive_v1"],
+        skillNames: [],
+        pendingReaction: "OnIt",
+        ownerOpenId: ""
+      },
+      {
+        id: "shared bot",
+        name: "Bot 2",
+        enabled: true,
+        cliPath: "",
+        profile: "",
+        appId: "cli_2",
+        appSecret: "secret",
+        receiveIdentity: "bot",
+        replyIdentity: "bot",
+        eventTypes: ["im.message.receive_v1"],
+        skillNames: [],
+        pendingReaction: "OnIt",
+        ownerOpenId: ""
+      }
+    ]
+  });
+
+  assert.deepEqual(config.bots.map((item) => item.id), ["shared-bot", "shared-bot-2"]);
+});
+
 test("adds a bounded max agent turns runtime config", () => {
   assert.equal(mergeConfig(base, {}).runtime.maxAgentTurns, 60);
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, maxAgentTurns: 500 } }).runtime.maxAgentTurns, 100);

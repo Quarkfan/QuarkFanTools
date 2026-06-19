@@ -37,6 +37,7 @@ button, input, select, textarea, label, nav, .actions, .form-actions, .panel, .n
 button.primary, button.ghost, button.danger { border-radius: 4px; padding: 10px 16px; border: 1px solid #34433b; color: #dce8e1; background: #151c19; }
 button.primary { color: #07110b; border-color: #77f2a1; background: #77f2a1; font-weight: 700; }
 button.danger { border-color: #a84b4b; color: #ffb2ac; }
+button.compact { padding: 5px 8px; font-size: 10px; }
 button:disabled { opacity: .35; cursor: not-allowed; }
 .help-button { width: 17px; height: 17px; margin-left: 6px; padding: 0; border: 1px solid #34433b; border-radius: 50%; color: #77f2a1; background: #101713; font: 700 10px/15px "Menlo", monospace; }
 .help-button:hover { border-color: #77f2a1; background: rgba(119,242,161,.08); }

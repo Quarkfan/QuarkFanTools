@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { QuarkfanToolsRuntime } from "./runtime.js";
 import { saveConfig } from "./config.js";
-import { migrateLegacyData } from "./paths.js";
+import { migrateLegacyData, stateRoot } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
 import { importSkillFolder, removeLocalSkill, skillPreview } from "./skills.js";
 import { syncSkillMarket } from "./skill-market.js";
@@ -84,6 +85,7 @@ runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
 
 ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
+ipcMain.handle("runtime:diagnostic-log", async () => diagnosticLogText());
 ipcMain.handle("app:info", () => appInfo(app.getVersion()));
 ipcMain.handle("storage:stats", () => storageStats());
 ipcMain.handle("storage:session-detail", (_event, id: string) => storageSessionDetail(id));
@@ -168,3 +170,87 @@ ipcMain.handle("lark:login-user", async (_event, botId: string) => {
     throw error;
   }
 });
+
+async function diagnosticLogText(): Promise<string> {
+  const snapshot = runtime.snapshot();
+  const persistentLog = await readFile(path.join(stateRoot(), "logs", "quarkfantools.jsonl"), "utf8").catch(() => "");
+  const persistentLines = persistentLog.trim().split(/\r?\n/).filter(Boolean).slice(-2000);
+  const botDiagnostics = await Promise.all(snapshot.config.bots.map(async (bot) => {
+    const botRoot = path.join(stateRoot(), "bots", bot.id);
+    const pidPath = path.join(botRoot, "lark-event-subscriber.pid");
+    return {
+      id: bot.id,
+      name: bot.name,
+      stateRoot: botRoot,
+      larkConfigDir: path.join(botRoot, "lark-cli"),
+      subscriberPid: (await readFile(pidPath, "utf8").catch(() => "")).trim() || null,
+      larkLogs: await recentFilesText(path.join(botRoot, "lark-cli", "logs"), 10, 120)
+    };
+  }));
+  return [
+    "QuarkfanTools diagnostic log",
+    `Generated at: ${new Date().toISOString()}`,
+    `App version: ${app.getVersion()}`,
+    "",
+    "SNAPSHOT",
+    JSON.stringify({
+      userDataPath: app.getPath("userData"),
+      appDataPath: app.getPath("appData"),
+      stateRoot: stateRoot(),
+      running: snapshot.running,
+      runningBotIds: snapshot.runningBotIds,
+      connectedBotIds: snapshot.connectedBotIds,
+      activeTasks: snapshot.activeTasks,
+      queuedTasks: snapshot.queuedTasks,
+      bots: snapshot.config.bots.map((bot) => ({
+        id: bot.id,
+        name: bot.name,
+        enabled: bot.enabled,
+        receiveIdentity: bot.receiveIdentity,
+        replyIdentity: bot.replyIdentity,
+        eventTypes: bot.eventTypes,
+        skillCount: bot.skillNames.length,
+        showProgress: bot.showProgress
+      })),
+      model: {
+        providerId: snapshot.config.model.providerId,
+        providerName: snapshot.config.model.providerName,
+        baseUrlConfigured: Boolean(snapshot.config.model.baseUrl),
+        model: snapshot.config.model.model,
+        apiKeyConfigured: Boolean(snapshot.config.model.apiKey),
+        multimodalEnabled: snapshot.config.model.multimodalEnabled
+      },
+      runtime: snapshot.config.runtime
+    }, null, 2),
+    "",
+    "BOT STATE AND LARK CLI LOGS",
+    JSON.stringify(botDiagnostics, null, 2),
+    "",
+    "RECENT IN-MEMORY LOGS",
+    JSON.stringify(runtime.logger.list(), null, 2),
+    "",
+    "RECENT PERSISTENT LOGS",
+    persistentLines.join("\n") || "(empty)"
+  ].join("\n");
+}
+
+async function recentFilesText(dir: string, maxFiles: number, maxLinesPerFile: number): Promise<Array<{ file: string; modifiedAt: string; tail: string }>> {
+  const files = await readdir(dir).catch(() => []);
+  const withStats = await Promise.all(files.map(async (file) => {
+    const fullPath = path.join(dir, file);
+    const fileStat = await stat(fullPath).catch(() => null);
+    return fileStat?.isFile() ? { file: fullPath, modifiedAt: fileStat.mtime.toISOString(), mtimeMs: fileStat.mtimeMs } : null;
+  }));
+  return Promise.all(withStats
+    .filter((item): item is { file: string; modifiedAt: string; mtimeMs: number } => Boolean(item))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, maxFiles)
+    .map(async (item) => {
+      const content = await readFile(item.file, "utf8").catch((error) => `Unable to read file: ${String(error)}`);
+      return {
+        file: item.file,
+        modifiedAt: item.modifiedAt,
+        tail: content.split(/\r?\n/).slice(-maxLinesPerFile).join("\n")
+      };
+    }));
+}

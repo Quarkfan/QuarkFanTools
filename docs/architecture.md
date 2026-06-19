@@ -21,7 +21,7 @@ flowchart LR
 
 ## 2. 消息处理流程
 
-每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 `LarkEventStream`。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话通过全局 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。
+每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 `LarkEventStream`。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话通过全局 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。群聊消息会在入队前做目标 Bot 判定：优先使用飞书事件来源 `app_id` 匹配当前 Bot 的 `appId`，没有来源应用 ID 时再按 `mentions` 中的应用 ID、open_id、user_id、union_id、展示名或 key 与当前 Bot 的 `appId`、配置 ID、名称匹配。未命中的消息只记录带判定原因的忽略日志，不添加处理中表情、不占用队列，也不写入该 Bot 的去重集合。私聊或旧版事件缺少可判定目标时继续按原路径处理。
 
 ```mermaid
 sequenceDiagram
@@ -33,7 +33,7 @@ sequenceDiagram
 
     F->>L: message event
     L->>R: NDJSON event
-    R->>R: dedupe and measure delivery delay
+    R->>R: filter target bot, dedupe and measure delivery delay
     R->>L: add OnIt reaction
     R->>W: prepare authorized skills and attachments
     R->>C: prompt, tools, multimodal input, resume session
