@@ -1,9 +1,10 @@
 import type { BotConfig } from "./types.js";
+import { effectiveBotProfile } from "./bot-identity.js";
 
 export const DEFAULT_LARK_USER_OAUTH_SCOPES = ["search:docs:read"];
 
 function profileArgs(bot: BotConfig): string[] {
-  return bot.profile ? ["--profile", bot.profile] : [];
+  return ["--profile", effectiveBotProfile(bot)];
 }
 
 export function larkEventSubscribeArgs(bot: BotConfig): string[] {

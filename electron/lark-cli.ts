@@ -5,9 +5,10 @@ import path from "node:path";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { projectRoot, stateRoot } from "./paths.js";
-import type { BotConfig, LarkMessage, LarkMessageResource } from "./types.js";
+import type { BotConfig, LarkBotIdentity, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "./lark-commands.js";
+import { effectiveBotProfile } from "./bot-identity.js";
 
 const preparedCredentials = new Map<string, string>();
 
@@ -55,7 +56,7 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   await mkdir(dir, { recursive: true });
   if (!bot.appId) return;
   const markerPath = path.join(dir, ".quarkfantools-credential");
-  const marker = createHash("sha256").update(`${bot.appId}:${bot.appSecret}`).digest("hex");
+  const marker = createHash("sha256").update(`${bot.appId}:${effectiveProfile(bot)}:${bot.appSecret}`).digest("hex");
   if (preparedCredentials.get(bot.id) === marker) return;
   if ((await readFile(markerPath, "utf8").catch(() => "")) === marker) {
     try {
@@ -69,7 +70,7 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   }
   const { command, prefix } = await resolveLarkCommand(bot);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, [...prefix, ...profileArgs(bot), "config", "init", "--app-id", bot.appId, "--app-secret-stdin", "--brand", "feishu"], {
+    const child = spawn(command, [...prefix, ...profileArgs(bot), "config", "init", "--name", effectiveProfile(bot), "--app-id", bot.appId, "--app-secret-stdin", "--brand", "feishu"], {
       cwd: projectRoot(),
       env: larkEnv(bot),
       stdio: ["pipe", "pipe", "pipe"]
@@ -91,7 +92,11 @@ async function prepareSandboxKeychain(bot: BotConfig): Promise<void> {
 }
 
 function profileArgs(bot: BotConfig): string[] {
-  return bot.profile ? ["--profile", bot.profile] : [];
+  return ["--profile", effectiveBotProfile(bot)];
+}
+
+export function effectiveProfile(bot: BotConfig): string {
+  return effectiveBotProfile(bot);
 }
 
 export class LarkEventStream extends EventEmitter {
@@ -316,6 +321,25 @@ export async function removeMessageReaction(bot: BotConfig, messageId: string, r
     "--format",
     "json"
   ]);
+}
+
+export async function getLarkBotIdentity(bot: BotConfig): Promise<LarkBotIdentity> {
+  const output = await runLarkCapture(bot, [
+    "api",
+    "GET",
+    "/open-apis/bot/v3/info",
+    "--as",
+    "bot",
+    "--format",
+    "json"
+  ]);
+  const result = JSON.parse(output) as any;
+  const openId = typeof result?.bot?.open_id === "string" ? result.bot.open_id : "";
+  if (!openId) throw new Error(`飞书未返回 Bot open_id: ${output}`);
+  return {
+    openId,
+    appName: typeof result?.bot?.app_name === "string" ? result.bot.app_name : undefined
+  };
 }
 
 export async function downloadMessageResources(bot: BotConfig, message: LarkMessage, outputDir: string): Promise<LarkMessage> {

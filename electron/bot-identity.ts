@@ -11,6 +11,10 @@ export function maskAppId(value: string): string {
   return `${normalized.slice(0, 6)}***${normalized.slice(-4)}`;
 }
 
+export function effectiveBotProfile(bot: BotConfig): string {
+  return bot.profile || `qft-${bot.id.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+}
+
 export function runningBotWithSameAppId(bot: BotConfig, bots: BotConfig[], runningBotIds: Iterable<string>): BotConfig | null {
   const appId = normalizeAppId(bot.appId);
   if (!appId) return null;

@@ -67,6 +67,11 @@ export interface LarkMessage {
   raw: unknown;
 }
 
+export interface LarkBotIdentity {
+  appName?: string;
+  openId: string;
+}
+
 export interface LarkMention {
   key?: string;
   name?: string;

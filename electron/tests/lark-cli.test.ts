@@ -23,6 +23,8 @@ const bot: BotConfig = {
 
 test("event subscription does not use unsafe parallel subscription mode", () => {
   assert.deepEqual(larkEventSubscribeArgs(bot), [
+    "--profile",
+    "qft-mentor",
     "event",
     "+subscribe",
     "--as",
@@ -146,6 +148,45 @@ test("routes by event source app id before mention display names", () => {
   assert.ok(message);
   assert.equal(messageTargetsBot(bot, message), true);
   assert.equal(messageTargetsBot(anotherBot, message), false);
+});
+
+test("routes mentioned group messages by resolved bot open id", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_open_id",
+        chat_id: "oc_1",
+        chat_type: "group",
+        mentions: [{ id: { open_id: "ou_target_bot" }, name: "飞书里的展示名" }],
+        content: JSON.stringify({ text: "查一下订单状态" })
+      }
+    }
+  });
+
+  assert.ok(message);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot", appName: "真实机器人名" }, true), true);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_other_bot", appName: "其他机器人" }, true), false);
+});
+
+test("does not route ambiguous group messages in strict multi-bot mode", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_ambiguous",
+        chat_id: "oc_1",
+        chat_type: "group",
+        content: JSON.stringify({ text: "@_user_1 你好" })
+      }
+    }
+  });
+
+  assert.ok(message);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, true), false);
+  assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, false), true);
 });
 
 test("routes mentioned group messages only to the matching bot", () => {

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { runClaude } from "./claude.js";
-import { addMessageReaction, downloadMessageResources, LarkEventStream, removeMessageReaction, replyToMessage, sendCardToUser } from "./lark-cli.js";
+import { addMessageReaction, downloadMessageResources, getLarkBotIdentity, LarkEventStream, removeMessageReaction, replyToMessage, sendCardToUser } from "./lark-cli.js";
 import { Logger } from "./logger.js";
 import { preprocessOfficeResources } from "./office.js";
 import { discoverSkills } from "./skills.js";
@@ -17,7 +17,7 @@ import { addDeferredTask, continueTaskId, getDeferredTask, parseDeferredTask, up
 import { cacheMessageResources } from "./file-cache.js";
 import { messageTargetDecision } from "./message-target.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
-import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
+import type { AppConfig, BotConfig, LarkBotIdentity, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
   readonly logger = new Logger();
@@ -28,6 +28,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private conversationTasks = new Map<string, Promise<void>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private runningBotIds = new Set<string>();
+  private botIdentities = new Map<string, LarkBotIdentity>();
   private taskLimiter = new TaskLimiter();
   private config!: AppConfig;
   private skills: SkillSummary[] = [];
@@ -76,6 +77,9 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (!this.config.model.baseUrl || !this.config.model.model || !this.config.model.apiKey) {
       throw new Error("Claude 兼容模型连接未完整配置");
     }
+    const identity = await getLarkBotIdentity(bot);
+    this.botIdentities.set(bot.id, identity);
+    await this.logger.write("info", "飞书 Bot 身份已确认", `${maskAppId(bot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId}`, bot.id);
     this.runningBotIds.add(bot.id);
     const stream = this.createStream(bot);
     this.streams.set(bot.id, stream);
@@ -85,6 +89,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       await this.logger.write("info", "机器人事件订阅正在连接", bot.receiveIdentity, bot.id);
     } catch (error) {
       this.runningBotIds.delete(bot.id);
+      this.botIdentities.delete(bot.id);
       if (this.streams.get(bot.id) === stream) this.streams.delete(bot.id);
       await this.logger.write("error", "机器人启动失败", String(error), bot.id);
     }
@@ -98,6 +103,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
     this.reconnectTimers.clear();
     this.connectedBotIds.clear();
+    this.botIdentities.clear();
     await this.logger.write("info", "QuarkfanTools 已停止");
     this.emitSnapshot();
   }
@@ -111,6 +117,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (stream) await stream.stop();
     this.streams.delete(botId);
     this.connectedBotIds.delete(botId);
+    this.botIdentities.delete(botId);
     const bot = this.config.bots.find((item) => item.id === botId);
     await this.logger.write("info", "机器人监听已停止", bot?.name, botId);
     this.emitSnapshot();
@@ -131,7 +138,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private createStream(bot: BotConfig): LarkEventStream {
     const stream = new LarkEventStream();
     stream.on("message", (message: LarkMessage) => {
-      const decision = messageTargetDecision(bot, message);
+      const decision = messageTargetDecision(bot, message, this.botIdentities.get(bot.id), this.runningBotIds.size > 1);
       if (!decision.targeted) {
         void this.logger.write("info", "已忽略非当前机器人艾特消息", JSON.stringify({
           reason: decision.reason,
@@ -139,6 +146,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
           eventId: message.eventId,
           messageId: message.messageId,
           chatType: message.chatType,
+          botOpenId: decision.botOpenId,
           sourceAppId: decision.sourceAppId,
           mentions: message.mentions ?? [],
           mentionValues: decision.mentionValues,
@@ -180,6 +188,11 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     const stream = this.createStream(bot);
     this.streams.set(bot.id, stream);
     try {
+      if (!this.botIdentities.has(bot.id)) {
+        const identity = await getLarkBotIdentity(bot);
+        this.botIdentities.set(bot.id, identity);
+        await this.logger.write("info", "飞书 Bot 身份已确认", `${maskAppId(bot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId}`, bot.id);
+      }
       await stream.start(bot);
       await this.logger.write("info", "机器人事件订阅正在重连", bot.name, bot.id);
     } catch (error) {

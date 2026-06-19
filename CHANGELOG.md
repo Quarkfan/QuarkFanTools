@@ -6,6 +6,12 @@
 
 ## Unreleased
 
+## v1.6.9 - 2026-06-19
+
+- 每个 Bot 启动时调用飞书 bot info 获取实际 `open_id` 和应用名，并在运行台记录脱敏 App ID、应用名和 open_id。
+- 所有 lark-cli 调用强制使用每个 Bot 的独立 named profile，避免默认 profile 干扰多 Bot 监听。
+- 多 Bot 群聊消息优先按 `mentions.id.open_id` 精确路由；缺少可判定 mention 元数据时记录诊断并忽略，避免多个机器人同时回复。
+
 ## v1.6.8 - 2026-06-19
 
 - 禁止同时启动两个 App ID 相同的本地 Bot；同一飞书应用的多角色能力应在单个 Bot 下通过 Skill、命令或套件路由。

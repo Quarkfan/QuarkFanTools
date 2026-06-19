@@ -1,9 +1,10 @@
-import type { BotConfig, LarkMention, LarkMessage } from "./types.js";
+import type { BotConfig, LarkBotIdentity, LarkMention, LarkMessage } from "./types.js";
 
 export interface MessageTargetDecision {
   targeted: boolean;
   reason: string;
   sourceAppId?: string;
+  botOpenId?: string;
   mentionValues: string[];
   botMatchers: string[];
 }
@@ -23,15 +24,29 @@ function mentionValues(mention: LarkMention): string[] {
   ].filter((value): value is string => Boolean(value));
 }
 
-export function messageTargetsBot(bot: BotConfig, message: LarkMessage): boolean {
-  return messageTargetDecision(bot, message).targeted;
+export function messageTargetsBot(bot: BotConfig, message: LarkMessage, identity?: LarkBotIdentity, strictGroupTargeting = false): boolean {
+  return messageTargetDecision(bot, message, identity, strictGroupTargeting).targeted;
 }
 
-export function messageTargetDecision(bot: BotConfig, message: LarkMessage): MessageTargetDecision {
+export function messageTargetDecision(bot: BotConfig, message: LarkMessage, identity?: LarkBotIdentity, strictGroupTargeting = false): MessageTargetDecision {
   const mentions = message.mentions ?? [];
-  const botMatchers = [bot.id, bot.name, bot.appId]
+  const botMatchers = [bot.id, bot.name, bot.appId, identity?.openId, identity?.appName]
     .filter((value): value is string => Boolean(value))
     .map((value) => normalize(value));
+  const values = mentions.flatMap(mentionValues);
+  const matcherSet = new Set(botMatchers);
+  if (identity?.openId && mentions.length > 0) {
+    const botOpenId = normalize(identity.openId);
+    const matched = mentions.some((mention) => normalize(mention.id?.openId) === botOpenId);
+    return {
+      targeted: matched,
+      reason: matched ? "bot-open-id-mention-match" : "bot-open-id-mention-mismatch",
+      botOpenId: identity.openId,
+      sourceAppId: message.sourceAppId,
+      mentionValues: values,
+      botMatchers
+    };
+  }
   const sourceAppId = normalize(message.sourceAppId);
   if (sourceAppId) {
     return {
@@ -43,10 +58,15 @@ export function messageTargetDecision(bot: BotConfig, message: LarkMessage): Mes
     };
   }
   if (mentions.length === 0) {
-    return { targeted: true, reason: "no-mention-metadata", mentionValues: [], botMatchers };
+    const targeted = !(strictGroupTargeting && message.chatType === "group");
+    return {
+      targeted,
+      reason: targeted ? "no-mention-metadata" : "missing-group-mention-metadata",
+      botOpenId: identity?.openId,
+      mentionValues: [],
+      botMatchers
+    };
   }
-  const matcherSet = new Set(botMatchers);
-  const values = mentions.flatMap(mentionValues);
   for (const mention of mentions) {
     for (const value of mentionValues(mention)) {
       if (matcherSet.has(normalize(value))) {

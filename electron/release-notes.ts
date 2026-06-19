@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.9",
+    date: "2026-06-19",
+    highlights: [
+      "启动 Bot 时会确认飞书实际机器人 open_id 和应用名，运行台可看到对应诊断信息。",
+      "多 Bot 群聊消息按被艾特机器人的 open_id 精确路由，避免不同机器人同时回复同一条消息。",
+      "所有 lark-cli 调用强制使用每个 Bot 的独立 profile，减少默认 profile 干扰。"
+    ]
+  },
+  {
     version: "1.6.8",
     date: "2026-06-19",
     highlights: [
