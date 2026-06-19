@@ -533,6 +533,7 @@ function renderManual(): string {
             <p><strong>企业微信事件桥命令</strong>只在消息平台为企业微信时生效，用于运行一个本地事件桥并从 stdout 读取一行一个 JSON 的消息事件。官方 wecom-cli 当前是调用型工具，这个字段用于补齐监听入口。</p>
             <p><strong>飞书知识连接器</strong>用于消息入口不是飞书时仍然读取飞书文档、Wiki、云盘和云 PPT。<strong>结果投递路由</strong>可把最终回复复制发送到另一个平台 chat。</p>
             <p><strong>用户态 OAuth 额外权限</strong>用于补充飞书 scope，例如 <code>drive:export:readonly</code>、<code>docs:document:export</code>。保存后需要重新点击“用户态 OAuth”，并且飞书开放平台也必须先开通对应应用权限。</p>
+            <p>用户态 OAuth 只授权当前用户用于搜索、读取或导出飞书资料，不会把机器人开放给群内所有成员。若其他成员 @ 机器人时看到“暂时还无法与我对话，需要机器人主人的允许”，需要到飞书开放平台检查该应用的发布状态和可用范围。</p>
             <p><strong>Owner open_id</strong>用于人工协助卡片。<strong>向用户展示工作过程</strong>只展示工具调用和检索进度，不展示模型隐藏推理。</p>
           </section>
           <section>
@@ -573,6 +574,7 @@ function renderManual(): string {
             <h3>运行台</h3>
             <p>运行台显示在线 Bot、可用 Skills、运行中任务和排队任务。点击 Bot 可查看该 Bot 的独立日志，并按日志等级筛选。</p>
             <p>收到 IM 消息后，应用会尽量给原消息添加处理中标记；平台不支持时会静默跳过。处理完成后回复结果。多人同时提问时，超出并发上限的任务会排队。</p>
+            <p>如果某个群成员 @ 飞书机器人后只看到平台提示“需要机器人主人的允许”，且运行台没有“收到飞书消息”，说明消息未到达 QuarkfanTools，本地监听和模型不会参与处理。请检查飞书应用是否已发布，且可用范围包含该群成员或所在组织。</p>
           </section>
           <section>
             <h3>飞书资料与文件</h3>

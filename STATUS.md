@@ -4,12 +4,12 @@
 
 ## 当前基线
 
-- 产品版本：`2.0.1`
+- 产品版本：`2.0.2`
 - Git 分支：`codex/2.0.0-stabilize`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：2.0.1 已修正多飞书 Bot 群聊 mention 身份误判，并继续围绕真实 IM 端到端、诊断和发布签名收口
+- 当前阶段：2.0.2 已补充飞书 Bot 可用范围诊断提示，并继续围绕真实 IM 端到端、诊断和发布签名收口
 
 ## 已实现
 
@@ -39,6 +39,7 @@
 - Agent sandbox 允许当前 Bot 的 lark-cli 状态与锁文件目录读写，同时继续拒绝其他 Bot 的状态和 workspace。
 - Agent sandbox 允许官方 lark-cli 全局安全存储目录读写，已完成用户态 OAuth 后可在 sandbox 内读取加密凭据；用户态授权统一从应用配置页发起。
 - Bot 可配置用户态 OAuth 额外权限列表，发起授权时与默认文档搜索权限合并。
+- 用户态 OAuth 完成日志改为摘要，并明确提示 OAuth 只授权资料读取用户，不会开放飞书 Bot 给其他群成员；群成员权限由飞书开放平台应用发布状态和可用范围控制。
 - moje-qa-assistant 在本地知识不足时继续搜索飞书，并对 Office 文件使用预览、导出和多模态分析。
 - 过滤处理中表情触发的 reaction created/deleted 未注册处理器日志，保留其他飞书连接错误。
 - 高匹配飞书文件可先回复基本答案并创建待确认任务，用户确认后沿用原会话继续下载和分析。
@@ -108,6 +109,8 @@
 
 ## 最近验证
 
+- 2026-06-19：`npm run pack:mac` 通过，`v2.0.2` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `2.0.2`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli/wecom-cli 均为 universal。
+- 2026-06-19：`npm test` 通过，67 个测试全部通过；新增飞书用户态 OAuth 摘要日志和 Bot 可用范围排障提示。
 - 2026-06-19：`npm run pack:mac` 通过，`v2.0.1` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `2.0.1`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli/wecom-cli 均为 universal。
 - 2026-06-19：`npm test` 通过，67 个测试全部通过；新增真实现场形态覆盖：mention 名称命中但 mention open_id 不同于 bot info open_id 时仍路由到正确 Bot，且有 mention 时不使用事件头 App ID 判定目标。
 - 2026-06-19：`npm test` 通过，65 个测试全部通过；`npm run pack:mac` 通过，重新生成 `release/arm64/QuarkfanTools-2.0.0-arm64.dmg`、`release/arm64/QuarkfanTools-2.0.0-arm64.zip`、`release/x64/QuarkfanTools-2.0.0-x64.dmg`、`release/x64/QuarkfanTools-2.0.0-x64.zip`；核对两个 app 版本均为 `2.0.0`、主程序架构分别为 arm64 与 x86_64、内置 lark-cli/wecom-cli 均为 universal。已将 `v1.6.9` 多飞书 Bot open_id 精确路由修复移植到 2.0，并补充 `aid` 连接层参数调查文档。
