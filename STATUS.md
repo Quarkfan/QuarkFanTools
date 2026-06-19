@@ -4,17 +4,17 @@
 
 ## 当前基线
 
-- 产品版本：`2.0.0`
-- Git 分支：`main`
+- 产品版本：`2.0.1`
+- Git 分支：`codex/2.0.0-stabilize`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：2.0.0 首版能力已打包验证，且已合入 v1.6.9 多飞书 Bot 路由修复；继续围绕真实 IM 端到端、诊断和发布签名收口
+- 当前阶段：2.0.1 已修正多飞书 Bot 群聊 mention 身份误判，并继续围绕真实 IM 端到端、诊断和发布签名收口
 
 ## 已实现
 
 - 多飞书机器人配置、独立监听和权限隔离。
-- 飞书 Bot 启动时会调用 bot info 确认实际 `open_id` 和应用名；多飞书 Bot 群聊艾特消息优先按 `mentions.id.open_id` 路由到目标机器人。
+- 飞书 Bot 启动时会调用 bot info 确认实际 `open_id` 和应用名；多飞书 Bot 群聊艾特消息按 mention 目标值路由到目标机器人，`mentions.id.open_id` 只作为正向命中信号，不作为排他条件。
 - 多飞书 Bot 同时运行时，群聊消息如果缺少可判定的 mention 元数据，会记录诊断并忽略，避免多个机器人同时回复。
 - 每个注册机器人可独立启停监听，并可查看和筛选其独立日志。
 - 应用内展示可点击版本号，并提供面向用户的更新记录弹窗。
@@ -108,6 +108,8 @@
 
 ## 最近验证
 
+- 2026-06-19：`npm run pack:mac` 通过，`v2.0.1` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `2.0.1`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli/wecom-cli 均为 universal。
+- 2026-06-19：`npm test` 通过，67 个测试全部通过；新增真实现场形态覆盖：mention 名称命中但 mention open_id 不同于 bot info open_id 时仍路由到正确 Bot，且有 mention 时不使用事件头 App ID 判定目标。
 - 2026-06-19：`npm test` 通过，65 个测试全部通过；`npm run pack:mac` 通过，重新生成 `release/arm64/QuarkfanTools-2.0.0-arm64.dmg`、`release/arm64/QuarkfanTools-2.0.0-arm64.zip`、`release/x64/QuarkfanTools-2.0.0-x64.dmg`、`release/x64/QuarkfanTools-2.0.0-x64.zip`；核对两个 app 版本均为 `2.0.0`、主程序架构分别为 arm64 与 x86_64、内置 lark-cli/wecom-cli 均为 universal。已将 `v1.6.9` 多飞书 Bot open_id 精确路由修复移植到 2.0，并补充 `aid` 连接层参数调查文档。
 - 2026-06-19：从线上 `v1.6.6` 标签单独 worktree 重新打包封板版本，生成 `release/restored-v1.6.6/QuarkfanTools-1.6.6-arm64.dmg`、`release/restored-v1.6.6/QuarkfanTools-1.6.6-arm64.zip`、`release/restored-v1.6.6/QuarkfanTools-1.6.6-x64.dmg`、`release/restored-v1.6.6/QuarkfanTools-1.6.6-x64.zip`；标签测试 27 个全部通过，核对版本号和架构。
 - 2026-06-19：`npm test` 通过，61 个测试全部通过；`npm run pack:mac` 通过，生成 `release/arm64/QuarkfanTools-2.0.0-arm64.dmg`、`release/arm64/QuarkfanTools-2.0.0-arm64.zip`、`release/x64/QuarkfanTools-2.0.0-x64.dmg`、`release/x64/QuarkfanTools-2.0.0-x64.zip`；核对 arm64/x64 主程序架构、两套 app 内 universal `wecom-cli`、Info.plist app icon；`git diff --check` 通过。安装包仍未签名和公证。

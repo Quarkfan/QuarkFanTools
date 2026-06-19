@@ -153,9 +153,10 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 ### 多飞书 Bot 群聊艾特路由异常
 
 - 配置里的 `cli_...` 是飞书开放平台应用 App ID，用于初始化对应 Bot 的 lark-cli profile。
-- 运行时的机器人身份以 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 为准。群聊消息会优先用事件里的 `message.mentions[].id.open_id` 与当前 Bot 的 `open_id` 精确匹配。
+- 运行时会记录 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 和应用名。群聊消息有 `message.mentions` 时，应用会先用 mention 目标里的名称、App ID、应用名和 open_id 等值匹配当前 Bot；`mentions[].id.open_id` 只作为命中信号，不作为排他条件，因为现场事件中它可能不同于 bot info 的 `bot.open_id`。
+- 事件头里的 App ID 表示当前监听连接所属应用，不一定是消息中被 @ 的目标。有 `mentions` 时不要用 `sourceAppId` 判定目标 Bot；它只用于缺少 mention 元数据的旧事件兜底。
 - lark-cli WebSocket 日志里可能出现 `aid=552564` 之类参数。该值来自飞书服务端返回的 WebSocket endpoint URL，是飞书事件网关或 SDK 连接层参数，不是配置的 App ID，也不能用于判断两个机器人是否接入了同一个飞书应用。
-- 本地 POC 确认：两个不同 `cli_...` 应用同时监听时，WebSocket URL 中可以出现相同 `aid`；但 `/open-apis/bot/v3/info` 返回的 `open_id` 和应用名不同。因此排查多 Bot 路由时，应看脱敏 App ID、bot info 的 `open_id`、事件 `mentions` 和“已忽略非当前机器人艾特消息”的判定原因。
+- 本地 POC 确认：两个不同 `cli_...` 应用同时监听时，WebSocket URL 中可以出现相同 `aid`；但 `/open-apis/bot/v3/info` 返回的 `open_id` 和应用名不同。因此排查多 Bot 路由时，应看脱敏 App ID、bot info 的 `open_id` 和应用名、事件 `mentions` 里的目标值，以及“已忽略非当前机器人艾特消息”的判定原因。
 - 多飞书 Bot 同时运行时，如果群聊事件缺少 `mentions` 元数据，应用会记录 `missing-group-mention-metadata` 并忽略该消息，避免多个 Bot 同时回复。出现这种日志时，需要确认飞书事件是否为原始消息事件、机器人是否被真正 @、以及 lark-cli 输出没有开启会丢失 mention 的紧凑模式。
 
 ### 用户态 OAuth 失败

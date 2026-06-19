@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "2.0.1",
+    date: "2026-06-19",
+    highlights: [
+      "修复多飞书 Bot 群聊中正确机器人被误忽略的问题。",
+      "群聊艾特现在按 mention 目标名称、App ID、应用名和 open_id 等值匹配；mention open_id 不再作为排他条件。",
+      "有 mention 的消息不再用事件头 App ID 判定目标 Bot，减少多监听连接带来的误判。"
+    ]
+  },
+  {
     version: "2.0.0",
     date: "2026-06-19",
     highlights: [
@@ -11,7 +20,7 @@ const releases: AppInfo["releases"] = [
       "新增套件和 Workflow 能力，支持导入、预览、Bot 挂载、命令调用和定时调用。",
       "新增 MCP stdio 配置、Bot 授权、严格注入和诊断刷新，可预览工具列表并展示失败详情。",
       "新增多 IM Provider 底座，开始支持企业微信 CLI，并把消息平台、飞书知识连接器和结果投递路由分开配置。",
-      "飞书 Bot 启动时会确认真实 open_id，多飞书 Bot 群聊艾特消息按 open_id 精确路由，避免多个机器人同时回复。",
+      "飞书 Bot 启动时会确认真实 open_id 和应用名，多飞书 Bot 群聊艾特消息按 mention 目标路由，避免多个机器人同时回复。",
       "打包链路携带官方 @wecom/cli macOS universal runtime，企业微信 Provider 不再只停留在开发环境依赖。",
       "打包链路会从本地 logo 生成 macOS app icon，安装包不再使用 Electron 默认图标。",
       "Skill、自定义应用和套件卡片支持打开资源所在目录，方便复制和检查文件。",

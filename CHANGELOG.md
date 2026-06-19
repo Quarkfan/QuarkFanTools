@@ -8,9 +8,15 @@
 
 - 暂无。
 
+## v2.0.1 - 2026-06-19
+
+- 修正多飞书 Bot 群聊路由策略：现场事件确认 `mentions.id.open_id` 可能不同于 bot info 的 `open_id`，现在有 mention 时按 mention 名称、App ID、应用名和 open_id 等目标值匹配。
+- 有 `mentions` 的群聊消息不再用事件头 `sourceAppId` 判定目标 Bot；`sourceAppId` 只在缺少 mention 元数据的旧事件中兜底，避免正确机器人被误忽略。
+- 将同一修复同步到 1.6 维护线并发布 `v1.6.10`，避免 2.0 后续重复修复同类问题。
+
 ## v2.0.0 - 2026-06-19
 
-- 将 `v1.6.9` 多飞书 Bot 群聊艾特修复带入 2.0：飞书 Bot 启动时确认真实 `open_id`，群聊消息按 `mentions.id.open_id` 精确路由，避免多个飞书 Bot 同时回复。
+- 将 `v1.6.9` 多飞书 Bot 群聊艾特修复带入 2.0：飞书 Bot 启动时确认真实 `open_id` 和应用名，群聊消息先按 mention 目标过滤，避免多个飞书 Bot 同时回复。
 - 记录 `aid=552564` 调查结论：该值是飞书事件 WebSocket endpoint 的连接层参数，不是开放平台 `cli_...` App ID，不能用于 Bot 身份判断。
 - 新增 Bot 级 `/xxx` 命令映射，可将命令路由到已授权 Skill、已授权套件、套件派生 Workflow 或已授权自定义应用，并支持 `{{args}}` Prompt 模板。
 - 新增套件能力：支持导入包含 `suite.json` 的目录、在能力页预览、在 Bot 编辑弹窗中挂载授权，并可作为命令目标注入套件上下文执行。
