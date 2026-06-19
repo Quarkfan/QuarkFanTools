@@ -4,7 +4,7 @@
 
 ## 当前基线
 
-- 产品版本：`1.6.9`
+- 产品版本：`1.6.10`
 - Git 分支：`codex/v1.6.7-multi-bot-mention-filter`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
@@ -15,7 +15,7 @@
 
 - 多飞书机器人配置、独立监听和权限隔离。
 - 同一飞书 App ID 同一时间只能启动一个本地 Bot，避免同一飞书机器人事件被多个本地 Bot 同时处理。
-- 机器人启动时会调用飞书 bot info 确认实际 `open_id` 和应用名；群聊艾特消息优先按 `mentions.id.open_id` 路由到目标机器人。
+- 机器人启动时会调用飞书 bot info 确认实际 `open_id` 和应用名；群聊艾特消息按 mention 目标值路由到目标机器人，`mentions.id.open_id` 只作为正向命中信号，不作为排他条件。
 - 多 Bot 同时运行时，群聊消息如果缺少可判定的 mention 元数据，会记录诊断并忽略，避免多个机器人同时回复。
 - Bot ID 会在加载配置时归一化并去重，确保每个机器人拥有独立监听状态路径。
 - 每个注册机器人可独立启停监听，并可查看和筛选其独立日志。
@@ -77,8 +77,10 @@
 
 ## 最近验证
 
+- 2026-06-19：`npm run pack:mac` 通过，`v1.6.10` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.10`，主程序架构分别为 arm64 与 x86_64。
+- 2026-06-19：`npm test` 通过，36 个测试全部通过；新增真实现场形态覆盖：mention 名称命中但 mention open_id 不同于 bot info open_id 时仍路由到正确 Bot，且有 mention 时不使用事件头 App ID 判定目标。
 - 2026-06-19：`npm run pack:mac` 通过，`v1.6.9` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.9`，主程序架构分别为 arm64 与 x86_64。
-- 2026-06-19：`npm test` 通过，34 个测试全部通过；新增飞书 Bot open_id 身份确认、独立 named profile 和多 Bot 群聊 open_id 精确路由覆盖。
+- 2026-06-19：`npm test` 通过，34 个测试全部通过；新增飞书 Bot open_id 身份确认、独立 named profile 和多 Bot 群聊 mention 目标路由覆盖。
 - 2026-06-19：`npm test` 通过，32 个测试全部通过；新增相同飞书 App ID 并发启动拦截，避免同一飞书机器人事件被多个本地 Bot 同时处理。
 - 2026-06-19：`npm run pack:mac` 通过，`v1.6.8` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.8`，主程序架构分别为 arm64 与 x86_64。
 - 2026-06-19：`npm test` 通过，31 个测试全部通过；新增多机器人群聊艾特事件来源 App ID 路由、Bot ID 去重和运行台诊断日志复制能力。

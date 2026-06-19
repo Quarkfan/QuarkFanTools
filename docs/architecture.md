@@ -21,11 +21,11 @@ flowchart LR
 
 ## 2. 消息处理流程
 
-每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 `LarkEventStream`。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话通过全局 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。启动监听前会调用 `/open-apis/bot/v3/info` 获取当前飞书机器人的 `open_id` 和应用名，所有 lark-cli 调用使用每个 Bot 的独立 named profile。群聊消息会在入队前做目标 Bot 判定：优先用 `mentions.id.open_id` 匹配当前 Bot 的真实 `open_id`，没有 bot 身份或 open_id mention 时再回退到事件来源和 mention 其他字段。未命中的消息只记录带判定原因的忽略日志，不添加处理中表情、不占用队列，也不写入该 Bot 的去重集合。多 Bot 同时运行时，群聊消息缺少可判定 mention 元数据会被忽略，以避免多个机器人同时回复；私聊或单 Bot 旧版事件继续按原路径处理。
+每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 `LarkEventStream`。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话通过全局 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。启动监听前会调用 `/open-apis/bot/v3/info` 获取当前飞书机器人的 `open_id` 和应用名，所有 lark-cli 调用使用每个 Bot 的独立 named profile。群聊消息会在入队前做目标 Bot 判定：有 `mentions` 元数据时，只用 mention 目标值匹配当前 Bot 的配置 App ID、Bot 名、bot info 应用名和可用 open_id；`mentions.id.open_id` 只作为命中的正向信号，不作为排他条件，因为飞书群聊 mention 事件里的 open_id 可能不是 `/open-apis/bot/v3/info` 返回的 Bot open_id。事件头 `sourceAppId` 表示当前监听连接所属应用，有 mention 时不参与目标路由；仅在缺少 mention 元数据的旧事件中作为兜底。未命中的消息只记录带判定原因的忽略日志，不添加处理中表情、不占用队列，也不写入该 Bot 的去重集合。多 Bot 同时运行时，群聊消息缺少可判定 mention 元数据会被忽略，以避免多个机器人同时回复；私聊或单 Bot 旧版事件继续按原路径处理。
 
 同一飞书 App ID 同一时间只能启动一个本地 Bot。飞书事件属于开放平台应用而不是 QuarkfanTools 内部 Bot 配置；如果两个本地 Bot 复用同一个 App ID，它们会收到同一条机器人事件，应用层无法可靠判断用户想调用哪个本地角色。因此多 Bot 隔离要求每个运行中的 Bot 使用不同飞书应用；同一飞书应用内的多角色能力应由 Skill、命令或套件在单个 Bot 内路由。
 
-飞书事件 WebSocket 连接地址由 `lark-cli` 依赖的 `github.com/larksuite/oapi-sdk-go/v3/ws` 向飞书服务端获取，SDK 再按服务端返回的 endpoint URL 建连。日志 URL 中的 `aid`、`service_id` 等 query 参数属于飞书事件网关连接层，不等同于开放平台 `cli_...` App ID，也不参与 QuarkfanTools 的 Bot 路由。QuarkfanTools 的身份治理只使用两类稳定信息：配置时的 App ID/profile 隔离，以及启动时通过 bot info 取得的 Bot `open_id`。
+飞书事件 WebSocket 连接地址由 `lark-cli` 依赖的 `github.com/larksuite/oapi-sdk-go/v3/ws` 向飞书服务端获取，SDK 再按服务端返回的 endpoint URL 建连。日志 URL 中的 `aid`、`service_id` 等 query 参数属于飞书事件网关连接层，不等同于开放平台 `cli_...` App ID，也不参与 QuarkfanTools 的 Bot 路由。QuarkfanTools 的身份治理使用配置时的 App ID/profile 隔离、启动时通过 bot info 取得的 Bot `open_id` 和应用名，以及事件 mention 中的展示名、应用 ID 和 open_id 等目标值；其中 mention open_id 只能做正向匹配，不能用来否定同名或同应用名命中的 Bot。
 
 ```mermaid
 sequenceDiagram
@@ -37,7 +37,7 @@ sequenceDiagram
 
     F->>L: message event
     L->>R: NDJSON event
-    R->>R: filter target bot by mention open_id, dedupe and measure delivery delay
+    R->>R: filter target bot by mention target, dedupe and measure delivery delay
     R->>L: add OnIt reaction
     R->>W: prepare authorized skills and attachments
     R->>C: prompt, tools, multimodal input, resume session

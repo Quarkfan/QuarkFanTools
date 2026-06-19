@@ -6,11 +6,16 @@
 
 ## Unreleased
 
+## v1.6.10 - 2026-06-19
+
+- 修正多飞书 Bot 群聊路由策略：现场事件确认 `mentions.id.open_id` 可能不同于 bot info 的 `open_id`，现在有 mention 时按 mention 名称、App ID、应用名和 open_id 等目标值匹配。
+- 有 `mentions` 的群聊消息不再用事件头 `sourceAppId` 判定目标 Bot；`sourceAppId` 只在缺少 mention 元数据的旧事件中兜底，避免正确机器人被误忽略。
+
 ## v1.6.9 - 2026-06-19
 
 - 每个 Bot 启动时调用飞书 bot info 获取实际 `open_id` 和应用名，并在运行台记录脱敏 App ID、应用名和 open_id。
 - 所有 lark-cli 调用强制使用每个 Bot 的独立 named profile，避免默认 profile 干扰多 Bot 监听。
-- 多 Bot 群聊消息优先按 `mentions.id.open_id` 精确路由；缺少可判定 mention 元数据时记录诊断并忽略，避免多个机器人同时回复。
+- 多 Bot 群聊消息按 mention 目标路由；缺少可判定 mention 元数据时记录诊断并忽略，避免多个机器人同时回复。
 
 ## v1.6.8 - 2026-06-19
 

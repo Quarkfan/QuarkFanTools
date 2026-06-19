@@ -129,7 +129,7 @@ test("normalizes a Feishu message event", () => {
   assert.equal(message?.createdAt, "1781330000000");
 });
 
-test("routes by event source app id before mention display names", () => {
+test("routes by mention target before event source app id", () => {
   const message = normalizeLarkEvent({
     header: { event_type: "im.message.receive_v1", app_id: "cli_test" },
     event: {
@@ -146,8 +146,8 @@ test("routes by event source app id before mention display names", () => {
   const anotherBot: BotConfig = { ...bot, id: "finance", name: "财务助手", appId: "cli_finance" };
 
   assert.ok(message);
-  assert.equal(messageTargetsBot(bot, message), true);
-  assert.equal(messageTargetsBot(anotherBot, message), false);
+  assert.equal(messageTargetsBot(bot, message), false);
+  assert.equal(messageTargetsBot(anotherBot, message, { openId: "ou_finance", appName: "飞书里的展示名" }, true), true);
 });
 
 test("routes mentioned group messages by resolved bot open id", () => {
@@ -170,6 +170,32 @@ test("routes mentioned group messages by resolved bot open id", () => {
   assert.equal(messageTargetsBot(bot, message, { openId: "ou_other_bot", appName: "其他机器人" }, true), false);
 });
 
+test("routes mentioned group messages by bot name when mention open id differs from bot info", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1", app_id: "cli_work_assistant" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_observed_mention",
+        chat_id: "oc_1",
+        chat_type: "group",
+        mentions: [{
+          key: "@_user_1",
+          id: { open_id: "ou_mention_subject", union_id: "on_mention_subject" },
+          name: "牛马的人生导师"
+        }],
+        content: JSON.stringify({ text: "你好" })
+      }
+    }
+  });
+  const mentorBot: BotConfig = { ...bot, name: "人生导师", appId: "cli_mentor" };
+  const workBot: BotConfig = { ...bot, id: "work", name: "工作助手", appId: "cli_work_assistant" };
+
+  assert.ok(message);
+  assert.equal(messageTargetsBot(mentorBot, message, { openId: "ou_bot_info_mentor", appName: "牛马的人生导师" }, true), true);
+  assert.equal(messageTargetsBot(workBot, message, { openId: "ou_bot_info_work", appName: "牛马的工作助手" }, true), false);
+});
+
 test("does not route ambiguous group messages in strict multi-bot mode", () => {
   const message = normalizeLarkEvent({
     header: { event_type: "im.message.receive_v1" },
@@ -187,6 +213,26 @@ test("does not route ambiguous group messages in strict multi-bot mode", () => {
   assert.ok(message);
   assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, true), false);
   assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, false), true);
+});
+
+test("routes legacy messages by event source app id when mention metadata is absent", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1", app_id: "cli_test" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_source_app_legacy",
+        chat_id: "oc_1",
+        chat_type: "group",
+        content: JSON.stringify({ text: "@_user_1 查一下订单状态" })
+      }
+    }
+  });
+  const anotherBot: BotConfig = { ...bot, id: "finance", name: "财务助手", appId: "cli_finance" };
+
+  assert.ok(message);
+  assert.equal(messageTargetsBot(bot, message, undefined, true), true);
+  assert.equal(messageTargetsBot(anotherBot, message, undefined, true), false);
 });
 
 test("routes mentioned group messages only to the matching bot", () => {

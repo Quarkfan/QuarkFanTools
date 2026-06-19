@@ -35,13 +35,23 @@ export function messageTargetDecision(bot: BotConfig, message: LarkMessage, iden
     .map((value) => normalize(value));
   const values = mentions.flatMap(mentionValues);
   const matcherSet = new Set(botMatchers);
-  if (identity?.openId && mentions.length > 0) {
-    const botOpenId = normalize(identity.openId);
-    const matched = mentions.some((mention) => normalize(mention.id?.openId) === botOpenId);
+  if (mentions.length > 0) {
+    const matched = mentions.some((mention) => mentionValues(mention).some((value) => matcherSet.has(normalize(value))));
+    const matchedByOpenId = Boolean(identity?.openId && mentions.some((mention) => normalize(mention.id?.openId) === normalize(identity.openId)));
+    if (matched) {
+      return {
+        targeted: true,
+        reason: matchedByOpenId ? "bot-open-id-mention-match" : "mention-match",
+        botOpenId: identity?.openId,
+        sourceAppId: message.sourceAppId,
+        mentionValues: values,
+        botMatchers
+      };
+    }
     return {
-      targeted: matched,
-      reason: matched ? "bot-open-id-mention-match" : "bot-open-id-mention-mismatch",
-      botOpenId: identity.openId,
+      targeted: false,
+      reason: matchedByOpenId ? "bot-open-id-mention-mismatch" : "mention-mismatch",
+      botOpenId: identity?.openId,
       sourceAppId: message.sourceAppId,
       mentionValues: values,
       botMatchers
@@ -53,26 +63,16 @@ export function messageTargetDecision(bot: BotConfig, message: LarkMessage, iden
       targeted: sourceAppId === normalize(bot.appId),
       reason: sourceAppId === normalize(bot.appId) ? "source-app-id-match" : "source-app-id-mismatch",
       sourceAppId: message.sourceAppId,
-      mentionValues: mentions.flatMap(mentionValues),
+      mentionValues: values,
       botMatchers
     };
   }
-  if (mentions.length === 0) {
-    const targeted = !(strictGroupTargeting && message.chatType === "group");
-    return {
-      targeted,
-      reason: targeted ? "no-mention-metadata" : "missing-group-mention-metadata",
-      botOpenId: identity?.openId,
-      mentionValues: [],
-      botMatchers
-    };
-  }
-  for (const mention of mentions) {
-    for (const value of mentionValues(mention)) {
-      if (matcherSet.has(normalize(value))) {
-        return { targeted: true, reason: "mention-match", mentionValues: values, botMatchers };
-      }
-    }
-  }
-  return { targeted: false, reason: "mention-mismatch", mentionValues: values, botMatchers };
+  const targeted = !(strictGroupTargeting && message.chatType === "group");
+  return {
+    targeted,
+    reason: targeted ? "no-mention-metadata" : "missing-group-mention-metadata",
+    botOpenId: identity?.openId,
+    mentionValues: [],
+    botMatchers
+  };
 }
