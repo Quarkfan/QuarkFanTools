@@ -81,6 +81,7 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 ### 多 Bot 群聊艾特路由异常
 
 - 配置里的 `cli_...` 是飞书开放平台应用 App ID，用于初始化对应 Bot 的 lark-cli profile。
+- Bot 启动前会规范化自己的隔离 `lark-cli/config.json`，只保留当前 App ID 对应的 `qft-...` 命名 profile。旧版单 Bot 迁移残留的未命名 app 会被合并，避免多 Bot 同时监听时 profile 解析出现歧义。
 - 运行时会记录 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 和应用名。群聊消息有 `message.mentions` 时，应用会先用 mention 目标里的名称、App ID、应用名和 open_id 等值匹配当前 Bot；`mentions[].id.open_id` 只作为命中信号，不作为排他条件，因为现场事件中它可能不同于 bot info 的 `bot.open_id`。
 - 事件头里的 App ID 表示当前监听连接所属应用，不一定是消息中被 @ 的目标。有 `mentions` 时不要用 `sourceAppId` 判定目标 Bot；它只用于缺少 mention 元数据的旧事件兜底。
 - lark-cli WebSocket 日志里可能出现 `aid=552564` 之类参数。该值来自飞书服务端返回的 WebSocket endpoint URL，是飞书事件网关或 SDK 连接层参数，不是配置的 App ID，也不能用于判断两个机器人是否接入了同一个飞书应用。

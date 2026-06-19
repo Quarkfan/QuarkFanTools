@@ -3,6 +3,7 @@ import test from "node:test";
 import { normalizeLarkEvent } from "../lark-event.js";
 import { messageTargetsBot } from "../message-target.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "../lark-commands.js";
+import { normalizeLarkConfigProfilesContent } from "../lark-config-profiles.js";
 import type { BotConfig } from "../types.js";
 
 const bot: BotConfig = {
@@ -63,6 +64,34 @@ test("user login merges custom OAuth scopes", () => {
     "search:docs:read,drive:export:readonly,docs:document:export",
     "--no-wait",
     "--json"
+  ]);
+});
+
+test("normalizes legacy duplicate lark-cli app profiles", () => {
+  const normalized = normalizeLarkConfigProfilesContent(JSON.stringify({
+    apps: [
+      {
+        appId: "cli_other",
+        name: "qft-other"
+      },
+      {
+        appId: "cli_test",
+        appSecret: { source: "keychain", id: "appsecret:cli_test" },
+        users: [{ userOpenId: "ou_1", userName: "User" }]
+      },
+      {
+        appId: "cli_test",
+        name: "qft-mentor",
+        appSecret: { source: "keychain", id: "appsecret:cli_test" },
+        users: [{ userOpenId: "ou_1", userName: "User" }]
+      }
+    ]
+  }), bot);
+  assert.ok(normalized);
+  const parsed = JSON.parse(normalized);
+  assert.deepEqual(parsed.apps.map((item: { appId: string; name?: string }) => [item.appId, item.name]), [
+    ["cli_other", "qft-other"],
+    ["cli_test", "qft-mentor"]
   ]);
 });
 

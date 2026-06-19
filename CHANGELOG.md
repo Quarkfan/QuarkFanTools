@@ -6,6 +6,11 @@
 
 ## Unreleased
 
+## v1.6.12 - 2026-06-20
+
+- 修复旧版单 Bot 配置迁移后，某个 Bot 的隔离 lark-cli 配置中可能同时保留未命名 app 和 `qft-...` 命名 profile 的问题。
+- Bot 启动前会规范化自身 lark-cli profile，只保留当前 App ID 对应的命名 profile，降低多 Bot 同时监听时 profile 解析和事件投递状态互相干扰的风险。
+
 ## v1.6.11 - 2026-06-20
 
 - 用户态 OAuth 完成日志改为摘要，避免运行台复制日志包含大段 scope 列表。

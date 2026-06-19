@@ -8,6 +8,7 @@ import { projectRoot, stateRoot } from "./paths.js";
 import type { BotConfig, LarkBotIdentity, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "./lark-commands.js";
+import { normalizeLarkConfigProfilesContent } from "./lark-config-profiles.js";
 import { effectiveBotProfile } from "./bot-identity.js";
 
 const preparedCredentials = new Map<string, string>();
@@ -60,6 +61,7 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   if (preparedCredentials.get(bot.id) === marker) return;
   if ((await readFile(markerPath, "utf8").catch(() => "")) === marker) {
     try {
+      await normalizeLarkConfigProfiles(bot);
       await runLarkCaptureRaw(bot, ["config", "show"]);
       await prepareSandboxKeychain(bot);
       preparedCredentials.set(bot.id, marker);
@@ -82,6 +84,7 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
     child.stdin?.end(`${bot.appSecret}\n`);
   });
   await writeFile(markerPath, marker, { encoding: "utf8", mode: 0o600 });
+  await normalizeLarkConfigProfiles(bot);
   await prepareSandboxKeychain(bot);
   preparedCredentials.set(bot.id, marker);
 }
@@ -89,6 +92,14 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
 async function prepareSandboxKeychain(bot: BotConfig): Promise<void> {
   if (process.platform !== "darwin") return;
   await runLarkCaptureRaw(bot, ["config", "keychain-downgrade"]);
+}
+
+async function normalizeLarkConfigProfiles(bot: BotConfig): Promise<void> {
+  const configPath = path.join(botStateRoot(bot), "lark-cli", "config.json");
+  const raw = await readFile(configPath, "utf8").catch(() => "");
+  const normalized = normalizeLarkConfigProfilesContent(raw, bot);
+  if (normalized === null || normalized === raw) return;
+  await writeFile(configPath, normalized, { encoding: "utf8", mode: 0o600 });
 }
 
 function profileArgs(bot: BotConfig): string[] {

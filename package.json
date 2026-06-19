@@ -1,6 +1,6 @@
 {
   "name": "quarkfantools",
-  "version": "1.6.11",
+  "version": "1.6.12",
   "private": true,
   "description": "Local macOS Feishu skill agent powered by Claude Agent SDK",
   "main": "dist-electron/main.js",

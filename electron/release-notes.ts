@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.12",
+    date: "2026-06-20",
+    highlights: [
+      "修复旧版单 Bot 配置迁移后，隔离 lark-cli 配置可能残留未命名 app 的问题。",
+      "Bot 启动前会清理重复 profile，只保留当前 App ID 对应的命名 profile。",
+      "降低多飞书 Bot 同时监听时 profile 解析和事件投递状态互相干扰的风险。"
+    ]
+  },
+  {
     version: "1.6.11",
     date: "2026-06-20",
     highlights: [
