@@ -2,6 +2,14 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.8",
+    date: "2026-06-19",
+    highlights: [
+      "禁止同时启动两个 App ID 相同的本地 Bot，避免同一个飞书机器人事件被多个本地角色同时处理。",
+      "复制诊断日志会显示脱敏 App ID，方便确认多个本地 Bot 是否误接入同一个飞书应用。"
+    ]
+  },
+  {
     version: "1.6.7",
     date: "2026-06-19",
     highlights: [

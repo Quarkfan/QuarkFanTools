@@ -16,6 +16,7 @@ import { TaskLimiter } from "./task-limiter.js";
 import { addDeferredTask, continueTaskId, getDeferredTask, parseDeferredTask, updateDeferredTask, type DeferredTask } from "./deferred-tasks.js";
 import { cacheMessageResources } from "./file-cache.js";
 import { messageTargetDecision } from "./message-target.js";
+import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
 import type { AppConfig, BotConfig, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
@@ -66,6 +67,12 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (!bot) throw new Error("机器人不存在");
     if (!bot.enabled) throw new Error("机器人已停用，请先在配置中启用");
     if (!bot.appId || !bot.appSecret) throw new Error("机器人 App ID 或 App Secret 未配置");
+    const conflictingBot = runningBotWithSameAppId(bot, this.config.bots, this.runningBotIds);
+    if (conflictingBot) {
+      const message = `飞书 App ID ${maskAppId(bot.appId)} 已被“${conflictingBot.name}”监听。一个飞书应用同一时间只能对应一个本地 Bot；同一机器人下的不同角色请用 Skill、命令或套件路由。`;
+      await this.logger.write("error", "机器人启动失败", message, bot.id);
+      throw new Error(message);
+    }
     if (!this.config.model.baseUrl || !this.config.model.model || !this.config.model.apiKey) {
       throw new Error("Claude 兼容模型连接未完整配置");
     }

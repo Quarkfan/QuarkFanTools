@@ -9,6 +9,7 @@ import { importSkillFolder, removeLocalSkill, skillPreview } from "./skills.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
+import { maskAppId } from "./bot-identity.js";
 import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
@@ -205,6 +206,7 @@ async function diagnosticLogText(): Promise<string> {
       bots: snapshot.config.bots.map((bot) => ({
         id: bot.id,
         name: bot.name,
+        appId: maskAppId(bot.appId),
         enabled: bot.enabled,
         receiveIdentity: bot.receiveIdentity,
         replyIdentity: bot.replyIdentity,

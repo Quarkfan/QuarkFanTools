@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { runningBotWithSameAppId } from "../bot-identity.js";
 import { mergeConfig } from "../config-merge.js";
-import type { AppConfig } from "../types.js";
+import type { AppConfig, BotConfig } from "../types.js";
 
 const base: AppConfig = {
   bots: [],
@@ -177,4 +178,26 @@ test("adds a bounded max agent turns runtime config", () => {
   assert.equal(mergeConfig(base, {}).runtime.maxAgentTurns, 60);
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, maxAgentTurns: 500 } }).runtime.maxAgentTurns, 100);
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, maxAgentTurns: 1 } }).runtime.maxAgentTurns, 10);
+});
+
+test("detects running bots that share the same Feishu app id", () => {
+  const first: BotConfig = {
+    id: "bot-1",
+    name: "Bot 1",
+    enabled: true,
+    cliPath: "",
+    profile: "",
+    appId: "cli_same",
+    appSecret: "secret",
+    receiveIdentity: "bot",
+    replyIdentity: "bot",
+    eventTypes: ["im.message.receive_v1"],
+    skillNames: [],
+    pendingReaction: "OnIt",
+    ownerOpenId: ""
+  };
+  const second: BotConfig = { ...first, id: "bot-2", name: "Bot 2", appId: " CLI_SAME " };
+
+  assert.equal(runningBotWithSameAppId(second, [first, second], ["bot-1"]), first);
+  assert.equal(runningBotWithSameAppId(second, [first, second], []), null);
 });
