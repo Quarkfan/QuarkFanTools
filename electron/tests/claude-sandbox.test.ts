@@ -22,6 +22,10 @@ const bot: BotConfig = {
 
 const config: AppConfig = {
   bots: [bot, { ...bot, id: "other", name: "另一个机器人" }],
+  mcpServers: [],
+  ui: {
+    theme: "system"
+  },
   skillMarket: { enabled: false, repositoryUrl: "", branch: "main", token: "" },
   model: {
     providerId: "anthropic",

@@ -2,6 +2,26 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "2.0.0",
+    date: "2026-06-19",
+    highlights: [
+      "新增 Bot 能力治理底座：Skill、套件、Workflow、自定义应用、MCP、命令和定时任务都进入同一授权边界。",
+      "新增 Bot 级 /xxx 命令映射，可路由到已授权 Skill、套件、Workflow 或自定义应用，并支持 Prompt 模板。",
+      "新增 Bot 级定时任务，支持 interval、daily、weekly，目标可选 Agent、命令或能力，并提供运行历史和手动立即运行。",
+      "新增套件和 Workflow 能力，支持导入、预览、Bot 挂载、命令调用和定时调用。",
+      "新增 MCP stdio 配置、Bot 授权、严格注入和诊断刷新，可预览工具列表并展示失败详情。",
+      "新增多 IM Provider 底座，开始支持企业微信 CLI，并把消息平台、飞书知识连接器和结果投递路由分开配置。",
+      "打包链路携带官方 @wecom/cli macOS universal runtime，企业微信 Provider 不再只停留在开发环境依赖。",
+      "打包链路会从本地 logo 生成 macOS app icon，安装包不再使用 Electron 默认图标。",
+      "Skill、自定义应用和套件卡片支持打开资源所在目录，方便复制和检查文件。",
+      "Bot 可配置长任务自动提示，处理超时仍未完成时会先回复一次自定义文案。",
+      "存储管理的会话详情改为结构化消息明细，可查看接收消息、Agent 工作过程、长任务提示和最终回复。",
+      "新增受控飞书文件缓存协议，云盘下载和云文档导出会优先复用应用级缓存。",
+      "存储管理新增文件缓存索引视图，可按 Bot 和来源类型查看缓存来源。",
+      "新增应用级主题切换，支持跟随系统、浅色和深色。"
+    ]
+  },
+  {
     version: "1.6.6",
     date: "2026-06-16",
     highlights: [

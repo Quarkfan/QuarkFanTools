@@ -1,6 +1,6 @@
 {
   "name": "quarkfantools",
-  "version": "1.6.6",
+  "version": "2.0.0",
   "private": true,
   "description": "Local macOS Feishu skill agent powered by Claude Agent SDK",
   "main": "dist-electron/main.js",
@@ -8,6 +8,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.177",
     "@larksuite/cli": "1.0.53",
+    "@wecom/cli": "0.1.9",
     "fast-xml-parser": "^5.8.0",
     "isomorphic-git": "^1.38.4",
     "unzipper": "^0.12.3"
@@ -27,7 +28,7 @@
     "build": "rm -rf dist dist-electron && tsc -p tsconfig.electron.json && cp electron/preload.cjs dist-electron/preload.cjs && vite build",
     "start": "npm run build && electron .",
     "test": "npm run build && node --test dist-electron/tests/*.test.js",
-    "pack:prepare": "bash scripts/prepare-universal-lark-cli.sh && bash scripts/prepare-universal-claude.sh",
+    "pack:prepare": "bash scripts/prepare-app-icon.sh && bash scripts/prepare-universal-lark-cli.sh && bash scripts/prepare-universal-wecom-cli.sh && bash scripts/prepare-universal-claude.sh",
     "pack:mac": "npm run pack:mac:arm64 && npm run pack:mac:x64",
     "pack:mac:arm64": "npm run build && npm run pack:prepare && electron-builder --mac --arm64 --config.directories.output=release/arm64",
     "pack:mac:x64": "npm run build && npm run pack:prepare && electron-builder --mac --x64 --config.directories.output=release/x64"
@@ -41,6 +42,8 @@
       "dist-electron/**/*",
       "package.json",
       "!node_modules/@larksuite/cli/**",
+      "!node_modules/@wecom/cli/**",
+      "!node_modules/@wecom/cli-darwin-*/**",
       "!node_modules/@anthropic-ai/claude-agent-sdk-darwin-*/**"
     ],
     "extraResources": [
@@ -53,6 +56,10 @@
         "to": "runtime/lark-cli"
       },
       {
+        "from": "runtime/wecom-cli",
+        "to": "runtime/wecom-cli"
+      },
+      {
         "from": "runtime/claude/${arch}",
         "to": "runtime/claude/${arch}"
       },
@@ -63,6 +70,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
         "dmg",

@@ -1,4 +1,4 @@
-import { app, shell } from "electron";
+import electron from "electron";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import path from "node:path";
@@ -8,6 +8,10 @@ import { projectRoot, stateRoot } from "./paths.js";
 import type { BotConfig, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "./lark-commands.js";
+import { cacheDownloadedLarkFile, cacheDownloadedMessageResource, materializeCachedLarkFile, materializeCachedMessageResource, type LarkFileCacheRequest } from "./file-cache.js";
+import type { LarkCachedFileRequest } from "./lark-cached-file-protocol.js";
+
+const { app, shell } = electron;
 
 const preparedCredentials = new Map<string, string>();
 
@@ -282,6 +286,24 @@ export async function sendCardToUser(bot: BotConfig, userOpenId: string, card: u
   ]);
 }
 
+export async function sendTextToChat(bot: BotConfig, chatId: string, text: string, replyIdentity?: "bot" | "user"): Promise<void> {
+  await prepareLarkConfig(bot);
+  await runLarkCapture(bot, [
+    "im",
+    "+messages-send",
+    "--as",
+    replyIdentity ?? bot.replyIdentity,
+    "--chat-id",
+    chatId,
+    "--msg-type",
+    text.length > 100 ? "markdown" : "text",
+    "--content",
+    text,
+    "--format",
+    "json"
+  ]);
+}
+
 export async function addMessageReaction(bot: BotConfig, messageId: string, emojiType: string): Promise<string> {
   await prepareLarkConfig(bot);
   const output = await runLarkCapture(bot, [
@@ -323,6 +345,11 @@ export async function downloadMessageResources(bot: BotConfig, message: LarkMess
   await mkdir(outputDir, { recursive: true });
   const resources: LarkMessageResource[] = [];
   for (const resource of message.resources) {
+    const cached = await materializeCachedMessageResource(bot, resource, outputDir);
+    if (cached) {
+      resources.push(cached);
+      continue;
+    }
     await runLarkCapture(bot, [
       "im",
       "+messages-resources-download",
@@ -341,9 +368,72 @@ export async function downloadMessageResources(bot: BotConfig, message: LarkMess
     ], outputDir);
     const fileName = (await readdir(outputDir)).find((entry) => entry === resource.key || entry.startsWith(`${resource.key}.`));
     if (!fileName) throw new Error(`飞书资源下载完成，但未找到文件: ${resource.key}`);
-    resources.push({ ...resource, localPath: path.join(outputDir, fileName) });
+    const downloaded = { ...resource, localPath: path.join(outputDir, fileName) };
+    await cacheDownloadedMessageResource(bot, downloaded);
+    resources.push(downloaded);
   }
   return { ...message, resources };
+}
+
+export async function materializeLarkCachedFile(bot: BotConfig, request: LarkCachedFileRequest, outputDir: string): Promise<{ localPath: string; cacheHit: boolean }> {
+  await mkdir(outputDir, { recursive: true });
+  const cacheRequest = larkFileCacheRequest(request);
+  const cached = await materializeCachedLarkFile(bot, cacheRequest, outputDir);
+  if (cached) return { localPath: cached, cacheHit: true };
+
+  const outputName = cacheRequest.outputName || defaultLarkOutputName(request);
+  if (request.action === "drive-export") {
+    await runLarkCapture(bot, [
+      "drive",
+      "+export",
+      "--as",
+      "user",
+      "--file-token",
+      request.fileToken,
+      "--doc-type",
+      request.docType!,
+      "--file-extension",
+      request.fileExtension!,
+      "--output",
+      outputName,
+      "--format",
+      "json"
+    ], outputDir);
+  } else {
+    await runLarkCapture(bot, [
+      "drive",
+      "+download",
+      "--as",
+      "user",
+      "--file-token",
+      request.fileToken,
+      "--output",
+      outputName,
+      "--format",
+      "json"
+    ], outputDir);
+  }
+  const localPath = path.join(outputDir, outputName);
+  await access(localPath);
+  await cacheDownloadedLarkFile(bot, { ...cacheRequest, outputName }, localPath);
+  return { localPath, cacheHit: false };
+}
+
+function larkFileCacheRequest(request: LarkCachedFileRequest): LarkFileCacheRequest {
+  return {
+    type: request.action === "drive-export" ? "lark-drive-export" : "lark-drive-file",
+    fileToken: request.fileToken,
+    docType: request.docType,
+    fileExtension: request.fileExtension,
+    freshnessKey: request.freshnessKey,
+    outputName: request.fileName || defaultLarkOutputName(request)
+  };
+}
+
+function defaultLarkOutputName(request: LarkCachedFileRequest): string {
+  if (request.fileName) return request.fileName;
+  if (request.action === "drive-export") return `${request.fileToken}.${request.fileExtension || "bin"}`;
+  return request.fileToken;
 }
 
 async function runLarkCapture(bot: BotConfig, args: string[], cwd = projectRoot()): Promise<string> {

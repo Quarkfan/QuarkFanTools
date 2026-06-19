@@ -70,6 +70,7 @@ export function normalizeLarkEvent(payload: any): LarkMessage | null {
     resources: [...resources.values()],
     createdAt: payload?.header?.create_time ? String(payload.header.create_time) : undefined,
     receivedAt: new Date().toISOString(),
+    provider: "lark",
     raw: payload
   };
 }

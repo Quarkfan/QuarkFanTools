@@ -1,5 +1,9 @@
 {
   "bots": [],
+  "mcpServers": [],
+  "ui": {
+    "theme": "system"
+  },
   "skillMarket": {
     "enabled": false,
     "repositoryUrl": "",

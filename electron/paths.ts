@@ -1,46 +1,73 @@
-import { app } from "electron";
+import electron from "electron";
 import { existsSync } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
 
+const { app } = electron;
+
+function isPackaged(): boolean {
+  return Boolean(app?.isPackaged);
+}
+
+function appPath(name: Parameters<NonNullable<typeof app>["getPath"]>[0]): string {
+  return app?.getPath(name) ?? process.cwd();
+}
+
 export function projectRoot(): string {
-  if (!app.isPackaged) {
+  if (!isPackaged()) {
     return process.cwd();
   }
   return process.resourcesPath;
 }
 
 export function skillsRoot(): string {
-  return app.isPackaged
-    ? path.join(app.getPath("userData"), "workspace", "skills")
+  return isPackaged()
+    ? path.join(appPath("userData"), "workspace", "skills")
     : path.join(projectRoot(), "skills");
 }
 
 export function builtinSkillsRoot(): string {
-  return app.isPackaged
+  return isPackaged()
     ? path.join(process.resourcesPath, "builtin-skills")
     : path.join(projectRoot(), "builtin-skills");
 }
 
 export function marketSkillsRoot(): string {
-  return app.isPackaged
-    ? path.join(app.getPath("userData"), "workspace", "market-skills")
+  return isPackaged()
+    ? path.join(appPath("userData"), "workspace", "market-skills")
     : path.join(projectRoot(), "market-skills");
 }
 
+export function appsRoot(): string {
+  return isPackaged()
+    ? path.join(appPath("userData"), "workspace", "apps")
+    : path.join(projectRoot(), "apps");
+}
+
+export function suitesRoot(): string {
+  return isPackaged()
+    ? path.join(appPath("userData"), "workspace", "suites")
+    : path.join(projectRoot(), "suites");
+}
+
 export function stateRoot(): string {
-  const root = app.isPackaged
-    ? path.join(app.getPath("userData"), "state")
+  const root = isPackaged()
+    ? path.join(appPath("userData"), "state")
     : path.join(projectRoot(), "state");
   return root;
 }
 
+export function botStateRoot(botIdOrBot: string | { id: string }): string {
+  const botId = typeof botIdOrBot === "string" ? botIdOrBot : botIdOrBot.id;
+  return path.join(stateRoot(), "bots", botId);
+}
+
 export function workspaceRoot(): string {
-  return app.isPackaged ? path.join(app.getPath("userData"), "workspace") : projectRoot();
+  return isPackaged() ? path.join(appPath("userData"), "workspace") : projectRoot();
 }
 
 export function larkCliSupportRoot(): string {
-  return path.join(app.getPath("appData"), "lark-cli");
+  return path.join(appPath("appData"), "lark-cli");
 }
 
 export function defaultConfigPath(): string {
@@ -49,16 +76,16 @@ export function defaultConfigPath(): string {
 
 export function localConfigPath(): string {
   const devPath = path.join(projectRoot(), "config", "local.json");
-  if (!app.isPackaged || existsSync(devPath)) {
+  if (!isPackaged() || existsSync(devPath)) {
     return devPath;
   }
-  return path.join(app.getPath("userData"), "config", "local.json");
+  return path.join(appPath("userData"), "config", "local.json");
 }
 
 export async function migrateLegacyData(): Promise<void> {
-  if (!app.isPackaged) return;
-  const legacyRoot = path.join(app.getPath("appData"), "qah");
-  const targetRoot = app.getPath("userData");
+  if (!isPackaged()) return;
+  const legacyRoot = path.join(appPath("appData"), "qah");
+  const targetRoot = appPath("userData");
   for (const name of ["config", "workspace", "state"]) {
     const source = path.join(legacyRoot, name);
     const target = path.join(targetRoot, name);

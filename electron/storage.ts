@@ -2,7 +2,8 @@ import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
 import { stateRoot, workspaceRoot } from "./paths.js";
-import type { StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
+import { fileCacheEntries } from "./file-cache.js";
+import type { SessionTranscriptTurn, StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
 
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 
@@ -10,26 +11,21 @@ interface SessionRecord {
   sessionId: string;
   updatedAt: string;
   messageIds?: string[];
-  transcript?: Array<{
-    time: string;
-    messageId: string;
-    user: string;
-    assistant: string;
-  }>;
+  transcript?: SessionTranscriptTurn[];
 }
 
 export async function storageStats(): Promise<StorageStats> {
   const bots = await botIds();
   let sessionCount = 0;
   let expiredSessionCount = 0;
-  let totalBytes = 0;
+  let conversationBytes = 0;
   const sessionEntries: StorageSession[] = [];
   const cutoff = Date.now() - SESSION_IDLE_MS;
   for (const botId of bots) {
-    totalBytes += await directorySize(path.join(stateRoot(), "bots", botId, "messages"));
-    totalBytes += await directorySize(path.join(stateRoot(), "bots", botId, "claude-home"));
-    totalBytes += await fileSize(path.join(stateRoot(), "bots", botId, "sessions.json"));
-    totalBytes += await directorySize(path.join(workspaceRoot(), "bots", botId));
+    conversationBytes += await directorySize(path.join(stateRoot(), "bots", botId, "messages"));
+    conversationBytes += await directorySize(path.join(stateRoot(), "bots", botId, "claude-home"));
+    conversationBytes += await fileSize(path.join(stateRoot(), "bots", botId, "sessions.json"));
+    conversationBytes += await directorySize(path.join(workspaceRoot(), "bots", botId));
     for (const [key, record] of Object.entries(await readSessions(botId))) {
       sessionCount += 1;
       const expired = Date.parse(record.updatedAt) < cutoff;
@@ -44,12 +40,16 @@ export async function storageStats(): Promise<StorageStats> {
       });
     }
   }
+  const cacheBytes = await directorySize(path.join(stateRoot(), "file-cache"));
   return {
-    totalBytes,
+    totalBytes: conversationBytes + cacheBytes,
+    conversationBytes,
+    cacheBytes,
     sessionCount,
     expiredSessionCount,
     botCount: bots.length,
-    sessions: sessionEntries.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    sessions: sessionEntries.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)),
+    cacheEntries: await fileCacheEntries()
   };
 }
 
@@ -133,6 +133,10 @@ export async function clearAllSessionStorage(): Promise<void> {
       rm(path.join(workspaceRoot(), "bots", botId), { recursive: true, force: true })
     ]);
   }
+}
+
+export async function clearFileCacheStorage(): Promise<void> {
+  await rm(path.join(stateRoot(), "file-cache"), { recursive: true, force: true });
 }
 
 async function botIds(): Promise<string[]> {

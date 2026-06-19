@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stateRoot } from "./paths.js";
-import type { BotConfig } from "./types.js";
+import type { BotConfig, SessionTranscriptTurn } from "./types.js";
 
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 
@@ -9,12 +9,7 @@ interface SessionRecord {
   sessionId: string;
   updatedAt: string;
   messageIds?: string[];
-  transcript?: Array<{
-    time: string;
-    messageId: string;
-    user: string;
-    assistant: string;
-  }>;
+  transcript?: SessionTranscriptTurn[];
 }
 
 export class SessionStore {
@@ -37,7 +32,7 @@ export class SessionStore {
     return undefined;
   }
 
-  async set(bot: BotConfig, key: string, sessionId: string, messageId: string, turn?: { user: string; assistant: string }): Promise<void> {
+  async set(bot: BotConfig, key: string, sessionId: string, messageId: string, turn?: Omit<SessionTranscriptTurn, "time" | "messageId">): Promise<void> {
     const records = this.records.get(bot.id) ?? new Map<string, SessionRecord>();
     const previous = records.get(key);
     records.set(key, {
@@ -49,7 +44,8 @@ export class SessionStore {
             time: new Date().toISOString(),
             messageId,
             user: turn.user,
-            assistant: turn.assistant
+            assistant: turn.assistant,
+            events: turn.events?.slice(-80)
           }].slice(-50)
         : previous?.transcript
     });

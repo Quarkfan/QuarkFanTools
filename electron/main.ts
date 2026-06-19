@@ -1,13 +1,18 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import path from "node:path";
 import { QuarkfanToolsRuntime } from "./runtime.js";
 import { saveConfig } from "./config.js";
 import { migrateLegacyData } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
+import { mcpServerDiagnostics } from "./mcp-diagnostics.js";
 import { importSkillFolder, removeLocalSkill, skillPreview } from "./skills.js";
+import { customAppPreview, importCustomAppFolder } from "./apps.js";
+import { importSuiteFolder, suitePreview } from "./suites.js";
 import { syncSkillMarket } from "./skill-market.js";
-import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
+import { scheduledTaskRunHistory } from "./scheduled-tasks.js";
+import { clearAllSessionStorage, clearExpiredStorage, clearFileCacheStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
+import { resourceDirectory, type ResourceLocationKind } from "./resource-locations.js";
 import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
@@ -84,10 +89,20 @@ runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
 
 ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
+ipcMain.handle("scheduled:runs", () => scheduledTaskRunHistory(runtime.snapshot().config));
+ipcMain.handle("scheduled:run-now", async (_event, botId: string, taskId: string) => runtime.triggerScheduledTaskNow(botId, taskId));
+ipcMain.handle("mcp:diagnostics", (_event, probeProtocol?: boolean) => mcpServerDiagnostics(runtime.snapshot().config, { probeProtocol: Boolean(probeProtocol) }));
 ipcMain.handle("app:info", () => appInfo(app.getVersion()));
 ipcMain.handle("storage:stats", () => storageStats());
 ipcMain.handle("storage:session-detail", (_event, id: string) => storageSessionDetail(id));
 ipcMain.handle("skills:preview", (_event, name: string) => skillPreview(name));
+ipcMain.handle("apps:preview", (_event, id: string) => customAppPreview(id));
+ipcMain.handle("suites:preview", (_event, id: string) => suitePreview(id));
+ipcMain.handle("resource:show-in-folder", async (_event, kind: ResourceLocationKind, id: string) => {
+  const directory = await resourceDirectory({ kind, id });
+  const error = await shell.openPath(directory);
+  if (error) throw new Error(error);
+});
 ipcMain.handle("storage:clear-expired", async () => {
   await runtime.stop();
   const removed = await clearExpiredStorage();
@@ -107,6 +122,13 @@ ipcMain.handle("storage:clear-all", async () => {
   await clearAllSessionStorage();
   await runtime.initialize(false);
   await runtime.logger.write("success", "已清理全部会话存储", "机器人配置、飞书授权和用户 Skills 已保留");
+  return storageStats();
+});
+ipcMain.handle("storage:clear-cache", async () => {
+  await runtime.stop();
+  await clearFileCacheStorage();
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "已清理文件缓存", "会话上下文、机器人配置、飞书授权和用户 Skills 已保留");
   return storageStats();
 });
 ipcMain.handle("runtime:start-bot", async (_event, botId: string) => {
@@ -132,6 +154,28 @@ ipcMain.handle("skills:import", async () => {
   const imported = await importSkillFolder(result.filePaths[0]);
   await runtime.initialize(false);
   await runtime.logger.write("success", "Skill 已复制到本地技能市场", imported);
+  return runtime.snapshot();
+});
+ipcMain.handle("apps:import", async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: "选择包含 app.json 的自定义应用文件夹",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
+  const imported = await importCustomAppFolder(result.filePaths[0]);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "自定义应用已导入", imported);
+  return runtime.snapshot();
+});
+ipcMain.handle("suites:import", async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: "选择包含 suite.json 的套件文件夹",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
+  const imported = await importSuiteFolder(result.filePaths[0]);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "套件已导入", imported);
   return runtime.snapshot();
 });
 ipcMain.handle("skills:market-sync", async () => {

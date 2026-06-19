@@ -6,6 +6,43 @@
 
 ## Unreleased
 
+- 暂无。
+
+## v2.0.0 - 2026-06-19
+
+- 新增 Bot 级 `/xxx` 命令映射，可将命令路由到已授权 Skill、已授权套件、套件派生 Workflow 或已授权自定义应用，并支持 `{{args}}` Prompt 模板。
+- 新增套件能力：支持导入包含 `suite.json` 的目录、在能力页预览、在 Bot 编辑弹窗中挂载授权，并可作为命令目标注入套件上下文执行。
+- 新增 Bot 级定时任务：支持 `interval/daily/weekly` 计划、`agent/command/capability` 目标、本机调度与运行记录，并可把结果投递到指定 `chat_id`。
+- 定时任务的 `capability` 目标现已支持已授权套件；Skill/Suite/App 的 capability 执行链已统一，并补齐 `allowScheduledUse` 治理校验。
+- Runtime Binding 新增统一 capability executor，为后续 workflow、mcp-adapter 等可执行能力扩展预留稳定入口。
+- Runtime Binding 进一步拆分为 executable capability binding resolver 与 capability executor，命令和定时任务不再直接分支 Skill/Suite/App 细节。
+- 新增 suite 派生 Workflow 能力：已授权套件下的 Workflow 可直接作为命令和定时任务的 capability 目标执行。
+- Workflow 支持声明式步骤编排：当前可按顺序执行 prompt step 和 capability step，并把上一步输出传给下一步。
+- Workflow 步骤执行现在进入运行台日志；定时任务触发的 Workflow 会把步骤状态和短输出摘要写入运行记录。
+- 存储管理新增定时任务最近运行历史，可查看 Bot、任务、状态、耗时和详情；Workflow 定时任务会显示步骤摘要。
+- Bot 定时任务支持手动立即运行已保存且启用的任务，结果进入同一运行历史，且不会扰动原本已计算的下一次计划时间。
+- 新增 MCP 能力：支持全局 `stdio` 配置、Bot 维度授权，并以严格 MCP 配置模式注入 Claude Agent SDK。
+- 能力页新增 MCP 静态诊断，展示命令解析、cwd、环境变量和 Bot 授权问题，并以 OK/WARN/ERROR 标记配置状态。
+- MCP 诊断刷新会短暂启动 `stdio` 服务执行协议握手和 `tools/list`，在能力页预览工具名，并在失败时展示协议错误、退出码和 stderr 尾部。
+- 新增多 IM Provider 底座，Bot 可选择飞书或企业微信作为消息平台，并通过飞书知识连接器和投递路由支持“企业微信接收、飞书查资料、结果转发飞书”的两端场景；钉钉 Provider 已预留结构。
+- 打包链路新增官方 `@wecom/cli` macOS universal runtime，arm64 与 x64 安装包都会携带 `wecom-cli`。
+- 打包链路会从本地 `logo.png` 生成 macOS app icon，安装包不再使用 Electron 默认图标。
+- Skill、自定义应用和套件卡片支持打开资源所在目录，便于复制、检查或备份资源文件。
+- Bot 支持配置长任务自动提示秒数和文案，单次消息处理超时仍未完成时会先回复一次提示，最终结果仍正常回复。
+- 存储管理会话详情新增结构化消息明细时间线，区分接收消息、Agent 可观察工作过程、长任务自动提示和最终回复，并继续展示 workspace 文件清单。
+- 补充 2.0.0 原始范围完成度矩阵，明确能力治理、自定义应用、套件、Workflow、命令、定时任务、MCP、缓存和发布的已完成与未完成边界。
+
+- 2.0.0 能力治理底座：新增 Bot `capabilityRefs` 配置、统一 Capability Registry/Resolver，并兼容旧版 `skillNames` 授权。
+- 新增自定义应用能力：可导入包含 `app.json` 的本地应用目录，进入能力页预览，并在 Bot 编辑弹窗中显式授权。
+- 存储管理拆分会话数据和文件缓存，可单独清理应用级内容哈希缓存。
+- 下载前缓存命中开始落地：飞书消息附件下载会先按 Bot 和资源 key 查询文件缓存，命中时直接复用，避免同一 Bot 跨会话重复下载同一附件。
+- 新增受控飞书文件缓存协议：Agent 可通过 `LARK_CACHED_FILE` 请求主进程下载云盘文件或导出云文档，优先复用应用级文件缓存，未命中再下载并回灌给同一会话继续分析。
+- Runtime 会拦截 Agent 裸调 `lark-cli drive +download` 或 `drive +export` 的 Bash 操作，避免绕过受控文件缓存 helper。
+- 存储管理中的定时任务运行历史支持按 Bot 和状态筛选；能力页 MCP 诊断支持手动刷新。
+- 存储管理新增文件缓存索引只读视图，可按 Bot 和来源类型筛选消息附件、云盘下载和云文档导出缓存。
+- 新增应用级主题切换，支持跟随系统、浅色和深色；左侧品牌区开始使用 `logo.png`。
+- 左上角应用内使用手册新增“能力与自定义应用”、套件命令和主题说明。
+
 ## v1.6.6 - 2026-06-16
 
 - 左上角 Logo 新增应用内使用手册入口，弹窗说明快速开始、模型配置、Bot、Skill 市场、运行台、飞书权限和存储管理。
