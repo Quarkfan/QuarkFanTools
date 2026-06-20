@@ -18,6 +18,17 @@ let helpTopicKey = "";
 let showManual = false;
 let logCopyState = "";
 
+function appendLocalLog(level: LogEntry["level"], message: string, detail?: string, botId?: string): void {
+  logs = [...logs.slice(-499), {
+    id: `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    time: new Date().toISOString(),
+    level,
+    message,
+    detail,
+    botId
+  }];
+}
+
 const helpTopics: Record<string, { title: string; body: string }> = {
   providerName: { title: "Provider 名称", body: "仅用于界面展示，方便区分当前配置的模型服务商。" },
   baseUrl: { title: "Claude Base URL", body: "兼容 Claude Messages API 的服务地址。当前 Agent SDK 需要 Claude/Anthropic 兼容接口和工具调用能力。" },
@@ -604,7 +615,14 @@ function bindEvents(): void {
     button.onclick = async (event) => {
       event.stopPropagation();
       selectedBotId = String(button.dataset.id);
-      snapshot = await window.quarkfanTools.startBot(selectedBotId);
+      const bot = snapshot.config.bots.find((item) => item.id === selectedBotId);
+      appendLocalLog("info", "正在启动机器人监听", bot?.name ?? selectedBotId, selectedBotId);
+      render();
+      try {
+        snapshot = await window.quarkfanTools.startBot(selectedBotId);
+      } catch (error) {
+        appendLocalLog("error", "启动机器人失败", error instanceof Error ? error.message : String(error), selectedBotId);
+      }
       render();
     };
   });

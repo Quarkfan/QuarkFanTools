@@ -4,12 +4,12 @@
 
 ## 当前基线
 
-- 产品版本：`1.6.14`
+- 产品版本：`1.6.15`
 - Git 分支：`codex/v1.6.7-multi-bot-mention-filter`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流与 OAuth 存储隔离问题，核心功能可用，正在进行打包交付验证
+- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、OAuth 存储隔离和启动无反馈问题，核心功能可用，正在进行打包交付验证
 
 ## 已实现
 
@@ -58,6 +58,7 @@
 - 存储管理会话详情展示最近对话记录和 workspace 文件清单。
 - 运行台日志默认记录 Agent 可观察工作过程，飞书进度消息仍由 Bot 配置控制。
 - 运行台支持复制诊断日志，包含运行快照、Bot 状态路径、订阅 PID、lark-cli 日志尾部、最近内存日志和持久化日志。
+- 运行台点击启动会立即记录本地启动日志；主进程记录启动请求和飞书身份确认阶段，lark-cli 配置校验、初始化和密钥降级短命令有 30 秒超时，避免启动卡住时无反馈。
 - arm64 与 x64 独立安装包构建。
 
 ## 已知限制与风险
@@ -80,6 +81,8 @@
 
 ## 最近验证
 
+- 2026-06-20：`npm run pack:mac` 通过，`v1.6.15` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.15`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
+- 2026-06-20：`npm test` 通过，39 个测试全部通过；启动按钮新增本地可见日志，主进程启动阶段新增日志，lark-cli 配置校验、初始化和 keychain-downgrade 短命令新增 30 秒超时。
 - 2026-06-20：`npm run pack:mac` 通过，`v1.6.14` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.14`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
 - 2026-06-20：`npm test` 通过，39 个测试全部通过；新增 lark-cli per-bot HOME 环境覆盖，并确认 Claude sandbox 不再放行真实用户全局 lark-cli 安全目录。
 - 2026-06-20：`npm test` 通过，38 个测试全部通过；新增共享飞书事件入口路由覆盖，确认一个 Bot 连接收到另一个 Bot 的 mention 消息时会路由到被艾特 Bot。

@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.15",
+    date: "2026-06-20",
+    highlights: [
+      "修复运行台点击“启动”后飞书 CLI 配置校验卡住时界面没有反馈的问题。",
+      "启动按钮会立即写入本地运行日志，主进程也会记录收到启动请求和飞书身份确认阶段。",
+      "飞书 CLI 配置校验、初始化和密钥降级短命令增加 30 秒超时，失败时会显示明确错误。"
+    ]
+  },
+  {
     version: "1.6.14",
     date: "2026-06-20",
     highlights: [

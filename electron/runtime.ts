@@ -64,11 +64,15 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   }
 
   async startBot(botId: string): Promise<void> {
-    if (this.streams.has(botId) || this.runningBotIds.has(botId)) return;
+    if (this.streams.has(botId) || this.runningBotIds.has(botId)) {
+      await this.logger.write("info", "机器人已在运行或正在连接", botId, botId);
+      return;
+    }
     this.config = await loadConfig();
     this.skills = await discoverSkills();
     const bot = this.config.bots.find((item) => item.id === botId);
     if (!bot) throw new Error("机器人不存在");
+    await this.logger.write("info", "收到机器人启动请求", bot.name, bot.id);
     if (!bot.enabled) throw new Error("机器人已停用，请先在配置中启用");
     if (!bot.appId || !bot.appSecret) throw new Error("机器人 App ID 或 App Secret 未配置");
     const conflictingBot = runningBotWithSameAppId(bot, this.config.bots, this.runningBotIds);
@@ -80,6 +84,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (!this.config.model.baseUrl || !this.config.model.model || !this.config.model.apiKey) {
       throw new Error("Claude 兼容模型连接未完整配置");
     }
+    await this.logger.write("info", "正在确认飞书 Bot 身份", maskAppId(bot.appId), bot.id);
     const identity = await getLarkBotIdentity(bot);
     this.botIdentities.set(bot.id, identity);
     await this.logger.write("info", "飞书 Bot 身份已确认", `${maskAppId(bot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId}`, bot.id);

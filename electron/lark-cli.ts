@@ -12,6 +12,7 @@ import { normalizeLarkConfigProfilesContent } from "./lark-config-profiles.js";
 import { effectiveBotProfile } from "./bot-identity.js";
 
 const preparedCredentials = new Map<string, string>();
+const LARK_CAPTURE_TIMEOUT_MS = 30_000;
 
 function bundledLarkBinary(): string {
   return app.isPackaged
@@ -83,9 +84,27 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
       stdio: ["pipe", "pipe", "pipe"]
     });
     let output = "";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`lark-cli config init timed out after ${LARK_CAPTURE_TIMEOUT_MS / 1000}s`));
+    }, LARK_CAPTURE_TIMEOUT_MS);
     child.stdout?.on("data", (chunk) => (output += String(chunk)));
     child.stderr?.on("data", (chunk) => (output += String(chunk)));
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(output || `lark-cli config init exited ${code}`))));
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      code === 0 ? resolve() : reject(new Error(output || `lark-cli config init exited ${code}`));
+    });
     child.stdin?.end(`${bot.appSecret}\n`);
   });
   await writeFile(markerPath, marker, { encoding: "utf8", mode: 0o600 });
@@ -401,13 +420,30 @@ async function runLarkCaptureRaw(bot: BotConfig, args: string[], cwd = projectRo
     });
     let output = "";
     let error = "";
+    let settled = false;
+    const displayArgs = [...profileArgs(bot), ...args].join(" ");
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`lark-cli ${displayArgs} timed out after ${LARK_CAPTURE_TIMEOUT_MS / 1000}s`));
+    }, LARK_CAPTURE_TIMEOUT_MS);
     child.stdout?.on("data", (chunk) => (output += String(chunk)));
     child.stderr?.on("data", (chunk) => (error += String(chunk)));
-    child.on("exit", (code) => (
+    child.on("error", (spawnError) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(spawnError);
+    });
+    child.on("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       code === 0
         ? resolve(output.trim())
-        : reject(new Error([error, output].filter(Boolean).join("\n") || `lark-cli exited ${code}`))
-    ));
+        : reject(new Error([error, output].filter(Boolean).join("\n") || `lark-cli exited ${code}`));
+    });
   });
 }
 
