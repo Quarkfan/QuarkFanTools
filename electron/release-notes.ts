@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.16",
+    date: "2026-06-20",
+    highlights: [
+      "修复升级到 Bot 专属 HOME 后，启动可能继续信任旧 lark-cli 凭据 marker 的问题。",
+      "遇到 invalid_client 或 The auth method is not supported 时，新版本会通过新的 marker 规则强制重新初始化 Bot 态配置。",
+      "用户态读取飞书资料仍需要在每个 Bot 配置页重新完成 OAuth。"
+    ]
+  },
+  {
     version: "1.6.15",
     date: "2026-06-20",
     highlights: [

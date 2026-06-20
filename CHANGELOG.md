@@ -6,6 +6,11 @@
 
 ## Unreleased
 
+## v1.6.16 - 2026-06-20
+
+- 修复从旧版升级到 Bot 专属 HOME 后，旧 lark-cli 凭据 marker 被继续信任，导致启动时报 `invalid_client / The auth method is not supported` 的问题。
+- 凭据 marker 加入 per-Bot HOME 版本，升级后会强制重新初始化每个 Bot 的 lark-cli Bot 态配置，避免旧全局或旧 HOME 状态污染启动。
+
 ## v1.6.15 - 2026-06-20
 
 - 修复点击运行台“启动”后如果飞书 CLI 配置校验或密钥降级阶段卡住，界面可能长时间无反馈的问题。

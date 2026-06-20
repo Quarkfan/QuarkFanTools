@@ -63,7 +63,7 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   ]);
   if (!bot.appId) return;
   const markerPath = path.join(dir, ".quarkfantools-credential");
-  const marker = createHash("sha256").update(`${bot.appId}:${effectiveProfile(bot)}:${bot.appSecret}`).digest("hex");
+  const marker = createHash("sha256").update(`per-bot-home-v2:${botLarkHomeRoot(bot.id)}:${bot.appId}:${effectiveProfile(bot)}:${bot.appSecret}`).digest("hex");
   if (preparedCredentials.get(bot.id) === marker) return;
   if ((await readFile(markerPath, "utf8").catch(() => "")) === marker) {
     try {
