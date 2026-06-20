@@ -226,7 +226,7 @@ test("routes mentioned group messages by bot name when mention open id differs f
   assert.equal(messageTargetsBot(workBot, message, { openId: "ou_bot_info_work", appName: "牛马的工作助手" }, true), false);
 });
 
-test("shared ingress routes a cross-delivered mention to the mentioned bot", () => {
+test("cross-delivered events route to the mentioned bot", () => {
   const message = normalizeLarkEvent({
     header: { event_type: "im.message.receive_v1", app_id: "cli_work_assistant" },
     event: {

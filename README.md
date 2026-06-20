@@ -2,15 +2,15 @@
 
 QuarkfanTools 是运行在 macOS 上的本地飞书 Skill Agent。安装包内置 Electron、Claude Agent SDK、飞书 CLI，以及 Word、PowerPoint、Excel 基础 Skills；支持多个相互隔离、可独立启停的飞书机器人。
 
-当前版本为 `1.6.16`。应用左下角显示当前版本，点击版本号可查看面向用户的更新记录。项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，开发变更历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+当前版本为 `1.6.17`。应用左下角显示当前版本，点击版本号可查看面向用户的更新记录。项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，开发变更历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 核心能力
 
 - 分别提供 Apple Silicon 与 Intel macOS 安装包。
-- 支持配置多个飞书机器人，每个机器人使用独立凭据、状态与 Claude 工作区，并可在运行台独立启动和停止；同一应用进程内复用一个飞书事件共享入口，收到事件后按被艾特 Bot 路由。
+- 支持配置多个飞书机器人，每个机器人使用独立凭据、HOME、状态与 Claude 工作区，并可在运行台独立启动和停止；事件进入 Runtime 后按被艾特 Bot 统一路由。
 - 点击运行台中的机器人可查看其独立详细日志，并按信息、成功、警告或错误等级筛选。
 - 每个机器人只能访问明确授权的 Skills；导入或同步的新 Skill 默认不授权，授权区支持搜索和对筛选结果批量操作。
-- 使用内置 `lark-cli event +subscribe` NDJSON 长连接接收飞书事件，异常断线自动重连；多 Bot 同时运行时避免多个 WebSocket 订阅互相分流。
+- 使用内置 `lark-cli event +subscribe` NDJSON 长连接接收飞书事件，异常断线自动重连；多 Bot 同时运行时每个 Bot 维护自己的隔离订阅，并保留跨 Bot 路由保护。
 - 收到消息后先在原消息上添加处理中表情，执行 Skill 并回复最终结果后移除表情。
 - 私聊按机器人与会话保持 24 小时连续上下文；群聊额外按发送者隔离。发送 `/new`、`新对话` 或 `重置会话` 可清空上下文。
 - 图片消息会自动下载并作为多模态输入交给模型；Skill 生成的图片或文件可通过内置 `lark-cli` 回复。

@@ -6,6 +6,12 @@
 
 ## Unreleased
 
+## v1.6.17 - 2026-06-21
+
+- 修复 `v1.6.16` 在部分 Intel macOS 客户环境下，多飞书 Bot 同时运行时只有后启动 Bot 能收到消息的问题。
+- 飞书事件监听改为每个 Bot 使用各自独立 HOME/profile 启动订阅进程，确保每个飞书应用至少接收自己的事件。
+- 保留 Runtime 统一 mention 路由：如果飞书服务端仍把某个 Bot 的事件投递到另一个 Bot 的连接，应用会跨 Bot 路由到被艾特 Bot；重复投递会由目标 Bot 的消息去重保护。
+
 ## v1.6.16 - 2026-06-20
 
 - 修复从旧版升级到 Bot 专属 HOME 后，旧 lark-cli 凭据 marker 被继续信任，导致启动时报 `invalid_client / The auth method is not supported` 的问题。

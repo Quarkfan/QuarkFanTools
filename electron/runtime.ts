@@ -29,7 +29,6 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private runningBotIds = new Set<string>();
   private botIdentities = new Map<string, LarkBotIdentity>();
-  private ingressBotId: string | null = null;
   private taskLimiter = new TaskLimiter();
   private config!: AppConfig;
   private skills: SkillSummary[] = [];
@@ -91,7 +90,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.runningBotIds.add(bot.id);
     try {
       await this.loadProcessed(bot.id);
-      await this.restartIngress(bot.id, "bot-start");
+      await this.startBotStream(bot);
     } catch (error) {
       this.runningBotIds.delete(bot.id);
       this.botIdentities.delete(bot.id);
@@ -108,7 +107,6 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.reconnectTimers.clear();
     this.connectedBotIds.clear();
     this.botIdentities.clear();
-    this.ingressBotId = null;
     await this.logger.write("info", "QuarkfanTools 已停止");
     this.emitSnapshot();
   }
@@ -125,16 +123,6 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.botIdentities.delete(botId);
     const bot = this.config.bots.find((item) => item.id === botId);
     await this.logger.write("info", "机器人监听已停止", bot?.name, botId);
-    if (this.ingressBotId === botId) {
-      this.ingressBotId = null;
-      this.connectedBotIds.clear();
-      const nextBot = this.runningBots().at(-1);
-      if (nextBot) {
-        await this.restartIngress(nextBot.id, "bot-stop-switch");
-      }
-    } else {
-      this.markIngressConnectedBots();
-    }
     this.emitSnapshot();
   }
 
@@ -150,23 +138,23 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     };
   }
 
-  private createIngressStream(bot: BotConfig): LarkEventStream {
+  private createBotStream(bot: BotConfig): LarkEventStream {
     const stream = new LarkEventStream();
     stream.on("message", (message: LarkMessage) => {
-      this.routeIngressMessage(bot, message);
+      this.routeBotMessage(bot, message);
     });
     stream.on("connected", () => {
-      this.markIngressConnectedBots();
-      void this.logger.write("success", "飞书共享事件入口已连接", `${bot.name} / 覆盖 ${this.runningBotIds.size} 个运行中机器人`, bot.id);
+      this.connectedBotIds.add(bot.id);
+      void this.logger.write("success", "飞书事件监听已连接", bot.name, bot.id);
       this.emitSnapshot();
     });
     stream.on("stderr", (text: string) => void this.logger.write("warn", "飞书连接输出", text, bot.id));
     stream.on("exit", ({ code, signal }) => {
-      this.connectedBotIds.clear();
+      this.connectedBotIds.delete(bot.id);
       if (this.streams.get(bot.id) === stream) this.streams.delete(bot.id);
       this.emitSnapshot();
-      if (this.ingressBotId === bot.id && this.runningBotIds.size > 0) {
-        void this.logger.write("error", "飞书共享事件入口已退出，5 秒后重连", `code=${code} signal=${signal}`, bot.id);
+      if (this.runningBotIds.has(bot.id)) {
+        void this.logger.write("error", "飞书事件监听已退出，5 秒后重连", `code=${code} signal=${signal}`, bot.id);
         this.scheduleReconnect(bot);
       }
     });
@@ -177,50 +165,29 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     return this.config.bots.filter((item) => this.runningBotIds.has(item.id));
   }
 
-  private markIngressConnectedBots(): void {
-    if (!this.ingressBotId || !this.streams.has(this.ingressBotId)) return;
-    this.connectedBotIds = new Set(this.runningBotIds);
-  }
-
-  private async restartIngress(botId: string, reason: string): Promise<void> {
-    const bot = this.config.bots.find((item) => item.id === botId);
-    if (!bot) return;
-    const previousIngressBotId = this.ingressBotId;
-    if (previousIngressBotId) {
-      const timer = this.reconnectTimers.get(previousIngressBotId);
-      if (timer) clearTimeout(timer);
-      this.reconnectTimers.delete(previousIngressBotId);
-    }
-    this.ingressBotId = null;
-    for (const [existingBotId, stream] of this.streams.entries()) {
-      await stream.stop();
-      this.streams.delete(existingBotId);
-    }
-    this.connectedBotIds.clear();
-    this.ingressBotId = bot.id;
-    const stream = this.createIngressStream(bot);
+  private async startBotStream(bot: BotConfig): Promise<void> {
+    const existing = this.streams.get(bot.id);
+    if (existing) await existing.stop();
+    this.connectedBotIds.delete(bot.id);
+    const stream = this.createBotStream(bot);
     this.streams.set(bot.id, stream);
     try {
-      if (this.runningBotIds.size > 1) {
-        await this.logger.write("info", "正在切换飞书共享事件入口", `${bot.name} / ${reason} / ${this.runningBotIds.size} 个运行中机器人`, bot.id);
-      }
       await stream.start(bot);
-      await this.logger.write("info", "飞书共享事件入口正在连接", bot.receiveIdentity, bot.id);
+      await this.logger.write("info", "飞书事件监听正在连接", bot.receiveIdentity, bot.id);
     } catch (error) {
       if (this.streams.get(bot.id) === stream) this.streams.delete(bot.id);
-      this.connectedBotIds.clear();
-      this.ingressBotId = null;
+      this.connectedBotIds.delete(bot.id);
       throw error;
     }
   }
 
-  private routeIngressMessage(ingressBot: BotConfig, message: LarkMessage): void {
+  private routeBotMessage(sourceBot: BotConfig, message: LarkMessage): void {
     const bots = this.runningBots();
     const route = selectLarkMessageTarget(bots, message, this.botIdentities, bots.length > 1);
     if (!route.bot) {
       void this.logger.write("info", "已忽略无法确定目标机器人的飞书消息", JSON.stringify({
         reason: route.reason,
-        ingressBotId: ingressBot.id,
+        sourceBotId: sourceBot.id,
         text: message.text,
         eventId: message.eventId,
         messageId: message.messageId,
@@ -235,7 +202,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
           mentionValues: item.decision.mentionValues,
           botMatchers: item.decision.botMatchers
         }))
-      }), ingressBot.id);
+      }), sourceBot.id);
       return;
     }
     for (const ignored of route.ignored.filter((item) => item.bot.id !== route.bot?.id)) {
@@ -244,7 +211,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         reason: ignored.decision.reason,
         routedBotId: route.bot.id,
         routedBotName: route.bot.name,
-        ingressBotId: ingressBot.id,
+        sourceBotId: sourceBot.id,
         text: message.text,
         eventId: message.eventId,
         messageId: message.messageId,
@@ -256,8 +223,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         botMatchers: ignored.decision.botMatchers
       }), ignored.bot.id);
     }
-    if (ingressBot.id !== route.bot.id) {
-      void this.logger.write("info", "飞书共享事件入口已路由消息", `${ingressBot.name} -> ${route.bot.name} / ${route.reason}`, route.bot.id);
+    if (sourceBot.id !== route.bot.id) {
+      void this.logger.write("info", "飞书事件已跨 Bot 路由", `${sourceBot.name} -> ${route.bot.name} / ${route.reason}`, route.bot.id);
     }
     void this.enqueueMessage(route.bot, message);
   }
@@ -272,23 +239,21 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private async reconnect(bot: BotConfig): Promise<void> {
     this.reconnectTimers.delete(bot.id);
     if (!this.runningBotIds.has(bot.id)) return;
-    if (this.ingressBotId && this.streams.has(this.ingressBotId)) return;
-    const ingressBot = this.config.bots.find((item) => item.id === this.ingressBotId) ?? bot;
-    const stream = this.createIngressStream(ingressBot);
-    this.ingressBotId = ingressBot.id;
-    this.streams.set(ingressBot.id, stream);
+    if (this.streams.has(bot.id)) return;
+    const currentBot = this.config.bots.find((item) => item.id === bot.id) ?? bot;
     try {
-      if (!this.botIdentities.has(ingressBot.id)) {
-        const identity = await getLarkBotIdentity(ingressBot);
-        this.botIdentities.set(ingressBot.id, identity);
-        await this.logger.write("info", "飞书 Bot 身份已确认", `${maskAppId(ingressBot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId}`, ingressBot.id);
+      if (!this.botIdentities.has(currentBot.id)) {
+        const identity = await getLarkBotIdentity(currentBot);
+        this.botIdentities.set(currentBot.id, identity);
+        await this.logger.write("info", "飞书 Bot 身份已确认", `${maskAppId(currentBot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId}`, currentBot.id);
       }
-      await stream.start(ingressBot);
-      await this.logger.write("info", "飞书共享事件入口正在重连", ingressBot.name, ingressBot.id);
+      await this.startBotStream(currentBot);
+      await this.logger.write("info", "飞书事件监听正在重连", currentBot.name, currentBot.id);
     } catch (error) {
-      if (this.streams.get(ingressBot.id) === stream) this.streams.delete(ingressBot.id);
-      await this.logger.write("error", "飞书共享事件入口重连失败，5 秒后重试", String(error), ingressBot.id);
-      this.scheduleReconnect(ingressBot);
+      this.streams.delete(currentBot.id);
+      this.connectedBotIds.delete(currentBot.id);
+      await this.logger.write("error", "飞书事件监听重连失败，5 秒后重试", String(error), currentBot.id);
+      this.scheduleReconnect(currentBot);
     }
   }
 

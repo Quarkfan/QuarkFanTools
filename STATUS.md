@@ -4,17 +4,17 @@
 
 ## 当前基线
 
-- 产品版本：`1.6.16`
+- 产品版本：`1.6.17`
 - Git 分支：`codex/v1.6.7-multi-bot-mention-filter`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、OAuth 存储隔离、启动无反馈和旧凭据 marker 迁移问题，核心功能可用，正在进行打包交付验证
+- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、OAuth 存储隔离、启动无反馈、旧凭据 marker 迁移和 Intel 客户环境下单共享入口只覆盖后启动 Bot 的问题，正在进行打包交付验证
 
 ## 已实现
 
 - 多飞书机器人配置、独立监听和权限隔离。
-- 同一应用进程内飞书事件监听使用共享入口，避免多个 `lark-cli event +subscribe` WebSocket 订阅被服务端分流；事件进入 Runtime 后按 mention 目标路由到唯一目标 Bot。
+- 每个飞书 Bot 使用自己的独立 HOME/profile 启动事件监听；事件进入 Runtime 后统一按 mention 目标路由到唯一目标 Bot。这样既保证每个飞书应用至少接收自己的事件，也能在服务端交叉投递时路由到被艾特 Bot。
 - 同一飞书 App ID 同一时间只能启动一个本地 Bot，避免同一飞书机器人事件被多个本地 Bot 同时处理。
 - 机器人启动时会调用飞书 bot info 确认实际 `open_id` 和应用名；群聊艾特消息按 mention 目标值路由到目标机器人，`mentions.id.open_id` 只作为正向命中信号，不作为排他条件。
 - 多 Bot 同时运行时，群聊消息如果缺少可判定的 mention 元数据，会记录诊断并忽略，避免多个机器人同时回复。
@@ -60,6 +60,7 @@
 - 运行台支持复制诊断日志，包含运行快照、Bot 状态路径、订阅 PID、lark-cli 日志尾部、最近内存日志和持久化日志。
 - 运行台点击启动会立即记录本地启动日志；主进程记录启动请求和飞书身份确认阶段，lark-cli 配置校验、初始化和密钥降级短命令有 30 秒超时，避免启动卡住时无反馈。
 - lark-cli 凭据 marker 加入 per-Bot HOME 版本，升级后会重新初始化 Bot 态配置，避免旧全局或旧 HOME 状态导致 `invalid_client`。
+- `v1.6.17` 起，多飞书 Bot 不再使用单共享事件入口；每个 Bot 维护自己的隔离订阅，连接断开后只重连当前 Bot，避免后启动 Bot 接管入口后先启动 Bot 收不到消息。
 - arm64 与 x64 独立安装包构建。
 
 ## 已知限制与风险
@@ -82,6 +83,7 @@
 
 ## 最近验证
 
+- 2026-06-21：客户 x64 环境反馈 `v1.6.16` 单共享入口会出现后启动 Bot 可用、先启动 Bot 收不到自身事件；已改为每 Bot 独立 HOME/profile 订阅并保留 Runtime 统一 mention 路由。`npm test` 通过，39 项测试全部通过；`npm run pack:mac` 通过，`v1.6.17` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.17`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含“飞书事件监听已连接”和“飞书事件已跨 Bot 路由”新代码。归档产物位于 `release/v1.6.17/`。
 - 2026-06-20：本机覆盖安装 `v1.6.16` 后现场验证通过：两个 Bot 均完成“飞书 Bot 身份已确认”，共享事件入口连接成功，旧 marker 触发的 `invalid_client / The auth method is not supported` 未再出现。
 - 2026-06-20：`npm run pack:mac` 通过，`v1.6.16` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.16`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
 - 2026-06-20：`npm test` 通过，39 个测试全部通过；lark-cli 凭据 marker 加入 per-Bot HOME 版本，旧版 marker 不再阻止 Bot 态配置重新初始化。

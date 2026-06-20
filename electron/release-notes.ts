@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.17",
+    date: "2026-06-21",
+    highlights: [
+      "修复部分 Intel macOS 环境下，多飞书 Bot 同时运行时只有后启动 Bot 能收到消息的问题。",
+      "飞书监听改为每个 Bot 使用独立 HOME/profile 启动订阅进程，避免单共享入口只覆盖一个飞书应用。",
+      "如果事件被飞书服务端交叉投递，应用仍会按被艾特 Bot 路由，并通过目标 Bot 消息去重避免重复处理。"
+    ]
+  },
+  {
     version: "1.6.16",
     date: "2026-06-20",
     highlights: [
