@@ -9,12 +9,12 @@
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：2.0.3 已同步 1.6.16 多飞书 Bot 共享事件入口、Bot 专属 lark-cli HOME、启动可见日志和旧凭据 marker 迁移修复，并继续围绕真实 IM 端到端、诊断和发布签名收口
+- 当前阶段：2.0.3 已同步 1.6.16 多飞书 Bot 修复；当前未发布变更已继续同步 1.6.17 每 Bot 隔离飞书事件订阅、Bot 专属 lark-cli HOME、启动可见日志和旧凭据 marker 迁移修复，并继续围绕真实 IM 端到端、诊断和发布签名收口
 
 ## 已实现
 
 - 多飞书机器人配置、独立启停和权限隔离。
-- 飞书 Provider 在同一应用进程内使用共享事件入口，避免多个 `lark-cli event +subscribe` WebSocket 订阅被服务端分流；事件进入 Runtime 后按 mention 目标路由到唯一目标 Bot。
+- 飞书 Provider 为每个运行中的 Bot 使用独立 HOME/profile 启动事件订阅；事件进入 Runtime 后统一按 mention 目标路由到唯一目标 Bot。这样每个飞书应用至少通过自己的订阅接收事件，如果服务端交叉投递也能路由到被艾特 Bot。
 - 飞书 Bot 启动时会调用 bot info 确认实际 `open_id` 和应用名；多飞书 Bot 群聊艾特消息按 mention 目标值路由到目标机器人，`mentions.id.open_id` 只作为正向命中信号，不作为排他条件。
 - 多飞书 Bot 同时运行时，群聊消息如果缺少可判定的 mention 元数据，会记录诊断并忽略，避免多个机器人同时回复。
 - 每个注册机器人可独立启停监听，并可查看和筛选其独立日志。
@@ -112,6 +112,7 @@
 
 ## 最近验证
 
+- 2026-06-21：已将 `v1.6.17` 每 Bot 隔离飞书事件订阅修复同步到 2.0 未发布变更；`npm test` 通过，70 项测试全部通过。
 - 2026-06-20：`v2.0.3` 已同步 `v1.6.16` 修复并完成封版验证：`npm test` 通过，70 项测试全部通过；`npm run pack:mac` 已生成 arm64 与 x64 双平台安装包。产物版本均为 `2.0.3`，arm64/x64 主程序架构正确，内置 lark-cli 与 wecom-cli 为 universal binary，Claude runtime 分别为 arm64/x86_64。归档产物位于 `release/v2.0.3/`。
 - 2026-06-19：`npm run pack:mac` 通过，`v2.0.2` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `2.0.2`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli/wecom-cli 均为 universal。
 - 2026-06-19：`npm test` 通过，67 个测试全部通过；新增飞书用户态 OAuth 摘要日志和 Bot 可用范围排障提示。

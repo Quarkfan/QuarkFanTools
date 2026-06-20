@@ -6,7 +6,7 @@
 
 ## Unreleased
 
-- 暂无。
+- 同步 `v1.6.17` 多飞书 Bot 监听修复：飞书 Provider 不再使用单共享事件入口，改为每个 Bot 使用独立 HOME/profile 维护自己的事件订阅，并继续在 Runtime 中按 mention 目标做跨 Bot 路由。此变更修复部分 Intel 客户环境下单共享入口只覆盖后启动 Bot 所属飞书应用的问题。
 
 ## v2.0.3 - 2026-06-20
 

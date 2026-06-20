@@ -154,7 +154,8 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 
 ### 多飞书 Bot 群聊艾特路由异常
 
-- QuarkfanTools 现在在同一应用进程内只保持一个飞书事件共享入口。官方 `lark-cli event +subscribe --force` 帮助提示多个订阅会被服务端随机拆分事件；现场也确认一个 Bot 的连接可能收到另一个 Bot 被 @ 的消息。因此运行台看到“飞书共享事件入口已连接”是预期行为，后续回复、表情、附件下载和 Agent 执行仍按被路由到的目标 Bot 使用隔离凭据。企业微信事件桥不受该共享入口影响。
+- 当前未发布变更已同步 `v1.6.17` 结构：QuarkfanTools 为每个运行中的飞书 Bot 启动一个使用该 Bot 专属 HOME/profile 的隔离事件订阅。`v2.0.3` 同步的单共享入口方案在部分 Intel 客户环境下会只覆盖后启动 Bot 所属飞书应用，导致先启动 Bot 收不到自身事件；新结构保证每个飞书应用至少通过自己的订阅接收事件。
+- 官方 `lark-cli event +subscribe --force` 帮助提示多个订阅会被服务端随机拆分事件；QuarkfanTools 不使用 `--force`，并通过 per-Bot HOME/profile 分离本地单实例锁。若飞书服务端仍把一个 Bot 的事件投递到另一个 Bot 的连接，Runtime 会继续按 mention 目标跨 Bot 路由，后续回复、表情、附件下载和 Agent 执行仍使用目标 Bot 自己的隔离凭据。企业微信事件桥不受飞书订阅结构影响。
 - 配置里的 `cli_...` 是飞书开放平台应用 App ID，用于初始化对应 Bot 的 lark-cli profile。
 - 运行时会记录 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 和应用名。群聊消息有 `message.mentions` 时，应用会先用 mention 目标里的名称、App ID、应用名和 open_id 等值匹配当前 Bot；`mentions[].id.open_id` 只作为命中信号，不作为排他条件，因为现场事件中它可能不同于 bot info 的 `bot.open_id`。
 - 事件头里的 App ID 表示当前监听连接所属应用，不一定是消息中被 @ 的目标。有 `mentions` 时不要用 `sourceAppId` 判定目标 Bot；它只用于缺少 mention 元数据的旧事件兜底。
