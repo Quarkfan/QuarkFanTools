@@ -66,8 +66,12 @@ export function workspaceRoot(): string {
   return isPackaged() ? path.join(appPath("userData"), "workspace") : projectRoot();
 }
 
-export function larkCliSupportRoot(): string {
-  return path.join(appPath("appData"), "lark-cli");
+export function botLarkHomeRoot(botId: string): string {
+  return path.join(botStateRoot(botId), "lark-home");
+}
+
+export function botLarkCliSupportRoot(botId: string): string {
+  return path.join(botLarkHomeRoot(botId), "Library", "Application Support", "lark-cli");
 }
 
 export function defaultConfigPath(): string {

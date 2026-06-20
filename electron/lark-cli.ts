@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { projectRoot, stateRoot } from "./paths.js";
+import { botLarkHomeRoot, projectRoot, stateRoot } from "./paths.js";
 import type { BotConfig, LarkBotIdentity, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "./lark-commands.js";
@@ -15,6 +15,7 @@ import { effectiveBotProfile } from "./bot-identity.js";
 const { app, shell } = electron;
 
 const preparedCredentials = new Map<string, string>();
+const LARK_CAPTURE_TIMEOUT_MS = 30_000;
 
 function bundledLarkBinary(): string {
   return app.isPackaged
@@ -24,7 +25,9 @@ function bundledLarkBinary(): string {
 
 export function larkRuntimeEnvironment(bot: BotConfig): NodeJS.ProcessEnv {
   const binaryDir = path.dirname(bot.cliPath || bundledLarkBinary());
+  const botHome = botLarkHomeRoot(bot.id);
   return {
+    HOME: botHome,
     LARKSUITE_CLI_CONFIG_DIR: path.join(botStateRoot(bot), "lark-cli"),
     LARKSUITE_CLI_LOG_DIR: path.join(botStateRoot(bot), "lark-cli", "logs"),
     LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
@@ -57,13 +60,17 @@ function larkEnv(bot: BotConfig): NodeJS.ProcessEnv {
 
 export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   const dir = path.join(botStateRoot(bot), "lark-cli");
-  await mkdir(dir, { recursive: true });
+  await Promise.all([
+    mkdir(dir, { recursive: true }),
+    mkdir(botLarkHomeRoot(bot.id), { recursive: true })
+  ]);
   if (!bot.appId) return;
   const markerPath = path.join(dir, ".quarkfantools-credential");
-  const marker = createHash("sha256").update(`${bot.appId}:${effectiveProfile(bot)}:${bot.appSecret}`).digest("hex");
+  const marker = createHash("sha256").update(`per-bot-home-v2:${botLarkHomeRoot(bot.id)}:${bot.appId}:${effectiveProfile(bot)}:${bot.appSecret}`).digest("hex");
   if (preparedCredentials.get(bot.id) === marker) return;
   if ((await readFile(markerPath, "utf8").catch(() => "")) === marker) {
     try {
+      await normalizeLarkConfigProfiles(bot);
       await runLarkCaptureRaw(bot, ["config", "show"]);
       await prepareSandboxKeychain(bot);
       preparedCredentials.set(bot.id, marker);
@@ -80,12 +87,31 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
       stdio: ["pipe", "pipe", "pipe"]
     });
     let output = "";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`lark-cli config init timed out after ${LARK_CAPTURE_TIMEOUT_MS / 1000}s`));
+    }, LARK_CAPTURE_TIMEOUT_MS);
     child.stdout?.on("data", (chunk) => (output += String(chunk)));
     child.stderr?.on("data", (chunk) => (output += String(chunk)));
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(output || `lark-cli config init exited ${code}`))));
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      code === 0 ? resolve() : reject(new Error(output || `lark-cli config init exited ${code}`));
+    });
     child.stdin?.end(`${bot.appSecret}\n`);
   });
   await writeFile(markerPath, marker, { encoding: "utf8", mode: 0o600 });
+  await normalizeLarkConfigProfiles(bot);
   await prepareSandboxKeychain(bot);
   preparedCredentials.set(bot.id, marker);
 }
@@ -93,6 +119,33 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
 async function prepareSandboxKeychain(bot: BotConfig): Promise<void> {
   if (process.platform !== "darwin") return;
   await runLarkCaptureRaw(bot, ["config", "keychain-downgrade"]);
+}
+
+export function normalizeLarkConfigProfilesContent(raw: string, bot: BotConfig): string | null {
+  if (!raw.trim()) return null;
+  let parsed: { apps?: Array<Record<string, unknown>> };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed.apps)) return null;
+  const profile = effectiveProfile(bot);
+  const matchingApps = parsed.apps.filter((appItem) => appItem.appId === bot.appId);
+  const named = matchingApps.find((appItem) => appItem.name === profile);
+  const fallback = named ?? matchingApps[0];
+  if (!fallback) return null;
+  const normalized = { ...fallback, name: profile };
+  const otherApps = parsed.apps.filter((appItem) => appItem.appId !== bot.appId);
+  return `${JSON.stringify({ ...parsed, apps: [...otherApps, normalized] }, null, 2)}\n`;
+}
+
+async function normalizeLarkConfigProfiles(bot: BotConfig): Promise<void> {
+  const configPath = path.join(botStateRoot(bot), "lark-cli", "config.json");
+  const raw = await readFile(configPath, "utf8").catch(() => "");
+  const normalized = normalizeLarkConfigProfilesContent(raw, bot);
+  if (normalized === null || normalized === raw) return;
+  await writeFile(configPath, normalized, { encoding: "utf8", mode: 0o600 });
 }
 
 function profileArgs(bot: BotConfig): string[] {
@@ -475,13 +528,30 @@ async function runLarkCaptureRaw(bot: BotConfig, args: string[], cwd = projectRo
     });
     let output = "";
     let error = "";
+    let settled = false;
+    const displayArgs = [...profileArgs(bot), ...args].join(" ");
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`lark-cli ${displayArgs} timed out after ${LARK_CAPTURE_TIMEOUT_MS / 1000}s`));
+    }, LARK_CAPTURE_TIMEOUT_MS);
     child.stdout?.on("data", (chunk) => (output += String(chunk)));
     child.stderr?.on("data", (chunk) => (error += String(chunk)));
-    child.on("exit", (code) => (
+    child.on("error", (spawnError) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(spawnError);
+    });
+    child.on("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       code === 0
         ? resolve(output.trim())
-        : reject(new Error([error, output].filter(Boolean).join("\n") || `lark-cli exited ${code}`))
-    ));
+        : reject(new Error([error, output].filter(Boolean).join("\n") || `lark-cli exited ${code}`));
+    });
   });
 }
 

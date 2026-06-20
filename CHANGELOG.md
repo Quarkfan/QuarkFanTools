@@ -8,6 +8,14 @@
 
 - 暂无。
 
+## v2.0.3 - 2026-06-20
+
+- 同步 `v1.6.16` 多飞书 Bot 修复：飞书事件监听改为同一应用进程内共享入口，收到事件后按 mention 目标路由到唯一目标 Bot，避免多个 `lark-cli event +subscribe` 长连接被飞书服务端分流。
+- 飞书用户态 OAuth、lark-cli 降级密钥和加密凭据改为按 Bot 专属 `HOME` 隔离，Claude sandbox 不再放行真实用户全局 `~/Library/Application Support/lark-cli/`。
+- 修复升级到 Bot 专属 HOME 后旧 lark-cli 凭据 marker 被继续信任，导致启动时报 `invalid_client / The auth method is not supported` 的问题。
+- 运行台点击启动会立即写入本地日志；主进程记录启动请求和飞书身份确认阶段，lark-cli 配置校验、初始化和 keychain-downgrade 短命令增加 30 秒超时。
+- 2.0 的企业微信 Provider 仍保持独立事件桥；本次共享入口只作用于飞书 Provider，不改变企业微信和后续钉钉的 Provider 边界。
+
 ## v2.0.2 - 2026-06-19
 
 - 用户态 OAuth 完成日志改为摘要，避免运行台复制日志包含大段 scope 列表。

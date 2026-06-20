@@ -3,7 +3,7 @@ import { app } from "electron";
 import { access, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
-import { larkCliSupportRoot, skillsRoot, stateRoot, workspaceRoot } from "./paths.js";
+import { skillsRoot, stateRoot, workspaceRoot } from "./paths.js";
 import { larkRuntimeEnvironment } from "./lark-cli.js";
 import { larkConnectorBot, larkConnectorEnabled, primaryProvider } from "./platform-connectors.js";
 import type { AppConfig, BotConfig, ChatMessage, SkillSummary, SuiteSummary } from "./types.js";
@@ -173,8 +173,7 @@ export async function runClaude(
           filesystem: buildSandboxFilesystem(config, bot, workspace, botState, skills, {
             stateRoot: stateRoot(),
             workspaceRoot: workspaceRoot(),
-            skillsRoot: skillsRoot(),
-            larkCliSupportRoot: larkCliSupportRoot()
+            skillsRoot: skillsRoot()
           })
         },
         maxTurns: Math.max(10, Math.min(100, config.runtime.maxAgentTurns ?? 60)),

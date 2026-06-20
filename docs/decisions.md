@@ -92,8 +92,9 @@
 - 决策：Bot 的工作过程开关只展示 SDK 可观察的工具调用类别、检索状态和重试状态，不展示模型隐藏推理。
 - 原因：原始思维链不适合作为用户进度信息，且可能包含敏感上下文；可观察事件足以解释当前工作阶段。
 
-## D-016 lark-cli 全局安全存储作为 sandbox 例外
+## D-016 lark-cli 安全存储按 Bot HOME 隔离
 
 - 状态：已采用
-- 决策：Agent sandbox 在拒绝其他 Bot 状态与 workspace 的同时，允许读写 `~/Library/Application Support/lark-cli/`。用户态 OAuth 统一由 QuarkfanTools 配置页发起，Agent 不在聊天会话内执行 `lark-cli auth login`。
-- 原因：官方 lark-cli 即使设置了 `LARKSUITE_CLI_CONFIG_DIR`，仍会把 OAuth 加密材料和 `keychain-downgrade` 的 `master.key.file` 存放在全局 Application Support 目录。若不放行该目录，Agent 在 sandbox 内无法使用已完成的用户态授权读取飞书资料。
+- 决策：所有 lark-cli 子进程设置当前 Bot 专属 `HOME=state/bots/<bot-id>/lark-home`，使官方 lark-cli 的 OAuth 加密材料和 `keychain-downgrade` 的 `master.key.file` 落在 Bot 状态目录下。Agent sandbox 只放行当前 Bot 状态目录，不再允许真实用户全局 `~/Library/Application Support/lark-cli/`。
+- 原因：源码确认 `LARKSUITE_CLI_CONFIG_DIR` 只能隔离 profile/config，macOS 安全存储路径由 HOME 和固定 service 名决定。继续使用全局目录会让多个 Bot 共享用户态 token 与 master key，破坏 Bot 维度治理。
+- 后果：升级后需要为每个需要读取飞书资料的 Bot 重新完成用户态 OAuth；换取 OAuth、密钥、profile、会话和 Skill 授权在 Bot 维度一致隔离。

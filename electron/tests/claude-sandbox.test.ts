@@ -57,16 +57,32 @@ test("sandbox allows current bot state while denying other bots", () => {
   const filesystem = buildSandboxFilesystem(config, bot, workspace, botState, [skill], {
     stateRoot: "/app/state",
     workspaceRoot: "/app/workspace",
-    skillsRoot: "/app/workspace/skills",
-    larkCliSupportRoot: "/Users/test/Library/Application Support/lark-cli"
+    skillsRoot: "/app/workspace/skills"
   });
 
   assert.ok(filesystem.allowWrite.includes(botState));
   assert.ok(filesystem.allowRead.includes(botState));
-  assert.ok(filesystem.allowWrite.includes("/Users/test/Library/Application Support/lark-cli"));
-  assert.ok(filesystem.allowRead.includes("/Users/test/Library/Application Support/lark-cli"));
+  assert.ok(!filesystem.allowWrite.includes("/Users/test/Library/Application Support/lark-cli"));
+  assert.ok(!filesystem.allowRead.includes("/Users/test/Library/Application Support/lark-cli"));
   assert.ok(!filesystem.denyWrite.includes(path.dirname(botState)));
   assert.ok(!filesystem.denyRead.includes(path.dirname(botState)));
   assert.ok(filesystem.denyWrite.some((item) => item.endsWith("/state/bots/other")));
   assert.ok(filesystem.denyRead.some((item) => item.endsWith("/state/bots/other")));
+});
+
+test("per-bot lark secure store stays inside current bot state", () => {
+  const botState = "/app/state/bots/default";
+  const secureStore = path.join(botState, "lark-home", "Library", "Application Support", "lark-cli");
+  const otherSecureStore = "/app/state/bots/other/lark-home/Library/Application Support/lark-cli";
+  const filesystem = buildSandboxFilesystem(config, bot, "/app/workspace/bots/default/sessions/current", botState, [], {
+    stateRoot: "/app/state",
+    workspaceRoot: "/app/workspace",
+    skillsRoot: "/app/workspace/skills"
+  });
+
+  assert.ok(secureStore.startsWith(botState));
+  assert.ok(filesystem.allowRead.includes(botState));
+  assert.ok(filesystem.allowWrite.includes(botState));
+  assert.ok(filesystem.denyRead.some((item) => otherSecureStore.startsWith(item)));
+  assert.ok(filesystem.denyWrite.some((item) => otherSecureStore.startsWith(item)));
 });

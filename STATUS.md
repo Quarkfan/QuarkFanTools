@@ -4,16 +4,17 @@
 
 ## 当前基线
 
-- 产品版本：`2.0.2`
+- 产品版本：`2.0.3`
 - Git 分支：`codex/2.0.0-stabilize`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：2.0.2 已补充飞书 Bot 可用范围诊断提示，并继续围绕真实 IM 端到端、诊断和发布签名收口
+- 当前阶段：2.0.3 已同步 1.6.16 多飞书 Bot 共享事件入口、Bot 专属 lark-cli HOME、启动可见日志和旧凭据 marker 迁移修复，并继续围绕真实 IM 端到端、诊断和发布签名收口
 
 ## 已实现
 
-- 多飞书机器人配置、独立监听和权限隔离。
+- 多飞书机器人配置、独立启停和权限隔离。
+- 飞书 Provider 在同一应用进程内使用共享事件入口，避免多个 `lark-cli event +subscribe` WebSocket 订阅被服务端分流；事件进入 Runtime 后按 mention 目标路由到唯一目标 Bot。
 - 飞书 Bot 启动时会调用 bot info 确认实际 `open_id` 和应用名；多飞书 Bot 群聊艾特消息按 mention 目标值路由到目标机器人，`mentions.id.open_id` 只作为正向命中信号，不作为排他条件。
 - 多飞书 Bot 同时运行时，群聊消息如果缺少可判定的 mention 元数据，会记录诊断并忽略，避免多个机器人同时回复。
 - 每个注册机器人可独立启停监听，并可查看和筛选其独立日志。
@@ -37,7 +38,7 @@
 - lark-cli 配置会校验并自动初始化，同时为 Claude sandbox 自动准备本地密钥文件。
 - Agent 使用用户态查找、读取和导出飞书文档，macOS sandbox 允许 trustd 完成 lark-cli 代理 TLS 校验。
 - Agent sandbox 允许当前 Bot 的 lark-cli 状态与锁文件目录读写，同时继续拒绝其他 Bot 的状态和 workspace。
-- Agent sandbox 允许官方 lark-cli 全局安全存储目录读写，已完成用户态 OAuth 后可在 sandbox 内读取加密凭据；用户态授权统一从应用配置页发起。
+- Agent sandbox 只允许当前 Bot 状态目录下的 lark-cli 配置、安全存储和降级密钥；所有 lark-cli 子进程设置当前 Bot 专属 HOME。用户态授权统一从应用配置页发起，升级到 `2.0.3` 后需要按 Bot 重新完成 OAuth。
 - Bot 可配置用户态 OAuth 额外权限列表，发起授权时与默认文档搜索权限合并。
 - 用户态 OAuth 完成日志改为摘要，并明确提示 OAuth 只授权资料读取用户，不会开放飞书 Bot 给其他群成员；群成员权限由飞书开放平台应用发布状态和可用范围控制。
 - moje-qa-assistant 在本地知识不足时继续搜索飞书，并对 Office 文件使用预览、导出和多模态分析。
@@ -55,6 +56,8 @@
 - 存储管理将会话数据和应用级文件缓存分开统计与清理。
 - 存储管理会话详情展示结构化消息明细、Claude session 和 workspace 文件清单，并兼容旧会话记录。
 - 运行台日志默认记录 Agent 可观察工作过程，飞书进度消息仍由 Bot 配置控制。
+- 运行台点击启动会立即记录本地启动日志；主进程记录启动请求和飞书身份确认阶段，lark-cli 配置校验、初始化和密钥降级短命令有 30 秒超时，避免启动卡住时无反馈。
+- lark-cli 凭据 marker 加入 per-Bot HOME 版本，升级后会重新初始化 Bot 态配置，避免旧全局或旧 HOME 状态导致 `invalid_client`。
 - Bot 支持长任务自动提示：超过配置秒数仍未完成时先回复一次配置文案，最终结果仍正常回复。
 - 会话明细会按轮次记录接收消息、资源准备、Agent 可观察工作过程、长任务自动提示、最终回复和错误事件。
 - 多 IM Provider 底座已接入：Bot 可选择飞书或企业微信作为消息平台；飞书知识连接器和结果投递路由与消息入口分离，支持企业微信接收、飞书资料检索、结果复制投递到飞书的结构。
@@ -109,6 +112,7 @@
 
 ## 最近验证
 
+- 2026-06-20：`v2.0.3` 已同步 `v1.6.16` 修复并完成封版验证：`npm test` 通过，70 项测试全部通过；`npm run pack:mac` 已生成 arm64 与 x64 双平台安装包。产物版本均为 `2.0.3`，arm64/x64 主程序架构正确，内置 lark-cli 与 wecom-cli 为 universal binary，Claude runtime 分别为 arm64/x86_64。归档产物位于 `release/v2.0.3/`。
 - 2026-06-19：`npm run pack:mac` 通过，`v2.0.2` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `2.0.2`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli/wecom-cli 均为 universal。
 - 2026-06-19：`npm test` 通过，67 个测试全部通过；新增飞书用户态 OAuth 摘要日志和 Bot 可用范围排障提示。
 - 2026-06-19：`npm run pack:mac` 通过，`v2.0.1` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `2.0.1`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli/wecom-cli 均为 universal。
