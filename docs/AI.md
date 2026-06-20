@@ -6,7 +6,7 @@
 
 QuarkfanTools 是一个自包含的 macOS 飞书 Skill Agent。用户配置兼容 Claude Messages API 的模型和一个或多个飞书机器人；应用通过内置 `lark-cli` 监听消息，使用 Claude Agent SDK 在机器人隔离的会话 workspace 中匹配和执行获授权 Skills，再通过飞书回复。
 
-当前版本 `1.6.12`。当前状态、风险和下一步见 [`../STATUS.md`](../STATUS.md)。
+当前版本 `1.6.14`。当前状态、风险和下一步见 [`../STATUS.md`](../STATUS.md)。
 
 ## 文档地图
 

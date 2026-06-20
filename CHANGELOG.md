@@ -6,6 +6,18 @@
 
 ## Unreleased
 
+## v1.6.14 - 2026-06-20
+
+- 修复飞书用户态 OAuth 和 lark-cli 降级密钥仍落在 macOS 用户全局目录的问题。
+- 所有主进程和 Agent 内的 lark-cli 调用都会设置当前 Bot 专属 `HOME`，使 OAuth token、`master.key.file` 和加密凭据进入 `state/bots/<bot-id>/lark-home/Library/Application Support/lark-cli/`。
+- Claude sandbox 不再放行真实用户全局 `~/Library/Application Support/lark-cli/`，只通过当前 Bot 状态目录访问自己的 lark-cli 配置、缓存、锁和安全存储；升级后各 Bot 需要在配置页重新完成用户态 OAuth。
+
+## v1.6.13 - 2026-06-20
+
+- 修复多个飞书 Bot 同时运行时，多个 `lark-cli event +subscribe` 长连接可能导致事件被飞书服务端分流，出现“最后启动的 Bot 正常，较早启动的 Bot 只能收到部分用户消息”的问题。
+- 飞书监听改为应用内共享事件入口：本机只保留一个飞书 WebSocket 订阅进程，收到事件后由 Runtime 按 mention 目标路由到唯一目标 Bot；回复、表情、附件下载和 Agent 执行仍使用目标 Bot 自己的凭据、状态和 workspace。
+- 运行台新增共享事件入口相关日志，跨连接投递的消息会记录入口 Bot 到目标 Bot 的路由结果，便于继续排查真实飞书现场。
+
 ## v1.6.12 - 2026-06-20
 
 - 修复旧版单 Bot 配置迁移后，某个 Bot 的隔离 lark-cli 配置中可能同时保留未命名 app 和 `qft-...` 命名 profile 的问题。

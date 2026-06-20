@@ -3,7 +3,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { QuarkfanToolsRuntime } from "./runtime.js";
 import { saveConfig } from "./config.js";
-import { migrateLegacyData, stateRoot } from "./paths.js";
+import { botLarkCliSupportRoot, botLarkHomeRoot, migrateLegacyData, stateRoot } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
 import { importSkillFolder, removeLocalSkill, skillPreview } from "./skills.js";
 import { syncSkillMarket } from "./skill-market.js";
@@ -208,6 +208,8 @@ async function diagnosticLogText(): Promise<string> {
       name: bot.name,
       stateRoot: botRoot,
       larkConfigDir: path.join(botRoot, "lark-cli"),
+      larkHome: botLarkHomeRoot(bot.id),
+      larkSecureStore: botLarkCliSupportRoot(bot.id),
       subscriberPid: (await readFile(pidPath, "utf8").catch(() => "")).trim() || null,
       larkLogs: await recentFilesText(path.join(botRoot, "lark-cli", "logs"), 10, 120)
     };

@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeLarkEvent } from "../lark-event.js";
 import { messageTargetsBot } from "../message-target.js";
+import { selectLarkMessageTarget } from "../lark-message-router.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "../lark-commands.js";
 import { normalizeLarkConfigProfilesContent } from "../lark-config-profiles.js";
-import type { BotConfig } from "../types.js";
+import type { BotConfig, LarkBotIdentity } from "../types.js";
 
 const bot: BotConfig = {
   id: "mentor",
@@ -223,6 +224,39 @@ test("routes mentioned group messages by bot name when mention open id differs f
   assert.ok(message);
   assert.equal(messageTargetsBot(mentorBot, message, { openId: "ou_bot_info_mentor", appName: "牛马的人生导师" }, true), true);
   assert.equal(messageTargetsBot(workBot, message, { openId: "ou_bot_info_work", appName: "牛马的工作助手" }, true), false);
+});
+
+test("shared ingress routes a cross-delivered mention to the mentioned bot", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1", app_id: "cli_work_assistant" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_shared_ingress",
+        chat_id: "oc_1",
+        chat_type: "group",
+        mentions: [{
+          key: "@_user_1",
+          id: { open_id: "ou_mention_subject", union_id: "on_mention_subject" },
+          name: "牛马的人生导师"
+        }],
+        content: JSON.stringify({ text: "魔介的店都哪里有" })
+      }
+    }
+  });
+  const mentorBot: BotConfig = { ...bot, id: "default", name: "人生导师", appId: "cli_mentor" };
+  const workBot: BotConfig = { ...bot, id: "work", name: "工作助手", appId: "cli_work_assistant" };
+  const identities = new Map<string, LarkBotIdentity>([
+    ["default", { openId: "ou_bot_info_mentor", appName: "牛马的人生导师" }],
+    ["work", { openId: "ou_bot_info_work", appName: "牛马的工作助手" }]
+  ]);
+
+  assert.ok(message);
+  const route = selectLarkMessageTarget([mentorBot, workBot], message, identities, true);
+  assert.equal(route.bot?.id, "default");
+  assert.equal(route.reason, "mention-match");
+  assert.equal(route.ignored.length, 1);
+  assert.equal(route.ignored[0].bot.id, "work");
 });
 
 test("does not route ambiguous group messages in strict multi-bot mode", () => {

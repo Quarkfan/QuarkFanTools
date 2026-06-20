@@ -1,19 +1,20 @@
 # 当前状态
 
-最后更新：2026-06-19
+最后更新：2026-06-20
 
 ## 当前基线
 
-- 产品版本：`1.6.12`
+- 产品版本：`1.6.14`
 - Git 分支：`codex/v1.6.7-multi-bot-mention-filter`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时监听后的 profile 状态干扰，核心功能可用，正在完善交付质量与持续演进能力
+- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流与 OAuth 存储隔离问题，核心功能可用，正在进行打包交付验证
 
 ## 已实现
 
 - 多飞书机器人配置、独立监听和权限隔离。
+- 同一应用进程内飞书事件监听使用共享入口，避免多个 `lark-cli event +subscribe` WebSocket 订阅被服务端分流；事件进入 Runtime 后按 mention 目标路由到唯一目标 Bot。
 - 同一飞书 App ID 同一时间只能启动一个本地 Bot，避免同一飞书机器人事件被多个本地 Bot 同时处理。
 - 机器人启动时会调用飞书 bot info 确认实际 `open_id` 和应用名；群聊艾特消息按 mention 目标值路由到目标机器人，`mentions.id.open_id` 只作为正向命中信号，不作为排他条件。
 - 多 Bot 同时运行时，群聊消息如果缺少可判定的 mention 元数据，会记录诊断并忽略，避免多个机器人同时回复。
@@ -39,7 +40,7 @@
 - lark-cli 配置会校验并自动初始化，同时为 Claude sandbox 自动准备本地密钥文件。
 - Agent 使用用户态查找、读取和导出飞书文档，macOS sandbox 允许 trustd 完成 lark-cli 代理 TLS 校验。
 - Agent sandbox 允许当前 Bot 的 lark-cli 状态与锁文件目录读写，同时继续拒绝其他 Bot 的状态和 workspace。
-- Agent sandbox 允许官方 lark-cli 全局安全存储目录读写，已完成用户态 OAuth 后可在 sandbox 内读取加密凭据；用户态授权统一从应用配置页发起。
+- Agent sandbox 只允许当前 Bot 状态目录下的 lark-cli 配置、安全存储和降级密钥；用户态授权统一从应用配置页发起，升级到 `1.6.14` 后需要按 Bot 重新完成 OAuth。
 - Bot 可配置用户态 OAuth 额外权限列表，发起授权时与默认文档搜索权限合并。
 - 用户态 OAuth 完成日志改为摘要，并明确提示 OAuth 只授权资料读取用户，不会开放飞书 Bot 给其他群成员；群成员权限由飞书开放平台应用发布状态和可用范围控制。
 - Bot 启动前会规范化自身隔离 lark-cli 配置，只保留当前 App ID 对应的命名 profile，避免旧版单 Bot 配置迁移残留的未命名 app 增加多 Bot 监听时的 profile 解析歧义。
@@ -79,6 +80,9 @@
 
 ## 最近验证
 
+- 2026-06-20：`npm run pack:mac` 通过，`v1.6.14` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.14`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
+- 2026-06-20：`npm test` 通过，39 个测试全部通过；新增 lark-cli per-bot HOME 环境覆盖，并确认 Claude sandbox 不再放行真实用户全局 lark-cli 安全目录。
+- 2026-06-20：`npm test` 通过，38 个测试全部通过；新增共享飞书事件入口路由覆盖，确认一个 Bot 连接收到另一个 Bot 的 mention 消息时会路由到被艾特 Bot。
 - 2026-06-20：`npm run pack:mac` 通过，`v1.6.12` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.12`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal。
 - 2026-06-20：`npm test` 通过，37 个测试全部通过；新增 lark-cli profile 去重覆盖，旧版单 Bot 迁移残留未命名 app 时会规范化为当前 Bot 的命名 profile。
 - 2026-06-20：`npm run pack:mac` 通过，`v1.6.11` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.11`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal。

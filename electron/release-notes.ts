@@ -2,6 +2,24 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.14",
+    date: "2026-06-20",
+    highlights: [
+      "飞书用户态 OAuth 和 lark-cli 本地密钥改为按 Bot 隔离存储，不再复用 macOS 用户全局 lark-cli 目录。",
+      "Claude sandbox 只允许当前 Bot 的 lark-cli 安全存储，避免多个 Bot 的用户态授权互相影响。",
+      "升级后请在每个需要读取飞书资料的 Bot 配置页重新完成一次用户态 OAuth。"
+    ]
+  },
+  {
+    version: "1.6.13",
+    date: "2026-06-20",
+    highlights: [
+      "修复多飞书 Bot 同时运行时，较早启动的 Bot 可能只能收到部分用户消息的问题。",
+      "飞书事件监听改为共享入口，收到事件后由应用按被艾特 Bot 路由，避免多个 WebSocket 订阅互相分流。",
+      "回复、处理中表情、附件下载和 Agent 会话仍使用目标 Bot 自己的凭据和隔离目录。"
+    ]
+  },
+  {
     version: "1.6.12",
     date: "2026-06-20",
     highlights: [

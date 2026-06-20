@@ -80,6 +80,7 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 
 ### 多 Bot 群聊艾特路由异常
 
+- QuarkfanTools 现在在同一应用进程内只保持一个飞书事件共享入口。官方 `lark-cli event +subscribe --force` 帮助提示多个订阅会被服务端随机拆分事件；现场也确认一个 Bot 的连接可能收到另一个 Bot 被 @ 的消息。因此运行台看到“飞书共享事件入口已连接”是预期行为，后续回复、表情、附件下载和 Agent 执行仍按被路由到的目标 Bot 使用隔离凭据。
 - 配置里的 `cli_...` 是飞书开放平台应用 App ID，用于初始化对应 Bot 的 lark-cli profile。
 - Bot 启动前会规范化自己的隔离 `lark-cli/config.json`，只保留当前 App ID 对应的 `qft-...` 命名 profile。旧版单 Bot 迁移残留的未命名 app 会被合并，避免多 Bot 同时监听时 profile 解析出现歧义。
 - 运行时会记录 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 和应用名。群聊消息有 `message.mentions` 时，应用会先用 mention 目标里的名称、App ID、应用名和 open_id 等值匹配当前 Bot；`mentions[].id.open_id` 只作为命中信号，不作为排他条件，因为现场事件中它可能不同于 bot info 的 `bot.open_id`。
@@ -98,6 +99,7 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 ### 用户态 OAuth 失败
 
 - 应用应使用推荐权限发起 OAuth。
+- `1.6.14` 起，用户态 OAuth 存在每个 Bot 专属 HOME 下，不再读取旧的 macOS 用户全局 lark-cli 授权。升级后需要在每个需要读取飞书资料的 Bot 配置页重新点击用户态授权。
 - 应用会额外申请 `search:docs:read`，用于用户态搜索飞书文档和云 PPT；旧授权需要重新点击用户态授权以补充该权限。
 - 如需导出或预览云文档、云 PPT，可在 Bot 配置的“用户态 OAuth 额外权限”中填写额外 scope，例如 `drive:export:readonly`、`docs:document:export`。多个 scope 支持空格、逗号或换行分隔，保存后需要重新点击用户态 OAuth。
 - 额外 scope 只影响用户态授权请求；对应权限仍必须先在飞书开放平台为该应用开通，否则授权或调用仍会失败。
@@ -110,7 +112,7 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 - 文档搜索报 `missing required scope(s): search:docs:read` 时，重新点击用户态授权。
 - 导出或下载报 `missing required scope(s)` 时，把错误里列出的 scope 加入该 Bot 的“用户态 OAuth 额外权限”，确认飞书开放平台已开通后保存配置并重新授权。
 - 如果回复提到 `lark-cli/locks/` 无法写入，说明旧版本 sandbox 误拦截了当前 Bot 的飞书 CLI 状态目录；升级到包含精确 Bot 目录隔离的版本。
-- 如果回复提到 `~/Library/Application Support/lark-cli/`、`master.key.file`、授权令牌或全局配置文件被 sandbox 阻止，说明旧版本没有放行官方 lark-cli 的全局安全存储目录；升级到 `1.6.4` 或更高版本，并在应用配置页重新确认用户态 OAuth。
+- 如果回复提到 `master.key.file`、授权令牌或 lark-cli 安全存储被 sandbox 阻止，确认正在运行 `1.6.14` 或更高版本，并在对应 Bot 配置页重新完成用户态 OAuth；新版本只应访问 `state/bots/<bot-id>/lark-home/Library/Application Support/lark-cli/`。
 - macOS sandbox 内的 lark-cli 通过受控网络代理访问飞书；应用允许系统 trustd 完成 TLS 校验。若仍出现 `x509: OSStatus -26276`，确认正在运行包含该修复的新版本。
 - 飞书云 PPT 属于 slides 文档，需要先用户态搜索，再使用 `drive +export --file-extension pptx` 导出；普通飞书文件才使用 `drive +download`。
 

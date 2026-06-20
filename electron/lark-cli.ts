@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { projectRoot, stateRoot } from "./paths.js";
+import { botLarkHomeRoot, projectRoot, stateRoot } from "./paths.js";
 import type { BotConfig, LarkBotIdentity, LarkMessage, LarkMessageResource } from "./types.js";
 import { normalizeLarkEvent } from "./lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "./lark-commands.js";
@@ -21,7 +21,9 @@ function bundledLarkBinary(): string {
 
 export function larkRuntimeEnvironment(bot: BotConfig): NodeJS.ProcessEnv {
   const binaryDir = path.dirname(bot.cliPath || bundledLarkBinary());
+  const botHome = botLarkHomeRoot(bot.id);
   return {
+    HOME: botHome,
     LARKSUITE_CLI_CONFIG_DIR: path.join(botStateRoot(bot), "lark-cli"),
     LARKSUITE_CLI_LOG_DIR: path.join(botStateRoot(bot), "lark-cli", "logs"),
     LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
@@ -54,7 +56,10 @@ function larkEnv(bot: BotConfig): NodeJS.ProcessEnv {
 
 export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   const dir = path.join(botStateRoot(bot), "lark-cli");
-  await mkdir(dir, { recursive: true });
+  await Promise.all([
+    mkdir(dir, { recursive: true }),
+    mkdir(botLarkHomeRoot(bot.id), { recursive: true })
+  ]);
   if (!bot.appId) return;
   const markerPath = path.join(dir, ".quarkfantools-credential");
   const marker = createHash("sha256").update(`${bot.appId}:${effectiveProfile(bot)}:${bot.appSecret}`).digest("hex");
