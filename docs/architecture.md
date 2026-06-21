@@ -101,14 +101,26 @@ lark-cli 凭据 marker 只用于避免重复初始化；应用进程首次使用
 
 事件监听、消息回复和表情操作分别使用机器人配置的接收与回复身份。Agent 查找和读取飞书文档、Wiki、云盘与云 PPT 时固定使用已 OAuth 授权的用户态；云 PPT 使用 `drive +export` 导出为 PPTX，而不是按普通文件下载。用户态 OAuth 默认申请文档搜索权限，并按 Bot 合并用户配置的额外 scope。macOS Claude sandbox 使用网络代理限制外部访问，同时允许访问系统 trustd，使 Go 编写的 lark-cli 能校验代理 TLS 证书。文件隔离按 Bot 目录精确拒绝其他 Bot，而不是拒绝整个 `state/bots` 后再回放行当前 Bot，避免 lark-cli 锁文件、安全存储和降级密钥写入被拦截。
 
-## 6. Office 与多模态
+## 6. 自动化与定时任务
+
+定时任务是 Bot worker 内能力，不由主进程直接执行。主进程负责 GUI、IPC、配置文件读写和通知运行中的 worker 重新加载；worker 内的 `BotScheduler` 负责按当前 Bot 的任务文件触发执行。
+
+```text
+state/bots/<bot-id>/scheduled-tasks.json
+```
+
+首版任务支持 `interval` 和 `once` 触发，目标仅支持 `prompt`，输出仅写运行台日志。触发后 Runtime 使用会话键 `scheduled:<task-id>` 调用 `runClaude()`，复用当前 Bot 的 Skill 授权、物化 Skill 副本、Claude home、session store、sandbox 和 `TaskLimiter`。它不伪造飞书消息，不添加处理中表情，也不会主动向飞书发送消息。
+
+任务状态写回 `scheduled-tasks.json`，包括 `lastRunAt`、`nextRunAt`、`lastStatus` 和 `lastError`。一次性任务执行后会自动停用；间隔任务按完成时间计算下一次运行。
+
+## 7. Office 与多模态
 
 - `.docx`、`.pptx`、`.xlsx` 使用内置 ZIP/XML 解析器提取为 `content.txt`。
 - 单文件最多 5,000 个压缩条目，解压后总体积最多 200 MB。
 - PowerPoint 在多模态开启时调用 macOS `/usr/bin/qlmanage` 生成视觉预览。
 - 飞书图片消息下载后编码为模型可接收的多模态内容。
 
-## 7. 数据目录
+## 8. 数据目录
 
 打包应用根目录为 `~/Library/Application Support/quarkfantools/`：
 
@@ -123,6 +135,7 @@ state/
     ├── claude-home/
     │   └── skills/
     ├── deferred-tasks.json
+    ├── scheduled-tasks.json
     └── sessions.json
 workspace/
 ├── skills/
@@ -137,7 +150,7 @@ workspace/
 
 用户可见工作过程仅从 SDK 的工具调用和重试事件生成，并限频发送。模型的 thinking block、隐藏推理和原始工具参数不向用户输出。
 
-## 8. 关键依赖
+## 9. 关键依赖
 
 - `@anthropic-ai/claude-agent-sdk`：Agent 运行内核
 - `@larksuite/cli`：飞书事件与 API 工具

@@ -6,6 +6,12 @@
 
 ## Unreleased
 
+## v1.8.1 - 2026-06-21
+
+- 新增 Bot 维度定时任务首版能力：每个 Bot 使用自己的 `state/bots/<bot-id>/scheduled-tasks.json` 保存任务，并由对应 Bot worker 内的 Scheduler 执行。
+- 首版支持 interval 和 once 触发、prompt 类型目标、运行台日志输出、超时限制、错过策略和并发策略配置；暂不主动发送飞书消息。
+- 自动化页支持按 Bot 查看、新增、编辑、启停、删除和手动运行定时任务；任务执行复用当前 Bot 的 Skill 授权、物化副本、Claude home、会话和并发限制。
+
 ## v1.8.0 - 2026-06-21
 
 - Agent 运行前不再通过 symlink 读取授权 Skill，而是把授权 Skill 复制物化到当前 Bot 的 Claude home 和当前会话 workspace；sandbox 拒绝原始 local、market、builtin Skill 根目录，降低客户机器上 symlink 或安装包路径差异导致的 Skill 读取失败。

@@ -3,7 +3,9 @@ import { QuarkfanToolsRuntime } from "./runtime.js";
 type ParentCommand =
   | { type: "start"; botId: string }
   | { type: "stop" }
-  | { type: "snapshot" };
+  | { type: "snapshot" }
+  | { type: "reload-scheduled-tasks"; botId: string }
+  | { type: "run-scheduled-task"; botId: string; taskId: string };
 
 const runtime = new QuarkfanToolsRuntime();
 let started = false;
@@ -37,6 +39,12 @@ process.on("message", (message: ParentCommand) => {
       await stop();
       process.exit(0);
     } else if (message.type === "snapshot") {
+      send("snapshot", runtime.snapshot());
+    } else if (message.type === "reload-scheduled-tasks") {
+      await runtime.reloadScheduledTasks(message.botId);
+      send("snapshot", runtime.snapshot());
+    } else if (message.type === "run-scheduled-task") {
+      await runtime.runScheduledTaskNow(message.botId, message.taskId);
       send("snapshot", runtime.snapshot());
     }
   })().catch((error) => {

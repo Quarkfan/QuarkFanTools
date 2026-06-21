@@ -1,4 +1,4 @@
-import type { AppConfig, AppInfo, DockerCapability, LogEntry, RuntimeSnapshot, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
+import type { AppConfig, AppInfo, DockerCapability, LogEntry, RuntimeSnapshot, ScheduledTask, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
 
 declare global {
   interface Window {
@@ -11,6 +11,10 @@ declare global {
       storageStats(): Promise<StorageStats>;
       storageSessionDetail(id: string): Promise<StorageSessionDetail>;
       skillPreview(name: string): Promise<SkillPreview>;
+      scheduledTasks(botId: string): Promise<ScheduledTask[]>;
+      newScheduledTask(botId: string): Promise<ScheduledTask[]>;
+      saveScheduledTasks(botId: string, tasks: ScheduledTask[]): Promise<ScheduledTask[]>;
+      runScheduledTaskNow(botId: string, taskId: string): Promise<ScheduledTask[]>;
       clearExpiredStorage(): Promise<StorageStats>;
       clearSelectedStorage(ids: string[]): Promise<StorageStats>;
       clearAllSessionStorage(): Promise<StorageStats>;

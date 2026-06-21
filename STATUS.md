@@ -4,12 +4,12 @@
 
 ## 当前基线
 
-- 产品版本：`1.8.0`
+- 产品版本：`1.8.1`
 - Git 分支：`codex/v1.8.0-runtime-governance`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.8.x 在不重写现有消息主链路的前提下加固运行治理：授权 Skill 运行时复制物化、防休眠配置、系统唤醒后重建 Bot worker、以及 worker 启动和飞书监听 ready 状态区分。
+- 当前阶段：1.8.x 在不重写现有消息主链路的前提下补齐 Bot 维度自动化首版：worker 内 Scheduler、间隔/一次性触发、prompt 任务、运行台日志输出和自动化页管理。
 
 ## 已实现
 
@@ -66,6 +66,7 @@
 - `v1.8.0` 起，授权 Skill 在 Agent 执行前复制物化到当前 Bot 和当前会话的受管目录，Agent 不再依赖 symlink 读取原始 Skill 目录。
 - `v1.8.0` 起，配置新增 `runtime.preventSleepMode`，可在 Bot 监听或任务执行时阻止系统自动休眠；系统唤醒后会重建正在运行的 Bot worker。
 - 运行台区分 worker 已启动和飞书监听已连接，诊断日志包含 ready Bot 与 powerSaveBlocker 状态。
+- `v1.8.1` 起，支持 Bot 维度定时任务首版能力：任务保存在 `state/bots/<bot-id>/scheduled-tasks.json`，由对应 Bot worker 内 Scheduler 执行，首版支持 interval、once 和 prompt 目标，输出到运行台日志。
 - arm64 与 x64 独立安装包构建。
 
 ## 已知限制与风险
@@ -76,18 +77,19 @@
 - Agent 使用 `bypassPermissions`，安全主要依赖 Claude sandbox、目录隔离和 Skill 授权边界。
 - PowerPoint 视觉预览依赖 macOS 自带 Quick Look；预览质量受系统支持影响。
 - 自动化测试目前集中在配置迁移、飞书事件解析、Office 提取和会话键，端到端飞书与 UI 覆盖仍有限。
-- 延后任务目前支持用户确认后立即进入队列，不支持 cron 或任意指定时间调度；Bot 维度定时任务已确定采用 worker 内 Scheduler 方案，尚未实现执行器与 UI。
+- 定时任务首版暂不支持 cron 和主动发送飞书消息；输出目标仍只写运行台日志。
 
 ## 后续优先事项
 
 1. 增加真实飞书事件、机器人隔离和会话清理的集成测试。
-2. 实现 Bot 维度定时任务执行器：worker 内 Scheduler、任务配置、missed policy、输出目标和 UI。
+2. 为定时任务补充 cron、飞书输出目标、任务会话重置和更细粒度 missed policy。
 3. 补充签名、公证和发布自动化。
 4. 评估会话过期时间、磁盘配额和物化 Skill 缓存清理的用户配置能力。
 5. 增强 Skill 市场来源校验、版本展示和更新可见性。
 
 ## 最近验证
 
+- 2026-06-21：`v1.8.1` 完成 Bot 维度定时任务首版：新增 `scheduled-tasks.json`、worker 内 `BotScheduler`、自动化页和手动运行 IPC。`npm test` 通过，50 项测试全部通过；`npm run pack:mac` 通过，已生成并核对 `v1.8.1` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.8.1`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；arm64/x64 `app.asar` 已确认包含 `scheduled-tasks.js`、`runtime.js` 和 UI 资源。
 - 2026-06-21：`v1.8.0` 完成运行治理第一轮加固：授权 Skill 复制物化、防休眠配置、系统唤醒后重建 Bot worker、运行台 ready 状态区分和相关诊断字段。`npm test` 通过，46 项测试全部通过；编译后的 `dist-electron/bot-worker.js` 已通过模块加载烟测。`npm run pack:mac` 的 arm64 阶段通过；x64 阶段在沙箱内因 `github.com` DNS 失败无法获取 Electron distribution，改用外部网络权限执行 x64 builder 后通过。已生成并核对 `v1.8.0` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.8.0`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
 - 2026-06-21：`v1.7.0` 已完成第一轮 Bot worker 进程隔离重构：主进程改为 Supervisor，每个 Bot 由独立 worker 承载监听、消息处理、Agent、会话和去重；新增 worker PID 诊断、Docker 能力检测和隔离模式配置，并把 worker 与 lark-cli 的临时目录隔离到当前 Bot 状态目录。`npm test` 通过，43 项测试全部通过；编译后的 `dist-electron/bot-worker.js` 已通过模块加载烟测。`npm run pack:mac` 通过，已生成并核对 `v1.7.0` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.7.0`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
 - 2026-06-21：审查发现 `v1.6.19` 的“无消息健康重启”不适合 7x24 低频群聊场景，已在 `v1.6.20` 调整为约 6 小时加随机抖动的定期续连，不再根据业务消息空闲时间判断连接故障。`npm test` 通过，41 项测试全部通过；`npm run pack:mac` 通过，`v1.6.20` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.20`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认使用 `STREAM_RENEW_INTERVAL_MS` 定期续连代码，不包含旧的 `STREAM_SILENT_RESTART_MS` 无消息重启策略。归档产物位于 `release/v1.6.20/`。

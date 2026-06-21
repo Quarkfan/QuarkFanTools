@@ -11,7 +11,8 @@ import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorag
 import { appInfo } from "./release-notes.js";
 import { maskAppId } from "./bot-identity.js";
 import { detectDocker } from "./docker.js";
-import type { AppConfig } from "./types.js";
+import { loadScheduledTasks, newScheduledTask, saveScheduledTasks } from "./scheduled-tasks.js";
+import type { AppConfig, ScheduledTask } from "./types.js";
 
 const runtime = new QuarkfanToolsSupervisor();
 let mainWindow: BrowserWindow | null = null;
@@ -128,6 +129,29 @@ ipcMain.handle("app:info", () => appInfo(app.getVersion()));
 ipcMain.handle("storage:stats", () => storageStats());
 ipcMain.handle("storage:session-detail", (_event, id: string) => storageSessionDetail(id));
 ipcMain.handle("skills:preview", (_event, name: string) => skillPreview(name));
+ipcMain.handle("scheduled:list", async (_event, botId: string) => {
+  const bot = botById(botId);
+  return loadScheduledTasks(bot);
+});
+ipcMain.handle("scheduled:new", async (_event, botId: string) => {
+  const bot = botById(botId);
+  const tasks = await loadScheduledTasks(bot);
+  const created = newScheduledTask();
+  await saveScheduledTasks(bot, [...tasks, created]);
+  await runtime.reloadScheduledTasks(bot.id);
+  return loadScheduledTasks(bot);
+});
+ipcMain.handle("scheduled:save", async (_event, botId: string, tasks: ScheduledTask[]) => {
+  const bot = botById(botId);
+  const saved = await saveScheduledTasks(bot, tasks);
+  await runtime.reloadScheduledTasks(bot.id);
+  return saved;
+});
+ipcMain.handle("scheduled:run-now", async (_event, botId: string, taskId: string) => {
+  const bot = botById(botId);
+  await runtime.runScheduledTaskNow(bot.id, taskId);
+  return loadScheduledTasks(bot);
+});
 ipcMain.handle("storage:clear-expired", async () => {
   await runtime.stop();
   const removed = await clearExpiredStorage();
@@ -135,6 +159,12 @@ ipcMain.handle("storage:clear-expired", async () => {
   await runtime.logger.write("success", "已清理过期会话存储", `${removed} 个会话`);
   return storageStats();
 });
+
+function botById(botId: string) {
+  const bot = runtime.snapshot().config.bots.find((item) => item.id === botId);
+  if (!bot) throw new Error("机器人不存在");
+  return bot;
+}
 ipcMain.handle("storage:clear-selected", async (_event, ids: string[]) => {
   await runtime.stop();
   const removed = await clearSelectedSessionStorage(ids);

@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.8.1",
+    date: "2026-06-21",
+    highlights: [
+      "新增 Bot 维度定时任务首版能力，每个 Bot 的任务由自己的 worker 执行。",
+      "自动化页支持按 Bot 新增、编辑、启停和手动运行定时任务。",
+      "首版定时任务输出到运行台日志，复用当前 Bot 的 Skill 授权、会话和并发限制。"
+    ]
+  },
+  {
     version: "1.8.0",
     date: "2026-06-21",
     highlights: [

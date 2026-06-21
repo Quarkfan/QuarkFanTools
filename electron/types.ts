@@ -99,10 +99,41 @@ export interface RuntimeSnapshot {
   connectedBotIds: string[];
   workerPids?: Record<string, number>;
   readyBotIds?: string[];
+  scheduledTaskCount?: number;
   activeTasks: number;
   queuedTasks: number;
   skills: SkillSummary[];
   config: AppConfig;
+}
+
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: {
+    type: "interval" | "once";
+    intervalMinutes?: number;
+    runAt?: string;
+    timezone: string;
+  };
+  target: {
+    type: "prompt";
+    prompt: string;
+  };
+  output: {
+    mode: "none";
+  };
+  policy: {
+    timeoutSeconds: number;
+    missed: "skip" | "run-once";
+    concurrency: "skip-if-running" | "queue";
+  };
+  state: {
+    lastRunAt?: string;
+    nextRunAt?: string;
+    lastStatus?: "success" | "failed" | "skipped";
+    lastError?: string;
+  };
 }
 
 export interface DockerCapability {

@@ -18,7 +18,8 @@ import { cacheMessageResources } from "./file-cache.js";
 import { selectLarkMessageTarget } from "./lark-message-router.js";
 import { hasProcessedMessage, markProcessedMessage } from "./message-dedupe.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
-import type { AppConfig, BotConfig, LarkBotIdentity, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
+import { BotScheduler, loadScheduledTasks, nextRunAt, saveScheduledTasks } from "./scheduled-tasks.js";
+import type { AppConfig, BotConfig, LarkBotIdentity, LarkMessage, RuntimeSnapshot, ScheduledTask, SkillSummary } from "./types.js";
 
 const STREAM_RENEW_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const STREAM_RENEW_JITTER_MS = 10 * 60 * 1000;
@@ -35,6 +36,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private renewingBotIds = new Set<string>();
   private runningBotIds = new Set<string>();
   private botIdentities = new Map<string, LarkBotIdentity>();
+  private schedulers = new Map<string, BotScheduler>();
+  private scheduledTaskCounts = new Map<string, number>();
   private taskLimiter = new TaskLimiter();
   private config!: AppConfig;
   private skills: SkillSummary[] = [];
@@ -55,6 +58,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     }
     this.skills = await discoverSkills();
     await Promise.all(this.config.bots.flatMap((bot) => [this.loadProcessed(bot.id), this.sessionStore.load(bot)]));
+    await this.loadScheduledTaskCounts();
     this.emitSnapshot();
   }
 
@@ -97,9 +101,11 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     try {
       await this.loadProcessed(bot.id);
       await this.startBotStream(bot);
+      await this.startBotScheduler(bot);
     } catch (error) {
       this.runningBotIds.delete(bot.id);
       this.botIdentities.delete(bot.id);
+      this.stopBotScheduler(bot.id);
       await this.logger.write("error", "机器人启动失败", String(error), bot.id);
     }
     this.emitSnapshot();
@@ -113,6 +119,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.reconnectTimers.clear();
     for (const timer of this.streamRenewTimers.values()) clearTimeout(timer);
     this.streamRenewTimers.clear();
+    for (const scheduler of this.schedulers.values()) scheduler.stop();
+    this.schedulers.clear();
     this.renewingBotIds.clear();
     this.connectedBotIds.clear();
     this.botIdentities.clear();
@@ -132,6 +140,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.connectedBotIds.delete(botId);
     this.renewingBotIds.delete(botId);
     this.botIdentities.delete(botId);
+    this.stopBotScheduler(botId);
     const bot = this.config.bots.find((item) => item.id === botId);
     await this.logger.write("info", "机器人监听已停止", bot?.name, botId);
     this.emitSnapshot();
@@ -142,11 +151,29 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       running: this.runningBotIds.size > 0,
       runningBotIds: [...this.runningBotIds],
       connectedBotIds: [...this.connectedBotIds],
+      scheduledTaskCount: [...this.scheduledTaskCounts.values()].reduce((sum, count) => sum + count, 0),
       activeTasks: this.taskLimiter.active,
       queuedTasks: this.taskLimiter.queued,
       skills: this.skills,
       config: this.config
     };
+  }
+
+  async reloadScheduledTasks(botId: string): Promise<void> {
+    const bot = this.config.bots.find((item) => item.id === botId);
+    if (!bot) throw new Error("机器人不存在");
+    const tasks = await loadScheduledTasks(bot);
+    this.scheduledTaskCounts.set(bot.id, tasks.length);
+    const scheduler = this.schedulers.get(bot.id);
+    if (scheduler) scheduler.reload(tasks);
+    await this.logger.write("info", "已重新加载定时任务", `${tasks.length} 个`, bot.id);
+    this.emitSnapshot();
+  }
+
+  async runScheduledTaskNow(botId: string, taskId: string): Promise<void> {
+    const bot = this.config.bots.find((item) => item.id === botId);
+    if (!bot) throw new Error("机器人不存在");
+    await this.executeScheduledTask(bot, taskId, true);
   }
 
   private createBotStream(bot: BotConfig): LarkEventStream {
@@ -192,6 +219,28 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       this.connectedBotIds.delete(bot.id);
       throw error;
     }
+  }
+
+  private async loadScheduledTaskCounts(): Promise<void> {
+    await Promise.all(this.config.bots.map(async (bot) => {
+      this.scheduledTaskCounts.set(bot.id, (await loadScheduledTasks(bot)).length);
+    }));
+  }
+
+  private async startBotScheduler(bot: BotConfig): Promise<void> {
+    const tasks = await loadScheduledTasks(bot);
+    this.scheduledTaskCounts.set(bot.id, tasks.length);
+    const scheduler = new BotScheduler((taskId) => this.executeScheduledTask(bot, taskId, false));
+    scheduler.start(tasks);
+    this.schedulers.set(bot.id, scheduler);
+    await this.logger.write("info", "Bot 定时任务调度器已启动", `${tasks.filter((task) => task.enabled).length}/${tasks.length} 已启用`, bot.id);
+    this.emitSnapshot();
+  }
+
+  private stopBotScheduler(botId: string): void {
+    const scheduler = this.schedulers.get(botId);
+    if (scheduler) scheduler.stop();
+    this.schedulers.delete(botId);
   }
 
   private routeBotMessage(sourceBot: BotConfig, message: LarkMessage): void {
@@ -480,6 +529,81 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     }
   }
 
+  private async executeScheduledTask(bot: BotConfig, taskId: string, manual: boolean): Promise<void> {
+    const tasks = await loadScheduledTasks(bot);
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) throw new Error("定时任务不存在");
+    if (!task.enabled && !manual) return;
+    if (!task.target.prompt.trim()) {
+      await this.updateScheduledTaskState(bot, task, tasks, "skipped", "任务提示词为空");
+      await this.logger.write("warn", "已跳过定时任务", `${task.name} / 任务提示词为空`, bot.id);
+      return;
+    }
+    const release = await this.taskLimiter.acquire(this.config.runtime.maxConcurrentTasks);
+    const startedAt = Date.now();
+    await this.logger.write("info", manual ? "正在手动运行定时任务" : "正在运行定时任务", task.name, bot.id);
+    try {
+      const result = await withTimeout(this.runScheduledAgent(bot, task), task.policy.timeoutSeconds * 1000);
+      await this.updateScheduledTaskState(bot, task, tasks, "success");
+      await this.logger.write("success", "定时任务执行完成", `${task.name} / ${formatDelay(Date.now() - startedAt)} / ${result.response}`, bot.id);
+    } catch (error) {
+      await this.updateScheduledTaskState(bot, task, tasks, "failed", String(error));
+      await this.logger.write("error", "定时任务执行失败", `${task.name} / ${String(error)}`, bot.id);
+    } finally {
+      release();
+      this.emitSnapshot();
+    }
+  }
+
+  private async runScheduledAgent(bot: BotConfig, task: ScheduledTask): Promise<{ response: string; sessionId: string }> {
+    const allowed = new Set(bot.skillNames);
+    const botSkills = this.skills.filter((skill) => allowed.has(skill.name));
+    const key = `scheduled:${task.id}`;
+    const message: LarkMessage = {
+      eventId: `scheduled:${task.id}:${Date.now()}`,
+      messageId: `scheduled-${task.id}`,
+      chatId: `scheduled:${task.id}`,
+      chatType: "scheduled",
+      senderId: "scheduled-task",
+      messageType: "text",
+      text: task.target.prompt,
+      resources: [],
+      receivedAt: new Date().toISOString(),
+      raw: { scheduledTaskId: task.id }
+    };
+    const result = await runClaude(this.config, bot, message, botSkills, key, this.sessionStore.get(bot, key), (progress) => {
+      void this.logger.write("info", "定时任务 Agent 工作过程", `${task.name} / ${progress.text}`, bot.id);
+    });
+    if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId, message.messageId, {
+      user: task.target.prompt,
+      assistant: result.response
+    });
+    return result;
+  }
+
+  private async updateScheduledTaskState(
+    bot: BotConfig,
+    task: ScheduledTask,
+    tasks: ScheduledTask[],
+    status: "success" | "failed" | "skipped",
+    error?: string
+  ): Promise<void> {
+    const current = tasks.find((item) => item.id === task.id) ?? task;
+    current.state.lastRunAt = new Date().toISOString();
+    current.state.lastStatus = status;
+    current.state.lastError = error ? error.slice(0, 1000) : undefined;
+    if (current.trigger.type === "once") {
+      current.enabled = false;
+      current.state.nextRunAt = undefined;
+    } else {
+      current.state.nextRunAt = nextRunAt(current, new Date()).toISOString();
+    }
+    const saved = await saveScheduledTasks(bot, tasks);
+    this.scheduledTaskCounts.set(bot.id, saved.length);
+    const scheduler = this.schedulers.get(bot.id);
+    if (scheduler) scheduler.reload(saved);
+  }
+
   private addPendingReaction(bot: BotConfig, message: LarkMessage, startedAt: number): Promise<string> {
     return addMessageReaction(bot, message.messageId, bot.pendingReaction || "OnIt")
       .then(async (reactionId) => {
@@ -534,4 +658,18 @@ function eventDelayMs(message: LarkMessage): number | null {
 
 function formatDelay(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`定时任务超过 ${Math.round(timeoutMs / 1000)} 秒超时限制`)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

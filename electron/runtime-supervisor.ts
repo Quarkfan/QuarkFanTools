@@ -126,6 +126,19 @@ export class QuarkfanToolsSupervisor extends EventEmitter {
     }
   }
 
+  async reloadScheduledTasks(botId: string): Promise<void> {
+    const worker = this.workers.get(botId);
+    if (worker) worker.child.send({ type: "reload-scheduled-tasks", botId });
+    await this.logger.write("info", "已请求 Bot worker 重新加载定时任务", botId, botId);
+  }
+
+  async runScheduledTaskNow(botId: string, taskId: string): Promise<void> {
+    const worker = this.workers.get(botId);
+    if (!worker) throw new Error("机器人未启动，暂不能手动运行定时任务");
+    worker.child.send({ type: "run-scheduled-task", botId, taskId });
+    await this.logger.write("info", "已请求 Bot worker 手动运行定时任务", taskId, botId);
+  }
+
   snapshot(): RuntimeSnapshot {
     const workerSnapshots = [...this.workers.values()].map((worker) => worker.snapshot).filter((item): item is RuntimeSnapshot => Boolean(item));
     const runningBotIds = [...this.workers.keys()];
@@ -136,6 +149,7 @@ export class QuarkfanToolsSupervisor extends EventEmitter {
       runningBotIds,
       connectedBotIds,
       readyBotIds,
+      scheduledTaskCount: workerSnapshots.reduce((sum, snapshot) => sum + (snapshot.scheduledTaskCount ?? 0), 0),
       workerPids: Object.fromEntries([...this.workers.entries()]
         .map(([botId, worker]) => [botId, worker.child.pid])
         .filter((entry): entry is [string, number] => typeof entry[1] === "number")),

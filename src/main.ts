@@ -1,13 +1,15 @@
 import "./style.css";
-import type { AppConfig, AppInfo, BotConfig, LogEntry, RuntimeSnapshot, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
+import type { AppConfig, AppInfo, BotConfig, LogEntry, RuntimeSnapshot, ScheduledTask, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let snapshot: RuntimeSnapshot;
 let logs: LogEntry[] = [];
 let storage: StorageStats;
+let scheduledTasks: ScheduledTask[] = [];
 let applicationInfo: AppInfo;
-let activeView: "console" | "skills" | "config" | "storage" = "console";
+let activeView: "console" | "skills" | "automation" | "config" | "storage" = "console";
 let selectedBotId = "";
+let selectedAutomationBotId = "";
 let logLevel: "all" | LogEntry["level"] = "all";
 let showReleaseNotes = false;
 let marketSource = "all";
@@ -79,6 +81,56 @@ function parseScopes(value: string): string[] {
   return [...new Set(value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean))];
 }
 
+function dateTimeLocalValue(value?: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+async function loadScheduledTasksForSelectedBot(): Promise<void> {
+  const bot = snapshot.config.bots.find((item) => item.id === selectedAutomationBotId) ?? snapshot.config.bots[0];
+  if (!bot) {
+    scheduledTasks = [];
+    return;
+  }
+  selectedAutomationBotId = bot.id;
+  scheduledTasks = await window.quarkfanTools.scheduledTasks(bot.id);
+}
+
+function collectScheduledTasks(): ScheduledTask[] {
+  return [...document.querySelectorAll<HTMLElement>("[data-scheduled-task]")].map((row) => {
+    const original = scheduledTasks.find((task) => task.id === row.dataset.scheduledTask)!;
+    const field = (name: string) => row.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[data-scheduled-field="${name}"]`);
+    const enabled = row.querySelector<HTMLInputElement>('[data-scheduled-field="enabled"]')?.checked ?? false;
+    const runAtValue = field("trigger.runAt")?.value;
+    return {
+      ...original,
+      enabled,
+      name: field("name")?.value || original.name,
+      trigger: {
+        ...original.trigger,
+        type: field("trigger.type")?.value === "once" ? "once" : "interval",
+        intervalMinutes: Math.max(1, Math.min(10080, Number(field("trigger.intervalMinutes")?.value ?? 60) || 60)),
+        runAt: runAtValue ? new Date(runAtValue).toISOString() : undefined
+      },
+      target: {
+        type: "prompt",
+        prompt: field("target.prompt")?.value ?? ""
+      },
+      output: {
+        mode: "none"
+      },
+      policy: {
+        timeoutSeconds: Math.max(30, Math.min(86400, Number(field("policy.timeoutSeconds")?.value ?? 1800) || 1800)),
+        missed: field("policy.missed")?.value === "run-once" ? "run-once" : "skip",
+        concurrency: field("policy.concurrency")?.value === "queue" ? "queue" : "skip-if-running"
+      }
+    };
+  });
+}
+
 function configured(config: AppConfig): boolean {
   return Boolean(
     config.model.baseUrl &&
@@ -126,6 +178,7 @@ function render(): void {
       <nav>
         <button class="${activeView === "console" ? "active" : ""}" data-view="console">运行台</button>
         <button class="${activeView === "skills" ? "active" : ""}" data-view="skills">技能市场</button>
+        <button class="${activeView === "automation" ? "active" : ""}" data-view="automation">自动化</button>
         <button class="${activeView === "config" ? "active" : ""}" data-view="config">配置</button>
         <button class="${activeView === "storage" ? "active" : ""}" data-view="storage">存储管理</button>
       </nav>
@@ -139,14 +192,14 @@ function render(): void {
       <header>
         <div>
           <p class="eyebrow">MACOS / FEISHU / CLAUDE</p>
-          <h1>${activeView === "console" ? "运行控制台" : activeView === "skills" ? "本地技能市场" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
+          <h1>${activeView === "console" ? "运行控制台" : activeView === "skills" ? "本地技能市场" : activeView === "automation" ? "自动化任务" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
         </div>
         <div class="actions">
           ${activeView === "skills" ? `<button class="ghost" id="import-skill">导入 Skill</button>` : ""}
         </div>
       </header>
       ${!isConfigured ? `<div class="notice">至少配置一个启用的飞书机器人，并填写 Claude 兼容模型连接信息。</div>` : ""}
-      ${activeView === "console" ? renderConsole() : activeView === "skills" ? renderSkills() : activeView === "config" ? renderConfig() : renderStorage()}
+      ${activeView === "console" ? renderConsole() : activeView === "skills" ? renderSkills() : activeView === "automation" ? renderAutomation() : activeView === "config" ? renderConfig() : renderStorage()}
     </main>
     ${showReleaseNotes ? renderReleaseNotes() : ""}
     ${preview ? renderPreview() : ""}
@@ -409,6 +462,75 @@ function renderConsole(): string {
   `;
 }
 
+function renderAutomation(): string {
+  const selectedBot = snapshot.config.bots.find((bot) => bot.id === selectedAutomationBotId) ?? snapshot.config.bots[0];
+  if (selectedBot && selectedAutomationBotId !== selectedBot.id) selectedAutomationBotId = selectedBot.id;
+  return `
+    <section class="metrics">
+      <article><span>当前 Bot</span><strong>${escapeHtml(selectedBot?.name ?? "未配置")}</strong></article>
+      <article><span>定时任务</span><strong>${scheduledTasks.length}</strong></article>
+      <article><span>已启用</span><strong>${scheduledTasks.filter((task) => task.enabled).length}</strong></article>
+      <article><span>运行中任务</span><strong>${snapshot.activeTasks}</strong></article>
+    </section>
+    <section class="workspace">
+      <div class="panel skill-panel">
+        <div class="panel-title"><span>BOT</span><small>scheduled tasks</small></div>
+        <div class="skill-list bot-registry">
+          ${snapshot.config.bots.map((bot) => `
+            <div class="skill bot-runtime-card ${selectedBot?.id === bot.id ? "selected" : ""}" data-select-automation-bot="${escapeHtml(bot.id)}">
+              <div class="skill-glyph">${escapeHtml(bot.name.slice(0, 2).toUpperCase())}</div>
+              <div class="bot-runtime-main">
+                <strong>${statusDot(snapshot.connectedBotIds.includes(bot.id))}${escapeHtml(bot.name)}</strong>
+                <p>${botRuntimeStatus(bot)} / ${bot.skillNames.length} 个授权 Skill</p>
+              </div>
+            </div>`).join("") || `<div class="empty">请先添加机器人。</div>`}
+        </div>
+      </div>
+      <div class="panel log-panel">
+        <div class="panel-title log-title">
+          <span>${selectedBot ? `${escapeHtml(selectedBot.name)} / SCHEDULED TASKS` : "SCHEDULED TASKS"}</span>
+          <div class="log-controls">
+            <button class="ghost compact" id="add-scheduled-task" ${selectedBot ? "" : "disabled"}>新增任务</button>
+            <button class="primary compact" id="save-scheduled-tasks" ${selectedBot ? "" : "disabled"}>保存任务</button>
+          </div>
+        </div>
+        <div class="scheduled-task-list">
+          ${scheduledTasks.map((task) => renderScheduledTask(task, Boolean(selectedBot && snapshot.runningBotIds.includes(selectedBot.id)))).join("") || `<div class="empty">当前 Bot 还没有定时任务。</div>`}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderScheduledTask(task: ScheduledTask, botRunning: boolean): string {
+  const next = task.state.nextRunAt ? new Date(task.state.nextRunAt).toLocaleString() : "未计划";
+  const last = task.state.lastRunAt ? `${new Date(task.state.lastRunAt).toLocaleString()} / ${task.state.lastStatus ?? "unknown"}` : "未运行";
+  return `
+    <article class="storage-row scheduled-task-row" data-scheduled-task="${escapeHtml(task.id)}">
+      <label class="check"><input type="checkbox" data-scheduled-field="enabled" ${task.enabled ? "checked" : ""}/><span><strong>${escapeHtml(task.name)}</strong><small>下次：${escapeHtml(next)} / 上次：${escapeHtml(last)}</small></span></label>
+      <div class="field-row">
+        <label><span>名称</span><input data-scheduled-field="name" value="${escapeHtml(task.name)}" /></label>
+        <label><span>触发方式</span><select data-scheduled-field="trigger.type"><option value="interval" ${task.trigger.type === "interval" ? "selected" : ""}>间隔</option><option value="once" ${task.trigger.type === "once" ? "selected" : ""}>一次性</option></select></label>
+      </div>
+      <div class="field-row">
+        <label><span>间隔分钟</span><input data-scheduled-field="trigger.intervalMinutes" type="number" min="1" max="10080" value="${task.trigger.intervalMinutes ?? 60}" /></label>
+        <label><span>一次性运行时间</span><input data-scheduled-field="trigger.runAt" type="datetime-local" value="${dateTimeLocalValue(task.trigger.runAt)}" /></label>
+      </div>
+      <label><span>任务提示词</span><textarea data-scheduled-field="target.prompt" rows="4">${escapeHtml(task.target.prompt)}</textarea><small>首版仅支持 prompt 类型，结果写入运行台日志，不主动发送飞书消息。</small></label>
+      <div class="field-row">
+        <label><span>超时秒数</span><input data-scheduled-field="policy.timeoutSeconds" type="number" min="30" max="86400" value="${task.policy.timeoutSeconds}" /></label>
+        <label><span>错过策略</span><select data-scheduled-field="policy.missed"><option value="skip" ${task.policy.missed === "skip" ? "selected" : ""}>跳过</option><option value="run-once" ${task.policy.missed === "run-once" ? "selected" : ""}>补跑一次</option></select></label>
+        <label><span>并发策略</span><select data-scheduled-field="policy.concurrency"><option value="skip-if-running" ${task.policy.concurrency === "skip-if-running" ? "selected" : ""}>运行中则跳过</option><option value="queue" ${task.policy.concurrency === "queue" ? "selected" : ""}>排队</option></select></label>
+      </div>
+      ${task.state.lastError ? `<pre>${escapeHtml(task.state.lastError)}</pre>` : ""}
+      <div class="form-actions">
+        <button type="button" class="ghost run-scheduled-task" data-id="${escapeHtml(task.id)}" ${botRunning ? "" : "disabled"}>立即运行</button>
+        <button type="button" class="danger remove-scheduled-task" data-id="${escapeHtml(task.id)}">删除</button>
+      </div>
+    </article>
+  `;
+}
+
 function field(label: string, name: string, value: string, type = "text", note = "", helpTopic = name): string {
   return `<label><span>${label}${helpButton(helpTopic)}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" />${note ? `<small>${note}</small>` : ""}</label>`;
 }
@@ -562,6 +684,7 @@ function bindEvents(): void {
     button.onclick = async () => {
       activeView = button.dataset.view as typeof activeView;
       if (activeView === "storage") storage = await window.quarkfanTools.storageStats();
+      if (activeView === "automation") await loadScheduledTasksForSelectedBot();
       render();
     };
   });
@@ -618,6 +741,41 @@ function bindEvents(): void {
   document.querySelectorAll<HTMLElement>("[data-select-bot]").forEach((card) => {
     card.onclick = () => {
       selectedBotId = String(card.dataset.selectBot);
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLElement>("[data-select-automation-bot]").forEach((card) => {
+    card.onclick = async () => {
+      selectedAutomationBotId = String(card.dataset.selectAutomationBot);
+      await loadScheduledTasksForSelectedBot();
+      render();
+    };
+  });
+  document.querySelector<HTMLButtonElement>("#add-scheduled-task")?.addEventListener("click", async () => {
+    if (!selectedAutomationBotId) return;
+    scheduledTasks = await window.quarkfanTools.newScheduledTask(selectedAutomationBotId);
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#save-scheduled-tasks")?.addEventListener("click", async () => {
+    if (!selectedAutomationBotId) return;
+    scheduledTasks = await window.quarkfanTools.saveScheduledTasks(selectedAutomationBotId, collectScheduledTasks());
+    render();
+  });
+  document.querySelectorAll<HTMLButtonElement>(".remove-scheduled-task").forEach((button) => {
+    button.onclick = async () => {
+      if (!selectedAutomationBotId) return;
+      scheduledTasks = await window.quarkfanTools.saveScheduledTasks(
+        selectedAutomationBotId,
+        collectScheduledTasks().filter((task) => task.id !== button.dataset.id)
+      );
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".run-scheduled-task").forEach((button) => {
+    button.onclick = async () => {
+      if (!selectedAutomationBotId) return;
+      scheduledTasks = await window.quarkfanTools.saveScheduledTasks(selectedAutomationBotId, collectScheduledTasks());
+      scheduledTasks = await window.quarkfanTools.runScheduledTaskNow(selectedAutomationBotId, String(button.dataset.id));
       render();
     };
   });
