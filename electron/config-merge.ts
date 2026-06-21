@@ -43,7 +43,9 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
       ...override.runtime,
       maxAgentTurns: Math.max(10, Math.min(100, override.runtime?.maxAgentTurns ?? base.runtime.maxAgentTurns ?? 60)),
       botIsolationMode: normalizeIsolationMode(override.runtime?.botIsolationMode ?? base.runtime.botIsolationMode),
-      preventSleepMode: normalizePreventSleepMode(override.runtime?.preventSleepMode ?? base.runtime.preventSleepMode)
+      preventSleepMode: normalizePreventSleepMode(override.runtime?.preventSleepMode ?? base.runtime.preventSleepMode),
+      groupFollowUpWithoutMention: Boolean(override.runtime?.groupFollowUpWithoutMention ?? base.runtime.groupFollowUpWithoutMention ?? false),
+      groupFollowUpWindowSeconds: Math.max(10, Math.min(3600, Math.floor(Number(override.runtime?.groupFollowUpWindowSeconds ?? base.runtime.groupFollowUpWindowSeconds ?? 60) || 60)))
     }
   };
 }

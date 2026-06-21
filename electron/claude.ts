@@ -40,13 +40,32 @@ export async function materializeSkillCopies(targetRoot: string, skills: SkillSu
   }));
 }
 
+export async function writeWorkspaceGuide(workspace: string, skills: SkillSummary[]): Promise<void> {
+  const lines = [
+    "# QuarkfanTools Bot Workspace",
+    "",
+    "You are running inside the current Bot session workspace.",
+    "Only the Skills copied under `./skills/` are authorized for this Bot.",
+    "Before answering a domain-specific request, inspect the relevant `./skills/<name>/SKILL.md` and follow it.",
+    "Do not read original Skill source directories outside this workspace.",
+    "",
+    "## Authorized Skills",
+    skills.length > 0
+      ? skills.map((skill) => `- ${skill.name}: ./skills/${skill.name}/SKILL.md - ${skill.description || "No description"}`).join("\n")
+      : "- No authorized Skills."
+  ];
+  await writeFile(path.join(workspace, "CLAUDE.md"), `${lines.join("\n")}\n`, "utf8");
+}
+
 async function ensureBotWorkspace(bot: BotConfig, conversationKey: string, skills: SkillSummary[]): Promise<{ claudeHome: string; workspace: string }> {
   const claudeHome = path.join(stateRoot(), "bots", bot.id, "claude-home");
   const workspace = path.join(workspaceRoot(), "bots", bot.id, "sessions", workspaceSessionId(conversationKey));
   await Promise.all([
     materializeSkillCopies(path.join(claudeHome, "skills"), skills),
-    materializeSkillCopies(path.join(workspace, "skills"), skills)
+    materializeSkillCopies(path.join(workspace, "skills"), skills),
+    mkdir(workspace, { recursive: true })
   ]);
+  await writeWorkspaceGuide(workspace, skills);
   return { claudeHome, workspace };
 }
 
@@ -77,9 +96,11 @@ export async function runClaude(
   const { claudeHome, workspace } = await ensureBotWorkspace(bot, conversationKey, skills);
   const botState = path.join(stateRoot(), "bots", bot.id);
   const skillList = skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
+  const skillPaths = skills.map((skill) => `- ${skill.name}: ./skills/${skill.name}/SKILL.md`).join("\n");
   const prompt = [
     "根据飞书消息选择最匹配的 Skill，并严格遵循该 Skill 的 SKILL.md。",
     "你只能访问当前机器人的 skills 目录，不得尝试访问其他机器人或未授权 Skill。",
+    "当前工作区根目录包含 CLAUDE.md 和 ./skills/；处理业务问题前必须先读取最匹配 Skill 的 ./skills/<name>/SKILL.md。",
     "仅在用户明确要求时更新 Skill 和 knowledge 文件。",
     "你可以默认通过 Bash 调用 lark-cli，命令会自动使用当前机器人隔离的飞书身份与凭据。",
     "需要查找或读取飞书文档时必须使用用户态：先执行 `lark-cli skills read lark-doc`，再使用带 `--as user` 的 `lark-cli docs +fetch`、`lark-cli docs +search`、`lark-cli wiki` 或 `lark-cli drive`。",
@@ -94,6 +115,9 @@ export async function runClaude(
     "",
     "可用 Skills：",
     skillList || "- 当前没有可用 Skill；明确告知用户。",
+    "",
+    "授权 Skill 文件路径：",
+    skillPaths || "- 无。",
     "",
     `当前消息 ID：${message.messageId}`,
     `当前飞书回复身份：${bot.replyIdentity}`,

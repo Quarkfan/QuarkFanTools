@@ -38,6 +38,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private botIdentities = new Map<string, LarkBotIdentity>();
   private schedulers = new Map<string, BotScheduler>();
   private scheduledTaskCounts = new Map<string, number>();
+  private groupFollowUps = new Map<string, { botId: string; expiresAt: number }>();
   private taskLimiter = new TaskLimiter();
   private config!: AppConfig;
   private skills: SkillSummary[] = [];
@@ -124,6 +125,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.renewingBotIds.clear();
     this.connectedBotIds.clear();
     this.botIdentities.clear();
+    this.groupFollowUps.clear();
     await this.logger.write("info", "QuarkfanTools 已停止");
     this.emitSnapshot();
   }
@@ -140,6 +142,9 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.connectedBotIds.delete(botId);
     this.renewingBotIds.delete(botId);
     this.botIdentities.delete(botId);
+    for (const [key, followUp] of this.groupFollowUps.entries()) {
+      if (followUp.botId === botId) this.groupFollowUps.delete(key);
+    }
     this.stopBotScheduler(botId);
     const bot = this.config.bots.find((item) => item.id === botId);
     await this.logger.write("info", "机器人监听已停止", bot?.name, botId);
@@ -246,7 +251,35 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private routeBotMessage(sourceBot: BotConfig, message: LarkMessage): void {
     const bots = this.runningBots();
     const route = selectLarkMessageTarget(bots, message, this.botIdentities, bots.length > 1);
+    void this.logger.write("info", "飞书事件路由诊断", JSON.stringify({
+      eventId: message.eventId,
+      messageId: message.messageId,
+      chatId: message.chatId,
+      chatType: message.chatType,
+      senderId: message.senderId,
+      sourceBotId: sourceBot.id,
+      sourceAppId: message.sourceAppId,
+      mentionsCount: message.mentions?.length ?? 0,
+      routeReason: route.reason,
+      routedBotId: route.bot?.id ?? null,
+      routedBotName: route.bot?.name ?? null,
+      text: message.text
+    }), route.bot?.id ?? sourceBot.id);
     if (!route.bot) {
+      const followUpBot = this.resolveGroupFollowUp(message, bots);
+      if (followUpBot) {
+        void this.logger.write("info", "群聊免 @ 连续对话已路由", JSON.stringify({
+          eventId: message.eventId,
+          messageId: message.messageId,
+          chatId: message.chatId,
+          senderId: message.senderId,
+          routedBotId: followUpBot.id,
+          routedBotName: followUpBot.name,
+          text: message.text
+        }), followUpBot.id);
+        void this.enqueueMessage(followUpBot, message);
+        return;
+      }
       void this.logger.write("info", "已忽略无法确定目标机器人的飞书消息", JSON.stringify({
         reason: route.reason,
         sourceBotId: sourceBot.id,
@@ -288,7 +321,41 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (sourceBot.id !== route.bot.id) {
       void this.logger.write("info", "飞书事件已跨 Bot 路由", `${sourceBot.name} -> ${route.bot.name} / ${route.reason}`, route.bot.id);
     }
+    this.rememberGroupFollowUp(route.bot, message, route.reason);
     void this.enqueueMessage(route.bot, message);
+  }
+
+  private groupFollowUpKey(message: LarkMessage): string {
+    return `${message.chatId || "unknown"}:${message.senderId || "unknown"}`;
+  }
+
+  private resolveGroupFollowUp(message: LarkMessage, bots: BotConfig[]): BotConfig | null {
+    if (!this.config.runtime.groupFollowUpWithoutMention) return null;
+    if (message.chatType !== "group" || (message.mentions?.length ?? 0) > 0) return null;
+    const followUp = this.groupFollowUps.get(this.groupFollowUpKey(message));
+    if (!followUp) return null;
+    if (followUp.expiresAt < Date.now()) {
+      this.groupFollowUps.delete(this.groupFollowUpKey(message));
+      return null;
+    }
+    return bots.find((bot) => bot.id === followUp.botId) ?? null;
+  }
+
+  private rememberGroupFollowUp(bot: BotConfig, message: LarkMessage, reason: string): void {
+    if (!this.config.runtime.groupFollowUpWithoutMention) return;
+    if (message.chatType !== "group" || (message.mentions?.length ?? 0) === 0) return;
+    if (!reason.includes("mention-match")) return;
+    const windowSeconds = Math.max(10, Math.min(3600, this.config.runtime.groupFollowUpWindowSeconds ?? 60));
+    const expiresAt = Date.now() + windowSeconds * 1000;
+    this.groupFollowUps.set(this.groupFollowUpKey(message), { botId: bot.id, expiresAt });
+    void this.logger.write("info", "已记录群聊免 @ 连续窗口", JSON.stringify({
+      chatId: message.chatId,
+      senderId: message.senderId,
+      botId: bot.id,
+      botName: bot.name,
+      expiresAt: new Date(expiresAt).toISOString(),
+      windowSeconds
+    }), bot.id);
   }
 
   private scheduleReconnect(bot: BotConfig): void {
@@ -423,6 +490,10 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       const allowed = new Set(bot.skillNames);
       const botSkills = this.skills.filter((skill) => allowed.has(skill.name));
+      await this.logger.write("info", "Agent Skill 上下文", JSON.stringify({
+        count: botSkills.length,
+        skills: botSkills.map((skill) => ({ name: skill.name, source: skill.source }))
+      }), bot.id);
       let key = conversationKey(message);
       let resumedTask: DeferredTask | null = null;
       const requestedTaskId = continueTaskId(message.text);
@@ -558,6 +629,12 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private async runScheduledAgent(bot: BotConfig, task: ScheduledTask): Promise<{ response: string; sessionId: string }> {
     const allowed = new Set(bot.skillNames);
     const botSkills = this.skills.filter((skill) => allowed.has(skill.name));
+    await this.logger.write("info", "定时任务 Skill 上下文", JSON.stringify({
+      taskId: task.id,
+      taskName: task.name,
+      count: botSkills.length,
+      skills: botSkills.map((skill) => ({ name: skill.name, source: skill.source }))
+    }), bot.id);
     const key = `scheduled:${task.id}`;
     const message: LarkMessage = {
       eventId: `scheduled:${task.id}:${Date.now()}`,

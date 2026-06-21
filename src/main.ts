@@ -40,6 +40,8 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   maxAgentTurns: { title: "单次 Agent 最大步数", body: "限制一次消息处理中 Agent 可执行的工具调用轮数。复杂检索可适当调高，范围 10-100。" },
   botIsolationMode: { title: "Bot 运行隔离", body: "1.7.0 起每个 Bot 由独立 worker 进程承载。Docker/自动模式会先记录配置和诊断能力，容器 driver 后续接入。" },
   preventSleepMode: { title: "防休眠", body: "可在 Bot 运行或任务繁忙时阻止系统自动休眠。不能阻止用户手动合盖、关机或强制睡眠。" },
+  groupFollowUpWithoutMention: { title: "群聊免 @ 连续对话", body: "默认关闭。开启后，同一群同一发送者在刚 @ 某个 Bot 后的指定时间内，可以不再 @ 而继续由该 Bot 回复。" },
+  groupFollowUpWindowSeconds: { title: "免 @ 窗口", body: "群聊免 @ 连续对话的有效秒数，范围 10-3600。窗口外或不同发送者的普通群消息不会触发机器人。" },
   multimodalEnabled: { title: "多模态视觉能力", body: "开启后图片消息和 PowerPoint 预览可作为视觉输入交给模型；关闭后只处理文本内容。" },
   marketEnabled: { title: "启用技能市场", body: "启用后可从 HTTPS Git 仓库同步 Skill。同步后的 Skill 默认不授权给任何 Bot。" },
   marketRepositoryUrl: { title: "HTTPS Git 仓库", body: "Skill 市场仓库地址。当前只支持 HTTPS，不依赖系统 Git 或 SSH Key。" },
@@ -612,6 +614,8 @@ function renderConfig(): string {
           <label><span>单次 Agent 最大步数${helpButton("maxAgentTurns")}</span><input name="maxAgentTurns" type="number" min="10" max="100" value="${c.runtime.maxAgentTurns ?? 60}" /><small>复杂 Skill 或飞书资料检索会消耗更多工具调用步数；默认 60。</small></label>
           <label><span>Bot 运行隔离${helpButton("botIsolationMode")}</span><select name="botIsolationMode"><option value="process" ${(c.runtime.botIsolationMode ?? "process") === "process" ? "selected" : ""}>进程隔离，推荐</option><option value="auto" ${c.runtime.botIsolationMode === "auto" ? "selected" : ""}>自动选择，预留 Docker</option><option value="container" ${c.runtime.botIsolationMode === "container" ? "selected" : ""}>容器隔离，需要 Docker</option></select><small>当前版本默认使用内置 worker 进程；Docker 状态会进入诊断日志，容器执行后续接入。</small></label>
           <label><span>防休眠${helpButton("preventSleepMode")}</span><select name="preventSleepMode"><option value="off" ${(c.runtime.preventSleepMode ?? "off") === "off" ? "selected" : ""}>关闭</option><option value="when-running" ${c.runtime.preventSleepMode === "when-running" ? "selected" : ""}>Bot 监听时阻止休眠</option><option value="when-busy" ${c.runtime.preventSleepMode === "when-busy" ? "selected" : ""}>任务执行时阻止休眠</option></select><small>用于 7x24 部署；不能阻止用户手动合盖或关机。</small></label>
+          <label><span>群聊免 @ 连续对话${helpButton("groupFollowUpWithoutMention")}</span><select name="groupFollowUpWithoutMention"><option value="false" ${!c.runtime.groupFollowUpWithoutMention ? "selected" : ""}>关闭，推荐</option><option value="true" ${c.runtime.groupFollowUpWithoutMention ? "selected" : ""}>开启</option></select><small>仅同一群、同一发送者、刚 @ 的同一 Bot 可在窗口内免 @ 继续。</small></label>
+          <label><span>免 @ 窗口秒数${helpButton("groupFollowUpWindowSeconds")}</span><input name="groupFollowUpWindowSeconds" type="number" min="10" max="3600" value="${c.runtime.groupFollowUpWindowSeconds ?? 60}" /><small>默认 60 秒。窗口外普通群消息不会触发机器人。</small></label>
           <label><span>多模态视觉能力${helpButton("multimodalEnabled")}</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
         </div>
         <div class="panel config-panel">
@@ -937,6 +941,8 @@ function bindEvents(): void {
     next.runtime.botIsolationMode = isolationMode === "auto" || isolationMode === "container" ? isolationMode : "process";
     const preventSleepMode = String(form.get("preventSleepMode") ?? "off");
     next.runtime.preventSleepMode = preventSleepMode === "when-running" || preventSleepMode === "when-busy" ? preventSleepMode : "off";
+    next.runtime.groupFollowUpWithoutMention = String(form.get("groupFollowUpWithoutMention") ?? "false") === "true";
+    next.runtime.groupFollowUpWindowSeconds = Math.max(10, Math.min(3600, Number(form.get("groupFollowUpWindowSeconds") ?? 60) || 60));
     next.skillMarket.enabled = String(form.get("marketEnabled") ?? "false") === "true";
     next.skillMarket.repositoryUrl = String(form.get("marketRepositoryUrl") ?? "");
     next.skillMarket.branch = String(form.get("marketBranch") ?? "main");

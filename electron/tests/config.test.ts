@@ -27,7 +27,9 @@ const base: AppConfig = {
     maxConcurrentTasks: 2,
     maxAgentTurns: 60,
     botIsolationMode: "process",
-    preventSleepMode: "off"
+    preventSleepMode: "off",
+    groupFollowUpWithoutMention: false,
+    groupFollowUpWindowSeconds: 60
   }
 };
 
@@ -194,6 +196,13 @@ test("defaults sleep prevention to off", () => {
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, preventSleepMode: "when-running" } }).runtime.preventSleepMode, "when-running");
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, preventSleepMode: "when-busy" } }).runtime.preventSleepMode, "when-busy");
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, preventSleepMode: "invalid" as never } }).runtime.preventSleepMode, "off");
+});
+
+test("defaults group follow-up without mention to off and bounds the window", () => {
+  assert.equal(mergeConfig(base, {}).runtime.groupFollowUpWithoutMention, false);
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, groupFollowUpWithoutMention: true } }).runtime.groupFollowUpWithoutMention, true);
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, groupFollowUpWindowSeconds: 1 } }).runtime.groupFollowUpWindowSeconds, 10);
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, groupFollowUpWindowSeconds: 7200 } }).runtime.groupFollowUpWindowSeconds, 3600);
 });
 
 test("detects running bots that share the same Feishu app id", () => {

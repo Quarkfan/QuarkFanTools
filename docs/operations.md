@@ -99,10 +99,12 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 - 配置里的 `cli_...` 是飞书开放平台应用 App ID，用于初始化对应 Bot 的 lark-cli profile。
 - Bot 启动前会规范化自己的隔离 `lark-cli/config.json`，只保留当前 App ID 对应的 `qft-...` 命名 profile。旧版单 Bot 迁移残留的未命名 app 会被合并，避免多 Bot 同时监听时 profile 解析出现歧义。
 - 运行时会记录 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 和应用名。群聊消息有 `message.mentions` 时，应用会先用 mention 目标里的名称、App ID、应用名和 open_id 等值匹配当前 Bot；`mentions[].id.open_id` 只作为命中信号，不作为排他条件，因为现场事件中它可能不同于 bot info 的 `bot.open_id`。
-- 事件头里的 App ID 表示当前监听连接所属应用，不一定是消息中被 @ 的目标。有 `mentions` 时不要用 `sourceAppId` 判定目标 Bot；它只用于缺少 mention 元数据的旧事件兜底。
+- 事件头里的 App ID 表示当前监听连接所属应用，不一定是消息中被 @ 的目标。有 `mentions` 时不要用 `sourceAppId` 判定目标 Bot；`v1.8.2` 起，多 Bot 严格群聊路由也不会仅凭 `sourceAppId` 处理缺少 mention 元数据的普通群消息。
 - lark-cli WebSocket 日志里可能出现 `aid=552564` 之类参数。该值来自飞书服务端返回的 WebSocket endpoint URL，是飞书事件网关或 SDK 连接层参数，不是配置的 App ID，也不能用于判断两个机器人是否接入了同一个飞书应用。
 - 本地 POC 确认：两个不同 `cli_...` 应用同时监听时，WebSocket URL 中可以出现相同 `aid`；但 `/open-apis/bot/v3/info` 返回的 `open_id` 和应用名不同。因此排查多 Bot 路由时，应看脱敏 App ID、bot info 的 `open_id` 和应用名、事件 `mentions` 里的目标值，以及“已忽略非当前机器人艾特消息”的判定原因。
 - 多 Bot 同时运行时，如果群聊事件缺少 `mentions` 元数据，应用会记录 `missing-group-mention-metadata` 并忽略该消息，避免多个 Bot 同时回复。出现这种日志时，需要确认飞书事件是否为原始消息事件、机器人是否被真正 @、以及 lark-cli 输出没有开启会丢失 mention 的紧凑模式。
+- 若配置页开启“群聊免 @ 连续对话”，运行台会在命中窗口时记录“群聊免 @ 连续对话已路由”。该能力只允许同一群、同一发送者、刚 @ 的同一 Bot 在窗口内接续；默认关闭。
+- `v1.8.2` 起，每条飞书消息会记录“飞书事件路由诊断”，包含 eventId、messageId、chat、sender、mentions 数量、路由原因和目标 Bot。排查“没回复”时先看是否有这条诊断，再判断是平台未投递、路由忽略、Agent 失败还是回复失败。
 
 ### 群成员看到“需要机器人主人的允许”
 
@@ -156,7 +158,8 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 - 确认目录包含 `SKILL.md`。
 - 确认 Skill 已被发现并授权给目标机器人。
 - 同名 Skill 优先级为用户、市场、内置，检查是否被更高优先级版本覆盖。
-- `v1.8.0` 起，Agent 读取的是当前 Bot 和当前会话下的物化 Skill 副本，而不是原始 Skill 目录或 symlink。若列表中能看到但 Agent 仍提示无 Skill，复制诊断日志并检查该 Bot 的最近“Agent 工作过程”和“消息处理失败”日志。
+- `v1.8.0` 起，Agent 读取的是当前 Bot 和当前会话下的物化 Skill 副本，而不是原始 Skill 目录或 symlink。`v1.8.2` 起，每个会话 workspace 会生成 `CLAUDE.md`，列出授权 Skill 的 `./skills/<name>/SKILL.md` 入口。
+- 若列表中能看到但 Agent 仍提示无 Skill，复制诊断日志并检查该 Bot 的最近“Agent Skill 上下文”“Agent 工作过程”和“消息处理失败”日志；`Agent Skill 上下文` 中应能看到当前 Bot 实际授权给本次运行的 Skill 名称。
 - 如果多个本地目录的 `SKILL.md` 声明了同一个 `name`，技能市场会保留第一个声明名，并用后续目录名区分显示，例如 `moje-qa-assistant-adv`。
 - 正在被 Bot 授权使用的本地 Skill 删除按钮会禁用；先到配置页取消对应 Bot 授权后再删除。
 

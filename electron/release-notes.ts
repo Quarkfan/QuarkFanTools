@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.8.2",
+    date: "2026-06-21",
+    highlights: [
+      "群聊普通消息默认不再因 sourceAppId 兜底触发机器人，避免刚 @ 后未 @ 的第二句话被意外回复。",
+      "配置页新增群聊免 @ 连续对话开关和窗口秒数；默认关闭，开启后只允许同一群同一发送者接续刚被 @ 的同一 Bot。",
+      "Agent workspace 会生成 CLAUDE.md 指向授权 Skill 入口，运行台新增路由诊断和 Skill 上下文日志。"
+    ]
+  },
+  {
     version: "1.8.1",
     date: "2026-06-21",
     highlights: [

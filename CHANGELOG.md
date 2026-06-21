@@ -6,6 +6,12 @@
 
 ## Unreleased
 
+## v1.8.2 - 2026-06-21
+
+- 修复群聊中刚 @ 回复后，后续未 @ 的普通消息仍可能因 sourceAppId 兜底被机器人回复的问题；多 Bot 严格群聊路由默认要求 mention 目标明确。
+- 新增可配置的“群聊免 @ 连续对话”：默认关闭；开启后仅同一群、同一发送者、刚 @ 的同一 Bot 可在指定时间窗口内免 @ 继续。
+- Agent 会话 workspace 现在生成 `CLAUDE.md` 并列出授权 Skill 的 `./skills/<name>/SKILL.md` 入口；运行台新增飞书事件路由诊断和 Agent Skill 上下文日志，便于排查“没回复”和“Skill 未被使用”。
+
 ## v1.8.1 - 2026-06-21
 
 - 新增 Bot 维度定时任务首版能力：每个 Bot 使用自己的 `state/bots/<bot-id>/scheduled-tasks.json` 保存任务，并由对应 Bot worker 内的 Scheduler 执行。

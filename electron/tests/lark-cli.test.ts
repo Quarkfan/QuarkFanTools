@@ -287,7 +287,7 @@ test("does not route ambiguous group messages in strict multi-bot mode", () => {
   assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, false), true);
 });
 
-test("routes legacy messages by event source app id when mention metadata is absent", () => {
+test("does not route group messages by source app id when mention metadata is absent in strict mode", () => {
   const message = normalizeLarkEvent({
     header: { event_type: "im.message.receive_v1", app_id: "cli_test" },
     event: {
@@ -303,7 +303,8 @@ test("routes legacy messages by event source app id when mention metadata is abs
   const anotherBot: BotConfig = { ...bot, id: "finance", name: "财务助手", appId: "cli_finance" };
 
   assert.ok(message);
-  assert.equal(messageTargetsBot(bot, message, undefined, true), true);
+  assert.equal(messageTargetsBot(bot, message, undefined, true), false);
+  assert.equal(messageTargetsBot(bot, message, undefined, false), true);
   assert.equal(messageTargetsBot(anotherBot, message, undefined, true), false);
 });
 

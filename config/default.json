@@ -21,6 +21,8 @@
     "maxConcurrentTasks": 2,
     "maxAgentTurns": 60,
     "botIsolationMode": "process",
-    "preventSleepMode": "off"
+    "preventSleepMode": "off",
+    "groupFollowUpWithoutMention": false,
+    "groupFollowUpWindowSeconds": 60
   }
 }

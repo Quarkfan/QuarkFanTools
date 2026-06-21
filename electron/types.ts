@@ -42,6 +42,8 @@ export interface AppConfig {
     maxAgentTurns?: number;
     botIsolationMode?: "process" | "container" | "auto";
     preventSleepMode?: "off" | "when-running" | "when-busy";
+    groupFollowUpWithoutMention?: boolean;
+    groupFollowUpWindowSeconds?: number;
   };
 }
 

@@ -58,6 +58,16 @@ export function messageTargetDecision(bot: BotConfig, message: LarkMessage, iden
     };
   }
   const sourceAppId = normalize(message.sourceAppId);
+  if (strictGroupTargeting && message.chatType === "group") {
+    return {
+      targeted: false,
+      reason: "missing-group-mention-metadata",
+      sourceAppId: message.sourceAppId,
+      botOpenId: identity?.openId,
+      mentionValues: values,
+      botMatchers
+    };
+  }
   if (sourceAppId) {
     return {
       targeted: sourceAppId === normalize(bot.appId),

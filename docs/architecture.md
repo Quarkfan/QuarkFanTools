@@ -29,6 +29,8 @@ flowchart LR
 
 飞书事件 WebSocket 连接地址由 `lark-cli` 依赖的 `github.com/larksuite/oapi-sdk-go/v3/ws` 向飞书服务端获取，SDK 再按服务端返回的 endpoint URL 建连。日志 URL 中的 `aid`、`service_id` 等 query 参数属于飞书事件网关连接层，不等同于开放平台 `cli_...` App ID，也不参与 QuarkfanTools 的 Bot 路由。QuarkfanTools 的身份治理使用配置时的 App ID/profile 隔离、启动时通过 bot info 取得的 Bot `open_id` 和应用名，以及事件 mention 中的展示名、应用 ID 和 open_id 等目标值；其中 mention open_id 只能做正向匹配，不能用来否定同名或同应用名命中的 Bot。
 
+多 Bot 严格群聊路由默认要求 `mentions` 元数据明确指向某个 Bot；缺少 `mentions` 的普通群消息不会仅凭事件 `sourceAppId` 触发回复。若用户需要“刚 @ 后继续追问不再 @”，必须在配置中显式开启 `runtime.groupFollowUpWithoutMention`。开启后 Runtime 只记录同一群、同一发送者、同一 Bot 的短期窗口，窗口外或不同发送者的普通群消息仍会被忽略。
+
 ```mermaid
 sequenceDiagram
     participant F as Feishu
@@ -85,7 +87,7 @@ Skill 来源按优先级发现：
 
 Skill 摘要标记为本地导入、Git 市场或应用内置。本地多个目录声明相同 frontmatter `name` 时，后续目录使用目录名作为显示名，避免被去重隐藏。用户只能从 GUI 删除本地导入且未被任何机器人授权使用的 Skill；已授权 Skill 必须先在 Bot 配置中取消授权。
 
-Agent 执行前，应用把当前 Bot 获授权的 Skill 从原始来源复制物化到 `state/bots/<bot-id>/claude-home/skills/` 和当前会话 `workspace/bots/<bot-id>/sessions/<conversation-hash>/skills/`。Agent 只读取物化副本，不通过 symlink 追踪用户导入目录、市场仓库目录或安装包内置目录；`.git` 元数据不会复制到运行目录。这样可减少客户机器上安装包路径、权限和 symlink 行为差异导致的 Skill 读取失败。
+Agent 执行前，应用把当前 Bot 获授权的 Skill 从原始来源复制物化到 `state/bots/<bot-id>/claude-home/skills/` 和当前会话 `workspace/bots/<bot-id>/sessions/<conversation-hash>/skills/`。Agent 只读取物化副本，不通过 symlink 追踪用户导入目录、市场仓库目录或安装包内置目录；`.git` 元数据不会复制到运行目录。这样可减少客户机器上安装包路径、权限和 symlink 行为差异导致的 Skill 读取失败。每个会话 workspace 根目录还会生成 `CLAUDE.md`，列出当前授权 Skill 的 `./skills/<name>/SKILL.md` 入口，提示 Agent 处理业务问题前先读取对应 Skill。
 
 机器人可配置 Owner open_id。Agent 仅通过结构化 `OWNER_ESCALATION` 结果发起人工升级；Runtime 将请求持久化并私聊 Owner 发送卡片。只有配置的 Owner 本人发出的 `/owner` 处理指令会被接受，处理结果回复到原消息。
 
