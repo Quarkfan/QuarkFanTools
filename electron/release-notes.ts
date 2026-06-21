@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.19",
+    date: "2026-06-21",
+    highlights: [
+      "飞书事件监听增加健康重启，连接后持续没有消息事件时会主动重建对应 Bot 的订阅。",
+      "用于恢复 lark-cli 进程仍在但 WebSocket 不再投递消息的假连接状态。",
+      "运行台会记录“飞书事件监听健康重启”，便于继续区分平台投递、路由和 Agent 处理问题。"
+    ]
+  },
+  {
     version: "1.6.18",
     date: "2026-06-21",
     highlights: [

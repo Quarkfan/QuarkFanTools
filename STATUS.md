@@ -4,12 +4,12 @@
 
 ## 当前基线
 
-- 产品版本：`1.6.18`
+- 产品版本：`1.6.19`
 - Git 分支：`codex/v1.6.7-multi-bot-mention-filter`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、重复投递去重、OAuth 存储隔离、启动无反馈、旧凭据 marker 迁移和 Intel 客户环境下单共享入口只覆盖后启动 Bot 的问题，正在进行打包交付验证
+- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、重复投递去重、OAuth 存储隔离、启动无反馈、旧凭据 marker 迁移、Intel 客户环境下单共享入口只覆盖后启动 Bot，以及 `lark-cli` 进程仍在但 WebSocket 不再投递消息的假连接问题，正在进行现场验证
 
 ## 已实现
 
@@ -62,6 +62,7 @@
 - 运行台点击启动会立即记录本地启动日志；主进程记录启动请求和飞书身份确认阶段，lark-cli 配置校验、初始化和密钥降级短命令有 30 秒超时，避免启动卡住时无反馈。
 - lark-cli 凭据 marker 加入 per-Bot HOME 版本，升级后会重新初始化 Bot 态配置，避免旧全局或旧 HOME 状态导致 `invalid_client`。
 - `v1.6.17` 起，多飞书 Bot 不再使用单共享事件入口；每个 Bot 维护自己的隔离订阅，连接断开后只重连当前 Bot，避免后启动 Bot 接管入口后先启动 Bot 收不到消息。
+- `v1.6.18` 之后的维护版为每个飞书事件订阅增加健康检查；订阅进程仍在但连接后长期没有消息事件、或长时间没有事件投递时，会主动重启对应 Bot 的监听并记录健康重启日志。
 - arm64 与 x64 独立安装包构建。
 
 ## 已知限制与风险
@@ -84,6 +85,7 @@
 
 ## 最近验证
 
+- 2026-06-21：本机现场日志确认 `v1.6.18` 中两个 Bot 订阅均可连接，但出现 `lark-cli` 进程仍在、重启后长时间没有新的 `im.message.receive_v1` 日志的假连接形态；`v1.6.19` 为每 Bot 事件订阅增加健康检查和退避重启，并记录“飞书事件监听健康重启”。`npm test` 通过，41 项测试全部通过；`npm run pack:mac` 通过，`v1.6.19` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.19`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含健康重启代码。归档产物位于 `release/v1.6.19/`。
 - 2026-06-21：arm 环境反馈 `v1.6.17` 每 Bot 隔离订阅后，同一条群聊消息被多个订阅收到时某个 Bot 会连续回复两次；已将去重从仅按 `event_id` 扩展为同时按 `message_id` 去重。`npm test` 通过，41 项测试全部通过；`npm run pack:mac` 通过，`v1.6.18` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.18`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含 `message:${messageId}` 去重代码。归档产物位于 `release/v1.6.18/`。
 - 2026-06-21：客户 x64 环境反馈 `v1.6.16` 单共享入口会出现后启动 Bot 可用、先启动 Bot 收不到自身事件；已改为每 Bot 独立 HOME/profile 订阅并保留 Runtime 统一 mention 路由。`npm test` 通过，39 项测试全部通过；`npm run pack:mac` 通过，`v1.6.17` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.17`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含“飞书事件监听已连接”和“飞书事件已跨 Bot 路由”新代码。归档产物位于 `release/v1.6.17/`。
 - 2026-06-20：本机覆盖安装 `v1.6.16` 后现场验证通过：两个 Bot 均完成“飞书 Bot 身份已确认”，共享事件入口连接成功，旧 marker 触发的 `invalid_client / The auth method is not supported` 未再出现。
