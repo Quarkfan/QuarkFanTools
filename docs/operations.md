@@ -86,6 +86,8 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 - 官方 `lark-cli event +subscribe --force` 帮助提示多个订阅会被服务端随机拆分事件；QuarkfanTools 不使用 `--force`。`v1.7.0` 通过 worker 进程把多 Bot 的长连接、任务队列和 Agent 状态隔离到运行时进程级，减少单主进程内多订阅互相影响。
 - 如果某个 Bot 对同一条消息连续回复两次，确认是否运行 `1.7.0` 或更高版本，并检查诊断日志中的 `messageId` 去重记录。应用仍按 `event_id` 和稳定的 `message_id` 去重。
 - `runtime.botIsolationMode` 当前默认 `process`。`container` 和 `auto` 会进入配置和诊断日志，但 `1.7.0` 仍使用内置 worker 进程承载 Bot；Docker 容器隔离将在后续 driver 中接入。
+- `v1.8.0` 起，运行台会把 Bot 状态显示为“worker 启动中”或“监听已连接”。如果第一条消息偶发无响应，先看该 Bot 当时是否已进入“监听已连接”；未连接时发送的消息不会被本地监听到。
+- 系统从休眠唤醒后，应用会记录“系统从休眠唤醒后重建监听”并重建当前运行中的 Bot worker。若客户机器经常休眠，建议在配置页将“防休眠”设置为“Bot 监听时阻止休眠”。
 - 配置里的 `cli_...` 是飞书开放平台应用 App ID，用于初始化对应 Bot 的 lark-cli profile。
 - Bot 启动前会规范化自己的隔离 `lark-cli/config.json`，只保留当前 App ID 对应的 `qft-...` 命名 profile。旧版单 Bot 迁移残留的未命名 app 会被合并，避免多 Bot 同时监听时 profile 解析出现歧义。
 - 运行时会记录 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 和应用名。群聊消息有 `message.mentions` 时，应用会先用 mention 目标里的名称、App ID、应用名和 open_id 等值匹配当前 Bot；`mentions[].id.open_id` 只作为命中信号，不作为排他条件，因为现场事件中它可能不同于 bot info 的 `bot.open_id`。
@@ -146,6 +148,7 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 - 确认目录包含 `SKILL.md`。
 - 确认 Skill 已被发现并授权给目标机器人。
 - 同名 Skill 优先级为用户、市场、内置，检查是否被更高优先级版本覆盖。
+- `v1.8.0` 起，Agent 读取的是当前 Bot 和当前会话下的物化 Skill 副本，而不是原始 Skill 目录或 symlink。若列表中能看到但 Agent 仍提示无 Skill，复制诊断日志并检查该 Bot 的最近“Agent 工作过程”和“消息处理失败”日志。
 - 如果多个本地目录的 `SKILL.md` 声明了同一个 `name`，技能市场会保留第一个声明名，并用后续目录名区分显示，例如 `moje-qa-assistant-adv`。
 - 正在被 Bot 授权使用的本地 Skill 删除按钮会禁用；先到配置页取消对应 Bot 授权后再删除。
 

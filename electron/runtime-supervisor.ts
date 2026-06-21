@@ -116,14 +116,26 @@ export class QuarkfanToolsSupervisor extends EventEmitter {
     this.emitSnapshot();
   }
 
+  async restartRunningBots(reason: string): Promise<void> {
+    const botIds = [...this.workers.keys()];
+    if (botIds.length === 0) return;
+    await this.logger.write("warn", "正在重建 Bot 隔离进程", `${reason} / ${botIds.length} 个机器人`);
+    for (const botId of botIds) {
+      await this.stopBot(botId);
+      await this.startBot(botId);
+    }
+  }
+
   snapshot(): RuntimeSnapshot {
     const workerSnapshots = [...this.workers.values()].map((worker) => worker.snapshot).filter((item): item is RuntimeSnapshot => Boolean(item));
     const runningBotIds = [...this.workers.keys()];
     const connectedBotIds = workerSnapshots.flatMap((snapshot) => snapshot.connectedBotIds);
+    const readyBotIds = [...this.workers.values()].filter((worker) => worker.connected).map((worker) => worker.botId);
     return {
       running: runningBotIds.length > 0,
       runningBotIds,
       connectedBotIds,
+      readyBotIds,
       workerPids: Object.fromEntries([...this.workers.entries()]
         .map(([botId, worker]) => [botId, worker.child.pid])
         .filter((entry): entry is [string, number] => typeof entry[1] === "number")),

@@ -41,6 +41,7 @@ export interface AppConfig {
     maxConcurrentTasks: number;
     maxAgentTurns?: number;
     botIsolationMode?: "process" | "container" | "auto";
+    preventSleepMode?: "off" | "when-running" | "when-busy";
   };
 }
 
@@ -97,6 +98,7 @@ export interface RuntimeSnapshot {
   runningBotIds: string[];
   connectedBotIds: string[];
   workerPids?: Record<string, number>;
+  readyBotIds?: string[];
   activeTasks: number;
   queuedTasks: number;
   skills: SkillSummary[];

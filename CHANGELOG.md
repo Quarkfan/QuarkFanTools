@@ -6,6 +6,13 @@
 
 ## Unreleased
 
+## v1.8.0 - 2026-06-21
+
+- Agent 运行前不再通过 symlink 读取授权 Skill，而是把授权 Skill 复制物化到当前 Bot 的 Claude home 和当前会话 workspace；sandbox 拒绝原始 local、market、builtin Skill 根目录，降低客户机器上 symlink 或安装包路径差异导致的 Skill 读取失败。
+- 配置新增防休眠模式，可选择关闭、Bot 监听时阻止系统自动休眠，或仅任务执行时阻止系统自动休眠；诊断日志会记录 powerSaveBlocker 状态。
+- 监听系统从休眠唤醒，醒来后自动重建当前运行中的 Bot worker 和 lark-cli 订阅，降低休眠后“进程仍在但不收消息”的假连接风险。
+- 运行台区分 worker 已启动与飞书监听已连接，诊断 snapshot 增加 ready Bot 信息，便于排查 x64 首条消息偶发无响应。
+
 ## v1.7.0 - 2026-06-21
 
 - 多 Bot 运行结构改为主进程 Supervisor + 每 Bot 独立 worker 进程。主进程只负责配置、启停、日志和状态聚合；每个 Bot 的飞书监听、消息处理、Agent、会话和去重在自己的 worker 中运行。

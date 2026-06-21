@@ -42,7 +42,8 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
       ...base.runtime,
       ...override.runtime,
       maxAgentTurns: Math.max(10, Math.min(100, override.runtime?.maxAgentTurns ?? base.runtime.maxAgentTurns ?? 60)),
-      botIsolationMode: normalizeIsolationMode(override.runtime?.botIsolationMode ?? base.runtime.botIsolationMode)
+      botIsolationMode: normalizeIsolationMode(override.runtime?.botIsolationMode ?? base.runtime.botIsolationMode),
+      preventSleepMode: normalizePreventSleepMode(override.runtime?.preventSleepMode ?? base.runtime.preventSleepMode)
     }
   };
 }
@@ -76,4 +77,8 @@ function normalizeScopes(scopes: unknown): string[] {
 
 function normalizeIsolationMode(value: unknown): "process" | "container" | "auto" {
   return value === "container" || value === "auto" ? value : "process";
+}
+
+function normalizePreventSleepMode(value: unknown): "off" | "when-running" | "when-busy" {
+  return value === "when-running" || value === "when-busy" ? value : "off";
 }

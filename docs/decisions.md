@@ -105,3 +105,17 @@
 - 决策：`v1.7.0` 起，主进程作为 Supervisor 管理多个 Bot worker；每个运行中的 Bot 在独立 worker 进程内启动飞书监听、消息处理、Agent、会话和去重。`runtime.botIsolationMode` 默认 `process`，`container` 与 `auto` 先作为 Docker driver 预留配置。
 - 原因：单主进程内多个 `lark-cli event +subscribe` 会把 Bot 隔离降低为目录/profile 级，现场已出现交叉投递、重复投递和分流风险。worker 进程隔离能把崩溃、长连接、任务队列和 Agent 状态收敛到 Bot 维度，同时不要求客户安装 Docker。
 - 后果：运行台和诊断日志需要聚合 worker 状态；后续容器隔离应实现同一 RuntimeDriver 合约，而不是重新把多 Bot 逻辑放回主进程。
+
+## D-018 授权 Skill 运行时复制物化
+
+- 状态：已采用
+- 决策：`v1.8.0` 起，Agent 执行前把当前 Bot 获授权的 Skill 复制到 Bot Claude home 和当前会话 workspace。Agent 只读取物化副本，sandbox 拒绝原始 local、market、builtin Skill 根目录。
+- 原因：客户机器上的安装包资源路径、用户导入目录权限和 symlink 行为可能不同；依赖 symlink 追踪原始 Skill 目录会导致“已授权但 Agent 读不到 Skill”的现场问题。
+- 后果：运行时会多占用少量磁盘空间；后续存储管理可增加物化 Skill 缓存清理。原始 Skill 不会因 Agent 写操作被直接修改。
+
+## D-019 休眠治理采用防休眠配置加唤醒重建
+
+- 状态：已采用
+- 决策：新增 `runtime.preventSleepMode` 控制 Electron `powerSaveBlocker`；系统唤醒后重建当前运行中的 Bot worker 和 lark-cli 订阅。
+- 原因：macOS 休眠会暂停主进程、worker、lark-cli WebSocket 和 Agent 子进程，醒来后可能出现进程仍在但不投递消息的假连接。完全禁止用户手动休眠不可行，也不应作为承诺。
+- 后果：默认仍不阻止休眠；7x24 部署可启用“Bot 监听时阻止休眠”。唤醒重建会短暂中断监听，但比假连接更可诊断。

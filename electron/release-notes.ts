@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.8.0",
+    date: "2026-06-21",
+    highlights: [
+      "授权 Skill 会在运行前复制到当前 Bot 的受管目录，减少客户机器上 Skill 读取失败或识别不到的问题。",
+      "配置新增防休眠模式，并在系统唤醒后自动重建正在运行的 Bot 监听。",
+      "运行台区分 worker 启动中和监听已连接，便于排查首条消息偶发无响应。"
+    ]
+  },
+  {
     version: "1.7.0",
     date: "2026-06-21",
     highlights: [

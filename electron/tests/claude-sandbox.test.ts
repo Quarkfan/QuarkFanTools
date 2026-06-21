@@ -53,7 +53,7 @@ test("sandbox allows current bot state while denying other bots", () => {
   const filesystem = buildSandboxFilesystem(config, bot, workspace, botState, [skill], {
     stateRoot: "/app/state",
     workspaceRoot: "/app/workspace",
-    skillsRoot: "/app/workspace/skills"
+    skillRoots: ["/app/workspace/skills", "/app/workspace/market-skills", "/app/resources/builtin-skills"]
   });
 
   assert.ok(filesystem.allowWrite.includes(botState));
@@ -64,6 +64,9 @@ test("sandbox allows current bot state while denying other bots", () => {
   assert.ok(!filesystem.denyRead.includes(path.dirname(botState)));
   assert.ok(filesystem.denyWrite.some((item) => item.endsWith("/state/bots/other")));
   assert.ok(filesystem.denyRead.some((item) => item.endsWith("/state/bots/other")));
+  assert.ok(filesystem.denyRead.includes("/app/workspace/skills"));
+  assert.ok(!filesystem.allowRead.includes(path.dirname(skill.path)));
+  assert.ok(!filesystem.allowWrite.includes(path.dirname(skill.path)));
 });
 
 test("per-bot lark secure store stays inside current bot state", () => {
@@ -73,7 +76,7 @@ test("per-bot lark secure store stays inside current bot state", () => {
   const filesystem = buildSandboxFilesystem(config, bot, "/app/workspace/bots/default/sessions/current", botState, [], {
     stateRoot: "/app/state",
     workspaceRoot: "/app/workspace",
-    skillsRoot: "/app/workspace/skills"
+    skillRoots: ["/app/workspace/skills", "/app/workspace/market-skills", "/app/resources/builtin-skills"]
   });
 
   assert.ok(secureStore.startsWith(botState));
@@ -81,4 +84,15 @@ test("per-bot lark secure store stays inside current bot state", () => {
   assert.ok(filesystem.allowWrite.includes(botState));
   assert.ok(filesystem.denyRead.some((item) => otherSecureStore.startsWith(item)));
   assert.ok(filesystem.denyWrite.some((item) => otherSecureStore.startsWith(item)));
+});
+
+test("sandbox denies original market and builtin skill roots", () => {
+  const filesystem = buildSandboxFilesystem(config, bot, "/app/workspace/bots/default/sessions/current", "/app/state/bots/default", [], {
+    stateRoot: "/app/state",
+    workspaceRoot: "/app/workspace",
+    skillRoots: ["/app/workspace/skills", "/app/workspace/market-skills", "/app/resources/builtin-skills"]
+  });
+
+  assert.ok(filesystem.denyRead.includes("/app/workspace/market-skills"));
+  assert.ok(filesystem.denyRead.includes("/app/resources/builtin-skills"));
 });

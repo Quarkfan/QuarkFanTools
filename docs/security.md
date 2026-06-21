@@ -14,6 +14,7 @@
 - 每个机器人使用独立飞书 CLI 配置、Claude home、会话状态和 workspace。
 - 每个运行中的机器人由独立 worker 进程承载；主进程只做 Supervisor、日志聚合和状态聚合。
 - 每个机器人只映射明确授权的 Skills。
+- Agent 运行时只读取授权 Skill 的物化副本；原始本地导入目录、市场仓库目录和安装包内置目录不直接暴露给 sandbox。
 - 删除本地导入 Skill 时同步撤销所有机器人对该名称的授权，避免同名市场或内置 Skill 自动继承权限。
 - Owner 人工请求只接受配置的 Owner open_id 发出的处理指令；待处理请求按机器人隔离保存。
 - Claude sandbox 默认拒绝其他机器人和全局 Skill 路径，只放行当前执行所需目录。
@@ -39,6 +40,8 @@ macOS 上启用 `enableWeakerNetworkIsolation` 会开放对 `com.apple.trustd.ag
 ### Bot worker 隔离
 
 `v1.7.0` 的默认隔离方式是进程级 worker。worker 仍运行在同一用户账户下，不等同于容器或系统用户级隔离；它的价值是隔离 lark-cli 长连接、Agent 会话、任务队列和崩溃影响面。Docker 容器隔离作为后续可选 driver，必须在不破坏默认自包含交付的前提下接入。
+
+配置中的防休眠使用 Electron `powerSaveBlocker`，只能降低系统自动休眠导致监听中断的概率，不是安全边界，也不能阻止用户手动合盖、关机或强制睡眠。
 
 ### Skill 供应链
 

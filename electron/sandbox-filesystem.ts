@@ -14,7 +14,7 @@ export function buildSandboxFilesystem(
   workspace: string,
   botState: string,
   skills: SkillSummary[],
-  roots: { stateRoot: string; workspaceRoot: string; skillsRoot: string }
+  roots: { stateRoot: string; workspaceRoot: string; skillRoots: string[] }
 ): SandboxFilesystem {
   const otherBotStateRoots = config.bots
     .filter((item) => item.id !== bot.id)
@@ -22,11 +22,10 @@ export function buildSandboxFilesystem(
   const otherBotWorkspaceRoots = config.bots
     .filter((item) => item.id !== bot.id)
     .map((item) => path.join(roots.workspaceRoot, "bots", item.id));
-  const skillDirs = skills.map((skill) => path.dirname(skill.path));
   return {
-    denyRead: [...otherBotWorkspaceRoots, ...otherBotStateRoots, roots.skillsRoot],
+    denyRead: [...otherBotWorkspaceRoots, ...otherBotStateRoots, ...roots.skillRoots],
     denyWrite: [...otherBotWorkspaceRoots, ...otherBotStateRoots],
-    allowRead: [workspace, botState, ...skillDirs],
-    allowWrite: [workspace, botState, ...skillDirs]
+    allowRead: [workspace, botState],
+    allowWrite: [workspace, botState]
   };
 }

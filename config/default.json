@@ -20,6 +20,7 @@
     "approvalPolicy": "never",
     "maxConcurrentTasks": 2,
     "maxAgentTurns": 60,
-    "botIsolationMode": "process"
+    "botIsolationMode": "process",
+    "preventSleepMode": "off"
   }
 }

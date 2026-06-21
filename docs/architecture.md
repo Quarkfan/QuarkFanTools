@@ -23,7 +23,7 @@ flowchart LR
 
 ## 2. 消息处理流程
 
-每个启用且配置完整的机器人可在 UI 中独立启动和停止。`v1.7.0` 起，主进程不再直接承载多个 Bot 的监听和 Agent，而是为每个 Bot 启动一个独立 worker 进程。worker 使用该 Bot 专属 `HOME`、named profile、状态目录、Claude home 和 workspace 启动自己的 `LarkEventStream`，并只处理该 Bot 的消息、会话、去重和 Agent 调用。主进程 Supervisor 只负责 worker 启停、崩溃隔离、日志聚合和 UI snapshot 聚合。这样隔离边界从目录/profile 提升到运行时进程，避免一个主 Runtime 内多个 Bot 订阅和任务状态互相影响。事件断开后当前 worker 内等待 5 秒重连，且每个 worker 最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话在 worker 内通过 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。启动监听前会调用 `/open-apis/bot/v3/info` 获取当前飞书机器人的 `open_id` 和应用名，所有回复、表情、附件下载和 Agent 内 lark-cli 调用均使用当前 Bot 的独立 named profile。
+每个启用且配置完整的机器人可在 UI 中独立启动和停止。`v1.7.0` 起，主进程不再直接承载多个 Bot 的监听和 Agent，而是为每个 Bot 启动一个独立 worker 进程。worker 使用该 Bot 专属 `HOME`、named profile、状态目录、Claude home 和 workspace 启动自己的 `LarkEventStream`，并只处理该 Bot 的消息、会话、去重和 Agent 调用。主进程 Supervisor 只负责 worker 启停、崩溃隔离、日志聚合和 UI snapshot 聚合。这样隔离边界从目录/profile 提升到运行时进程，避免一个主 Runtime 内多个 Bot 订阅和任务状态互相影响。事件断开后当前 worker 内等待 5 秒重连，且每个 worker 最多只有一个待执行的重连定时器。系统从休眠唤醒后，主进程会延迟数秒重建当前运行中的 Bot worker，避免 lark-cli 进程仍在但 WebSocket 不再投递事件。同一连续对话内任务串行，不同对话在 worker 内通过 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。启动监听前会调用 `/open-apis/bot/v3/info` 获取当前飞书机器人的 `open_id` 和应用名，所有回复、表情、附件下载和 Agent 内 lark-cli 调用均使用当前 Bot 的独立 named profile。
 
 同一飞书 App ID 同一时间只能启动一个本地 Bot。飞书事件属于开放平台应用而不是 QuarkfanTools 内部 Bot 配置；如果两个本地 Bot 复用同一个 App ID，它们会收到同一条机器人事件，应用层无法可靠判断用户想调用哪个本地角色。因此多 Bot 隔离要求每个运行中的 Bot 使用不同飞书应用；同一飞书应用内的多角色能力应由 Skill、命令或套件在单个 Bot 内路由。
 
@@ -85,6 +85,8 @@ Skill 来源按优先级发现：
 
 Skill 摘要标记为本地导入、Git 市场或应用内置。本地多个目录声明相同 frontmatter `name` 时，后续目录使用目录名作为显示名，避免被去重隐藏。用户只能从 GUI 删除本地导入且未被任何机器人授权使用的 Skill；已授权 Skill 必须先在 Bot 配置中取消授权。
 
+Agent 执行前，应用把当前 Bot 获授权的 Skill 从原始来源复制物化到 `state/bots/<bot-id>/claude-home/skills/` 和当前会话 `workspace/bots/<bot-id>/sessions/<conversation-hash>/skills/`。Agent 只读取物化副本，不通过 symlink 追踪用户导入目录、市场仓库目录或安装包内置目录；`.git` 元数据不会复制到运行目录。这样可减少客户机器上安装包路径、权限和 symlink 行为差异导致的 Skill 读取失败。
+
 机器人可配置 Owner open_id。Agent 仅通过结构化 `OWNER_ESCALATION` 结果发起人工升级；Runtime 将请求持久化并私聊 Owner 发送卡片。只有配置的 Owner 本人发出的 `/owner` 处理指令会被接受，处理结果回复到原消息。
 
 日志条目可包含结构化 `botId`。运行台使用该字段按机器人隔离展示详细日志，并可按等级筛选；不属于机器人的应用级日志仍保留为全局日志。
@@ -119,12 +121,14 @@ state/
     ├── lark-home/
     ├── tmp/
     ├── claude-home/
+    │   └── skills/
     ├── deferred-tasks.json
     └── sessions.json
 workspace/
 ├── skills/
 ├── market-skills/
 └── bots/<bot-id>/sessions/<conversation-hash>/
+    └── skills/
 ```
 
 首次运行会从旧目录 `~/Library/Application Support/qah/` 迁移配置、Skills 和状态。

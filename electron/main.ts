@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, powerSaveBlocker } from "electron";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { QuarkfanToolsSupervisor } from "./runtime-supervisor.js";
@@ -17,6 +17,8 @@ const runtime = new QuarkfanToolsSupervisor();
 let mainWindow: BrowserWindow | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let quittingAfterRuntimeStop = false;
+let sleepBlockerId: number | null = null;
+let wakeRestartTimer: ReturnType<typeof setTimeout> | null = null;
 
 if (!hasSingleInstanceLock) app.quit();
 
@@ -48,6 +50,7 @@ if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     await migrateLegacyData();
     await runtime.initialize();
+    updatePowerSaveBlocker();
     createWindow();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -70,6 +73,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", (event) => {
   if (quittingAfterRuntimeStop) return;
   event.preventDefault();
+  stopPowerSaveBlocker();
   void runtime.stop().finally(() => {
     quittingAfterRuntimeStop = true;
     app.quit();
@@ -100,8 +104,21 @@ function summarizeLarkOAuthResult(result: string): string {
   }
 }
 
-runtime.on("snapshot", (snapshot) => sendToRenderer("runtime:snapshot", snapshot));
+runtime.on("snapshot", (snapshot) => {
+  updatePowerSaveBlocker();
+  sendToRenderer("runtime:snapshot", snapshot);
+});
 runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
+
+powerMonitor.on("resume", () => {
+  if (wakeRestartTimer) clearTimeout(wakeRestartTimer);
+  wakeRestartTimer = setTimeout(() => {
+    wakeRestartTimer = null;
+    void runtime.restartRunningBots("系统从休眠唤醒后重建监听").catch((error) => (
+      runtime.logger.write("error", "系统唤醒后重建监听失败", String(error))
+    ));
+  }, 5000);
+});
 
 ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
@@ -253,7 +270,11 @@ async function diagnosticLogText(): Promise<string> {
         multimodalEnabled: snapshot.config.model.multimodalEnabled
       },
       runtime: snapshot.config.runtime,
-      docker
+      docker,
+      powerSaveBlocker: {
+        active: sleepBlockerId !== null,
+        id: sleepBlockerId
+      }
     }, null, 2),
     "",
     "BOT STATE AND LARK CLI LOGS",
@@ -265,6 +286,31 @@ async function diagnosticLogText(): Promise<string> {
     "RECENT PERSISTENT LOGS",
     persistentLines.join("\n") || "(empty)"
   ].join("\n");
+}
+
+function shouldPreventSleep(): boolean {
+  const snapshot = runtime.snapshot();
+  const mode = snapshot.config.runtime.preventSleepMode ?? "off";
+  if (mode === "off") return false;
+  if (mode === "when-running") return snapshot.runningBotIds.length > 0;
+  return snapshot.activeTasks + snapshot.queuedTasks > 0;
+}
+
+function updatePowerSaveBlocker(): void {
+  const enabled = shouldPreventSleep();
+  if (enabled && sleepBlockerId === null) {
+    sleepBlockerId = powerSaveBlocker.start("prevent-display-sleep");
+    void runtime.logger.write("info", "已启用防休眠", `powerSaveBlocker=${sleepBlockerId}`);
+  } else if (!enabled && sleepBlockerId !== null) {
+    stopPowerSaveBlocker();
+  }
+}
+
+function stopPowerSaveBlocker(): void {
+  if (sleepBlockerId === null) return;
+  if (powerSaveBlocker.isStarted(sleepBlockerId)) powerSaveBlocker.stop(sleepBlockerId);
+  void runtime.logger.write("info", "已关闭防休眠", `powerSaveBlocker=${sleepBlockerId}`);
+  sleepBlockerId = null;
 }
 
 async function recentFilesText(dir: string, maxFiles: number, maxLinesPerFile: number): Promise<Array<{ file: string; modifiedAt: string; tail: string }>> {

@@ -26,7 +26,8 @@ const base: AppConfig = {
     approvalPolicy: "never",
     maxConcurrentTasks: 2,
     maxAgentTurns: 60,
-    botIsolationMode: "process"
+    botIsolationMode: "process",
+    preventSleepMode: "off"
   }
 };
 
@@ -186,6 +187,13 @@ test("defaults bot runtime isolation to process workers", () => {
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, botIsolationMode: "auto" } }).runtime.botIsolationMode, "auto");
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, botIsolationMode: "container" } }).runtime.botIsolationMode, "container");
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, botIsolationMode: "invalid" as never } }).runtime.botIsolationMode, "process");
+});
+
+test("defaults sleep prevention to off", () => {
+  assert.equal(mergeConfig(base, {}).runtime.preventSleepMode, "off");
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, preventSleepMode: "when-running" } }).runtime.preventSleepMode, "when-running");
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, preventSleepMode: "when-busy" } }).runtime.preventSleepMode, "when-busy");
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, preventSleepMode: "invalid" as never } }).runtime.preventSleepMode, "off");
 });
 
 test("detects running bots that share the same Feishu app id", () => {

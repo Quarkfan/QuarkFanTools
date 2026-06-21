@@ -1,9 +1,9 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import electron from "electron";
-import { access, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
-import { skillsRoot, stateRoot, workspaceRoot } from "./paths.js";
+import { builtinSkillsRoot, marketSkillsRoot, skillsRoot, stateRoot, workspaceRoot } from "./paths.js";
 import { larkRuntimeEnvironment } from "./lark-cli.js";
 import type { AppConfig, BotConfig, LarkMessage, SkillSummary } from "./types.js";
 import { cacheWorkspaceFiles } from "./file-cache.js";
@@ -15,7 +15,7 @@ function appVersion(): string {
   return process.env.QFT_APP_VERSION ?? electronApp?.getVersion() ?? "dev";
 }
 
-async function syncSkillLinks(targetRoot: string, skills: SkillSummary[]): Promise<void> {
+export async function materializeSkillCopies(targetRoot: string, skills: SkillSummary[]): Promise<void> {
   await mkdir(targetRoot, { recursive: true });
 
   const expected = new Set(skills.map((skill) => skill.name));
@@ -24,11 +24,19 @@ async function syncSkillLinks(targetRoot: string, skills: SkillSummary[]): Promi
     .map((entry) => rm(path.join(targetRoot, entry), { recursive: true, force: true })));
   await Promise.all(skills.map(async (skill) => {
     const target = path.join(targetRoot, skill.name);
-    try {
-      await access(target);
-    } catch {
-      await symlink(path.dirname(skill.path), target, "dir");
-    }
+    await rm(target, { recursive: true, force: true });
+    await cp(path.dirname(skill.path), target, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+      filter: (source) => path.basename(source) !== ".git"
+    });
+    await writeFile(path.join(target, ".quarkfantools-materialized.json"), JSON.stringify({
+      name: skill.name,
+      source: skill.source,
+      sourcePath: skill.path,
+      materializedAt: new Date().toISOString()
+    }, null, 2));
   }));
 }
 
@@ -36,8 +44,8 @@ async function ensureBotWorkspace(bot: BotConfig, conversationKey: string, skill
   const claudeHome = path.join(stateRoot(), "bots", bot.id, "claude-home");
   const workspace = path.join(workspaceRoot(), "bots", bot.id, "sessions", workspaceSessionId(conversationKey));
   await Promise.all([
-    syncSkillLinks(path.join(claudeHome, "skills"), skills),
-    syncSkillLinks(path.join(workspace, "skills"), skills)
+    materializeSkillCopies(path.join(claudeHome, "skills"), skills),
+    materializeSkillCopies(path.join(workspace, "skills"), skills)
   ]);
   return { claudeHome, workspace };
 }
@@ -133,7 +141,7 @@ export async function runClaude(
           filesystem: buildSandboxFilesystem(config, bot, workspace, botState, skills, {
             stateRoot: stateRoot(),
             workspaceRoot: workspaceRoot(),
-            skillsRoot: skillsRoot()
+            skillRoots: [skillsRoot(), marketSkillsRoot(), builtinSkillsRoot()]
           })
         },
         maxTurns: Math.max(10, Math.min(100, config.runtime.maxAgentTurns ?? 60)),
