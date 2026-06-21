@@ -16,6 +16,7 @@ import { TaskLimiter } from "./task-limiter.js";
 import { addDeferredTask, continueTaskId, getDeferredTask, parseDeferredTask, updateDeferredTask, type DeferredTask } from "./deferred-tasks.js";
 import { cacheMessageResources } from "./file-cache.js";
 import { selectLarkMessageTarget } from "./lark-message-router.js";
+import { hasProcessedMessage, markProcessedMessage } from "./message-dedupe.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
 import type { AppConfig, BotConfig, LarkBotIdentity, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
@@ -274,7 +275,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   }
 
   private async runWithTaskSlot(bot: BotConfig, message: LarkMessage): Promise<void> {
-    if (this.processed.get(bot.id)?.has(message.eventId)) return;
+    if (this.hasProcessedMessage(bot.id, message)) return;
     const limit = Math.max(1, Math.floor(this.config.runtime.maxConcurrentTasks || 1));
     const wasQueued = this.taskLimiter.active >= limit;
     const pendingRelease = this.taskLimiter.acquire(limit);
@@ -295,10 +296,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
 
   private async handleMessage(bot: BotConfig, message: LarkMessage, existingReaction?: Promise<string>): Promise<void> {
     const originalUserText = message.text;
-    const processed = this.processed.get(bot.id) ?? new Set<string>();
-    if (processed.has(message.eventId)) return;
-    processed.add(message.eventId);
-    this.processed.set(bot.id, processed);
+    if (this.hasProcessedMessage(bot.id, message)) return;
+    this.markProcessedMessage(bot.id, message);
 
     const delay = eventDelayMs(message);
     await this.logger.write(
@@ -459,6 +458,16 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     const values = [...(this.processed.get(botId) ?? [])].slice(-5000);
     await mkdir(path.dirname(processedPath(botId)), { recursive: true });
     await writeFile(processedPath(botId), `${JSON.stringify(values, null, 2)}\n`, "utf8");
+  }
+
+  private hasProcessedMessage(botId: string, message: LarkMessage): boolean {
+    return hasProcessedMessage(this.processed.get(botId), message);
+  }
+
+  private markProcessedMessage(botId: string, message: LarkMessage): void {
+    const processed = this.processed.get(botId) ?? new Set<string>();
+    markProcessedMessage(processed, message);
+    this.processed.set(botId, processed);
   }
 }
 

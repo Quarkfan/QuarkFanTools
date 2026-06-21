@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.18",
+    date: "2026-06-21",
+    highlights: [
+      "修复每个 Bot 独立监听后，同一条飞书消息被多个订阅收到时目标 Bot 可能连续回复两次的问题。",
+      "消息去重现在同时使用 event_id 和 message_id，跨订阅重复投递会被稳定拦截。",
+      "保留 1.6.17 的每 Bot 独立 HOME/profile 监听结构。"
+    ]
+  },
+  {
     version: "1.6.17",
     date: "2026-06-21",
     highlights: [

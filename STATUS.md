@@ -1,15 +1,15 @@
 # 当前状态
 
-最后更新：2026-06-20
+最后更新：2026-06-21
 
 ## 当前基线
 
-- 产品版本：`1.6.17`
+- 产品版本：`1.6.18`
 - Git 分支：`codex/v1.6.7-multi-bot-mention-filter`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、OAuth 存储隔离、启动无反馈、旧凭据 marker 迁移和 Intel 客户环境下单共享入口只覆盖后启动 Bot 的问题，正在进行打包交付验证
+- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、重复投递去重、OAuth 存储隔离、启动无反馈、旧凭据 marker 迁移和 Intel 客户环境下单共享入口只覆盖后启动 Bot 的问题，正在进行打包交付验证
 
 ## 已实现
 
@@ -25,6 +25,7 @@
 - 顶部拖拽带、侧栏品牌区与页面标题空白区均可用于移动窗口。
 - 按机器人选择可访问的 Skills。
 - 飞书消息处理中表情、最终回复、消息去重和断线重连。
+- 消息去重同时记录飞书 `event_id` 与稳定的 `message_id`，避免每 Bot 独立订阅时同一消息跨订阅重复投递导致目标 Bot 连续回复两次。
 - 24 小时连续会话、主动重置、私聊与群聊用户隔离。
 - 图片消息多模态输入，Agent 可调用隔离身份下的 `lark-cli`。
 - 内置 Word、PowerPoint、Excel Skills 和 Office 文件预处理。
@@ -83,6 +84,7 @@
 
 ## 最近验证
 
+- 2026-06-21：arm 环境反馈 `v1.6.17` 每 Bot 隔离订阅后，同一条群聊消息被多个订阅收到时某个 Bot 会连续回复两次；已将去重从仅按 `event_id` 扩展为同时按 `message_id` 去重。`npm test` 通过，41 项测试全部通过；`npm run pack:mac` 通过，`v1.6.18` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.18`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含 `message:${messageId}` 去重代码。归档产物位于 `release/v1.6.18/`。
 - 2026-06-21：客户 x64 环境反馈 `v1.6.16` 单共享入口会出现后启动 Bot 可用、先启动 Bot 收不到自身事件；已改为每 Bot 独立 HOME/profile 订阅并保留 Runtime 统一 mention 路由。`npm test` 通过，39 项测试全部通过；`npm run pack:mac` 通过，`v1.6.17` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.17`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含“飞书事件监听已连接”和“飞书事件已跨 Bot 路由”新代码。归档产物位于 `release/v1.6.17/`。
 - 2026-06-20：本机覆盖安装 `v1.6.16` 后现场验证通过：两个 Bot 均完成“飞书 Bot 身份已确认”，共享事件入口连接成功，旧 marker 触发的 `invalid_client / The auth method is not supported` 未再出现。
 - 2026-06-20：`npm run pack:mac` 通过，`v1.6.16` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `1.6.16`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
