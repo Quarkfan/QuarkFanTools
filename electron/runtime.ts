@@ -20,10 +20,8 @@ import { hasProcessedMessage, markProcessedMessage } from "./message-dedupe.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
 import type { AppConfig, BotConfig, LarkBotIdentity, LarkMessage, RuntimeSnapshot, SkillSummary } from "./types.js";
 
-const STREAM_SILENT_RESTART_MS = 2 * 60 * 1000;
-const STREAM_MAX_SILENT_RESTART_MS = 10 * 60 * 1000;
-const STREAM_IDLE_RESTART_MS = 10 * 60 * 1000;
-const STREAM_HEALTH_CHECK_MS = 30 * 1000;
+const STREAM_RENEW_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const STREAM_RENEW_JITTER_MS = 10 * 60 * 1000;
 
 export class QuarkfanToolsRuntime extends EventEmitter {
   readonly logger = new Logger();
@@ -33,11 +31,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private sessionStore = new SessionStore();
   private conversationTasks = new Map<string, Promise<void>>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private streamHealthTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private streamStartedAt = new Map<string, number>();
-  private streamLastMessageAt = new Map<string, number>();
-  private streamSilentRestartCounts = new Map<string, number>();
-  private healthRestartingBotIds = new Set<string>();
+  private streamRenewTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private renewingBotIds = new Set<string>();
   private runningBotIds = new Set<string>();
   private botIdentities = new Map<string, LarkBotIdentity>();
   private taskLimiter = new TaskLimiter();
@@ -116,12 +111,9 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.streams.clear();
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
     this.reconnectTimers.clear();
-    for (const timer of this.streamHealthTimers.values()) clearTimeout(timer);
-    this.streamHealthTimers.clear();
-    this.streamStartedAt.clear();
-    this.streamLastMessageAt.clear();
-    this.streamSilentRestartCounts.clear();
-    this.healthRestartingBotIds.clear();
+    for (const timer of this.streamRenewTimers.values()) clearTimeout(timer);
+    this.streamRenewTimers.clear();
+    this.renewingBotIds.clear();
     this.connectedBotIds.clear();
     this.botIdentities.clear();
     await this.logger.write("info", "QuarkfanTools 已停止");
@@ -133,15 +125,12 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     const timer = this.reconnectTimers.get(botId);
     if (timer) clearTimeout(timer);
     this.reconnectTimers.delete(botId);
-    this.clearStreamHealthCheck(botId);
+    this.clearStreamRenewal(botId);
     const stream = this.streams.get(botId);
     if (stream) await stream.stop();
     this.streams.delete(botId);
     this.connectedBotIds.delete(botId);
-    this.streamStartedAt.delete(botId);
-    this.streamLastMessageAt.delete(botId);
-    this.streamSilentRestartCounts.delete(botId);
-    this.healthRestartingBotIds.delete(botId);
+    this.renewingBotIds.delete(botId);
     this.botIdentities.delete(botId);
     const bot = this.config.bots.find((item) => item.id === botId);
     await this.logger.write("info", "机器人监听已停止", bot?.name, botId);
@@ -163,26 +152,21 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private createBotStream(bot: BotConfig): LarkEventStream {
     const stream = new LarkEventStream();
     stream.on("message", (message: LarkMessage) => {
-      this.streamLastMessageAt.set(bot.id, Date.now());
-      this.streamSilentRestartCounts.set(bot.id, 0);
       this.routeBotMessage(bot, message);
     });
     stream.on("connected", () => {
       this.connectedBotIds.add(bot.id);
-      this.streamStartedAt.set(bot.id, Date.now());
       void this.logger.write("success", "飞书事件监听已连接", bot.name, bot.id);
-      this.scheduleStreamHealthCheck(bot, stream);
+      this.scheduleStreamRenewal(bot, stream);
       this.emitSnapshot();
     });
     stream.on("stderr", (text: string) => void this.logger.write("warn", "飞书连接输出", text, bot.id));
     stream.on("exit", ({ code, signal }) => {
       this.connectedBotIds.delete(bot.id);
-      this.clearStreamHealthCheck(bot.id);
-      this.streamStartedAt.delete(bot.id);
-      this.streamLastMessageAt.delete(bot.id);
+      this.clearStreamRenewal(bot.id);
       if (this.streams.get(bot.id) === stream) this.streams.delete(bot.id);
       this.emitSnapshot();
-      if (this.runningBotIds.has(bot.id) && !this.healthRestartingBotIds.has(bot.id)) {
+      if (this.runningBotIds.has(bot.id) && !this.renewingBotIds.has(bot.id)) {
         void this.logger.write("error", "飞书事件监听已退出，5 秒后重连", `code=${code} signal=${signal}`, bot.id);
         this.scheduleReconnect(bot);
       }
@@ -286,52 +270,26 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     }
   }
 
-  private clearStreamHealthCheck(botId: string): void {
-    const timer = this.streamHealthTimers.get(botId);
+  private clearStreamRenewal(botId: string): void {
+    const timer = this.streamRenewTimers.get(botId);
     if (timer) clearTimeout(timer);
-    this.streamHealthTimers.delete(botId);
+    this.streamRenewTimers.delete(botId);
   }
 
-  private scheduleStreamHealthCheck(bot: BotConfig, stream: LarkEventStream): void {
-    this.clearStreamHealthCheck(bot.id);
-    const timer = setTimeout(() => void this.checkStreamHealth(bot, stream), STREAM_HEALTH_CHECK_MS);
-    this.streamHealthTimers.set(bot.id, timer);
+  private scheduleStreamRenewal(bot: BotConfig, stream: LarkEventStream): void {
+    this.clearStreamRenewal(bot.id);
+    const jitter = Math.floor(Math.random() * STREAM_RENEW_JITTER_MS);
+    const timer = setTimeout(() => void this.renewBotStream(bot, stream), STREAM_RENEW_INTERVAL_MS + jitter);
+    this.streamRenewTimers.set(bot.id, timer);
   }
 
-  private async checkStreamHealth(bot: BotConfig, stream: LarkEventStream): Promise<void> {
-    this.streamHealthTimers.delete(bot.id);
+  private async renewBotStream(bot: BotConfig, stream: LarkEventStream): Promise<void> {
+    this.streamRenewTimers.delete(bot.id);
+    if (this.renewingBotIds.has(bot.id)) return;
     if (!this.runningBotIds.has(bot.id) || this.streams.get(bot.id) !== stream) return;
-
-    const now = Date.now();
-    const startedAt = this.streamStartedAt.get(bot.id) ?? now;
-    const lastMessageAt = this.streamLastMessageAt.get(bot.id);
-    const silentFor = now - (lastMessageAt ?? startedAt);
-    const silentRestartCount = this.streamSilentRestartCounts.get(bot.id) ?? 0;
-    const silentRestartLimit = Math.min(
-      STREAM_MAX_SILENT_RESTART_MS,
-      STREAM_SILENT_RESTART_MS * (2 ** silentRestartCount)
-    );
-    const limit = lastMessageAt ? STREAM_IDLE_RESTART_MS : silentRestartLimit;
-
-    if (silentFor >= limit) {
-      const reason = lastMessageAt
-        ? `最近 ${formatDelay(silentFor)} 没有收到飞书消息事件`
-        : `连接后 ${formatDelay(silentFor)} 没有收到任何飞书消息事件`;
-      await this.restartBotStreamForHealth(bot, stream, reason);
-      return;
-    }
-    this.scheduleStreamHealthCheck(bot, stream);
-  }
-
-  private async restartBotStreamForHealth(bot: BotConfig, stream: LarkEventStream, reason: string): Promise<void> {
-    if (this.healthRestartingBotIds.has(bot.id)) return;
-    if (!this.runningBotIds.has(bot.id) || this.streams.get(bot.id) !== stream) return;
-    this.healthRestartingBotIds.add(bot.id);
+    this.renewingBotIds.add(bot.id);
     try {
-      await this.logger.write("warn", "飞书事件监听健康重启", reason, bot.id);
-      if (!this.streamLastMessageAt.has(bot.id)) {
-        this.streamSilentRestartCounts.set(bot.id, (this.streamSilentRestartCounts.get(bot.id) ?? 0) + 1);
-      }
+      await this.logger.write("info", "飞书事件监听定期续连", "长期运行维护，主动重建订阅连接", bot.id);
       await stream.stop();
       if (!this.runningBotIds.has(bot.id)) return;
       const currentBot = this.config.bots.find((item) => item.id === bot.id) ?? bot;
@@ -339,10 +297,10 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     } catch (error) {
       this.streams.delete(bot.id);
       this.connectedBotIds.delete(bot.id);
-      await this.logger.write("error", "飞书事件监听健康重启失败，5 秒后重试", String(error), bot.id);
+      await this.logger.write("error", "飞书事件监听定期续连失败，5 秒后重试", String(error), bot.id);
       this.scheduleReconnect(bot);
     } finally {
-      this.healthRestartingBotIds.delete(bot.id);
+      this.renewingBotIds.delete(bot.id);
       this.emitSnapshot();
     }
   }

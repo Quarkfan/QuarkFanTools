@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.6.20",
+    date: "2026-06-21",
+    highlights: [
+      "将飞书事件监听自愈策略改为适合 7x24 运行的低频定期续连。",
+      "不再把长时间没有群消息视为故障，避免安静时频繁重启订阅。",
+      "每个 Bot 约 6 小时加随机抖动续连一次，运行台会记录“飞书事件监听定期续连”。"
+    ]
+  },
+  {
     version: "1.6.19",
     date: "2026-06-21",
     highlights: [
