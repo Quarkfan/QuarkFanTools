@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.8.3",
+    date: "2026-06-21",
+    highlights: [
+      "Bot 维度定时任务新增 Cron 表达式触发，支持 5 段分钟、小时、日、月、周配置。",
+      "Cron 表达式支持 *、列表、范围和步进，适合工作日、固定时间段和周期性巡检任务。",
+      "自动化页的定时任务配置改为基础信息、触发计划和执行设置三段，并按触发方式隐藏无关字段。"
+    ]
+  },
+  {
     version: "1.8.2",
     date: "2026-06-21",
     highlights: [

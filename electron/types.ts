@@ -113,9 +113,10 @@ export interface ScheduledTask {
   name: string;
   enabled: boolean;
   trigger: {
-    type: "interval" | "once";
+    type: "interval" | "once" | "cron";
     intervalMinutes?: number;
     runAt?: string;
+    cronExpression?: string;
     timezone: string;
   };
   target: {

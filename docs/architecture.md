@@ -111,7 +111,7 @@ lark-cli 凭据 marker 只用于避免重复初始化；应用进程首次使用
 state/bots/<bot-id>/scheduled-tasks.json
 ```
 
-首版任务支持 `interval` 和 `once` 触发，目标仅支持 `prompt`，输出仅写运行台日志。触发后 Runtime 使用会话键 `scheduled:<task-id>` 调用 `runClaude()`，复用当前 Bot 的 Skill 授权、物化 Skill 副本、Claude home、session store、sandbox 和 `TaskLimiter`。它不伪造飞书消息，不添加处理中表情，也不会主动向飞书发送消息。
+任务支持 `interval`、`once` 和 `cron` 触发，目标仅支持 `prompt`，输出仅写运行台日志。Cron 使用 5 段 `分钟 小时 日 月 周` 表达式，支持 `*`、列表、范围和步进，按任务配置的 `timezone` 解释本地墙钟时间。触发后 Runtime 使用会话键 `scheduled:<task-id>` 调用 `runClaude()`，复用当前 Bot 的 Skill 授权、物化 Skill 副本、Claude home、session store、sandbox 和 `TaskLimiter`。它不伪造飞书消息，不添加处理中表情，也不会主动向飞书发送消息。
 
 任务状态写回 `scheduled-tasks.json`，包括 `lastRunAt`、`nextRunAt`、`lastStatus` 和 `lastError`。一次性任务执行后会自动停用；间隔任务按完成时间计算下一次运行。
 

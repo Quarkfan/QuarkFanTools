@@ -107,15 +107,17 @@ function collectScheduledTasks(): ScheduledTask[] {
     const field = (name: string) => row.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[data-scheduled-field="${name}"]`);
     const enabled = row.querySelector<HTMLInputElement>('[data-scheduled-field="enabled"]')?.checked ?? false;
     const runAtValue = field("trigger.runAt")?.value;
+    const triggerType = field("trigger.type")?.value;
     return {
       ...original,
       enabled,
       name: field("name")?.value || original.name,
       trigger: {
         ...original.trigger,
-        type: field("trigger.type")?.value === "once" ? "once" : "interval",
+        type: triggerType === "once" ? "once" : triggerType === "cron" ? "cron" : "interval",
         intervalMinutes: Math.max(1, Math.min(10080, Number(field("trigger.intervalMinutes")?.value ?? 60) || 60)),
-        runAt: runAtValue ? new Date(runAtValue).toISOString() : undefined
+        runAt: runAtValue ? new Date(runAtValue).toISOString() : undefined,
+        cronExpression: (field("trigger.cronExpression")?.value || "15 9 * * 1-5").trim().replace(/\s+/g, " ")
       },
       target: {
         type: "prompt",
@@ -508,21 +510,33 @@ function renderScheduledTask(task: ScheduledTask, botRunning: boolean): string {
   const next = task.state.nextRunAt ? new Date(task.state.nextRunAt).toLocaleString() : "未计划";
   const last = task.state.lastRunAt ? `${new Date(task.state.lastRunAt).toLocaleString()} / ${task.state.lastStatus ?? "unknown"}` : "未运行";
   return `
-    <article class="storage-row scheduled-task-row" data-scheduled-task="${escapeHtml(task.id)}">
-      <label class="check"><input type="checkbox" data-scheduled-field="enabled" ${task.enabled ? "checked" : ""}/><span><strong>${escapeHtml(task.name)}</strong><small>下次：${escapeHtml(next)} / 上次：${escapeHtml(last)}</small></span></label>
-      <div class="field-row">
-        <label><span>名称</span><input data-scheduled-field="name" value="${escapeHtml(task.name)}" /></label>
-        <label><span>触发方式</span><select data-scheduled-field="trigger.type"><option value="interval" ${task.trigger.type === "interval" ? "selected" : ""}>间隔</option><option value="once" ${task.trigger.type === "once" ? "selected" : ""}>一次性</option></select></label>
+    <article class="storage-row scheduled-task-row" data-scheduled-task="${escapeHtml(task.id)}" data-trigger-type="${escapeHtml(task.trigger.type)}">
+      <div class="scheduled-task-summary">
+        <label class="check"><input type="checkbox" data-scheduled-field="enabled" ${task.enabled ? "checked" : ""}/><span><strong>${escapeHtml(task.name)}</strong><small>下次：${escapeHtml(next)} / 上次：${escapeHtml(last)}</small></span></label>
       </div>
-      <div class="field-row">
-        <label><span>间隔分钟</span><input data-scheduled-field="trigger.intervalMinutes" type="number" min="1" max="10080" value="${task.trigger.intervalMinutes ?? 60}" /></label>
-        <label><span>一次性运行时间</span><input data-scheduled-field="trigger.runAt" type="datetime-local" value="${dateTimeLocalValue(task.trigger.runAt)}" /></label>
+      <div class="scheduled-task-section">
+        <strong>基础信息</strong>
+        <div class="field-row">
+          <label><span>名称</span><input data-scheduled-field="name" value="${escapeHtml(task.name)}" /></label>
+          <label><span>触发方式</span><select data-scheduled-field="trigger.type"><option value="interval" ${task.trigger.type === "interval" ? "selected" : ""}>间隔</option><option value="once" ${task.trigger.type === "once" ? "selected" : ""}>一次性</option><option value="cron" ${task.trigger.type === "cron" ? "selected" : ""}>Cron 表达式</option></select></label>
+        </div>
       </div>
-      <label><span>任务提示词</span><textarea data-scheduled-field="target.prompt" rows="4">${escapeHtml(task.target.prompt)}</textarea><small>首版仅支持 prompt 类型，结果写入运行台日志，不主动发送飞书消息。</small></label>
-      <div class="field-row">
-        <label><span>超时秒数</span><input data-scheduled-field="policy.timeoutSeconds" type="number" min="30" max="86400" value="${task.policy.timeoutSeconds}" /></label>
-        <label><span>错过策略</span><select data-scheduled-field="policy.missed"><option value="skip" ${task.policy.missed === "skip" ? "selected" : ""}>跳过</option><option value="run-once" ${task.policy.missed === "run-once" ? "selected" : ""}>补跑一次</option></select></label>
-        <label><span>并发策略</span><select data-scheduled-field="policy.concurrency"><option value="skip-if-running" ${task.policy.concurrency === "skip-if-running" ? "selected" : ""}>运行中则跳过</option><option value="queue" ${task.policy.concurrency === "queue" ? "selected" : ""}>排队</option></select></label>
+      <div class="scheduled-task-section">
+        <strong>触发计划</strong>
+        <div class="field-row">
+          <label class="trigger-interval"><span>间隔分钟</span><input data-scheduled-field="trigger.intervalMinutes" type="number" min="1" max="10080" value="${task.trigger.intervalMinutes ?? 60}" /></label>
+          <label class="trigger-once"><span>一次性运行时间</span><input data-scheduled-field="trigger.runAt" type="datetime-local" value="${dateTimeLocalValue(task.trigger.runAt)}" /></label>
+          <label class="trigger-cron"><span>Cron 表达式</span><input data-scheduled-field="trigger.cronExpression" value="${escapeHtml(task.trigger.cronExpression ?? "15 9 * * 1-5")}" placeholder="15 9 * * 1-5" /><small>5 段：分钟 小时 日 月 周；支持 *、列表、范围和步进。</small></label>
+        </div>
+      </div>
+      <div class="scheduled-task-section">
+        <strong>执行设置</strong>
+        <label><span>任务提示词</span><textarea data-scheduled-field="target.prompt" rows="4">${escapeHtml(task.target.prompt)}</textarea><small>首版仅支持 prompt 类型，结果写入运行台日志，不主动发送飞书消息。</small></label>
+        <div class="field-row three">
+          <label><span>超时秒数</span><input data-scheduled-field="policy.timeoutSeconds" type="number" min="30" max="86400" value="${task.policy.timeoutSeconds}" /></label>
+          <label><span>错过策略</span><select data-scheduled-field="policy.missed"><option value="skip" ${task.policy.missed === "skip" ? "selected" : ""}>跳过</option><option value="run-once" ${task.policy.missed === "run-once" ? "selected" : ""}>补跑一次</option></select></label>
+          <label><span>并发策略</span><select data-scheduled-field="policy.concurrency"><option value="skip-if-running" ${task.policy.concurrency === "skip-if-running" ? "selected" : ""}>运行中则跳过</option><option value="queue" ${task.policy.concurrency === "queue" ? "selected" : ""}>排队</option></select></label>
+        </div>
       </div>
       ${task.state.lastError ? `<pre>${escapeHtml(task.state.lastError)}</pre>` : ""}
       <div class="form-actions">
@@ -781,6 +795,12 @@ function bindEvents(): void {
       scheduledTasks = await window.quarkfanTools.saveScheduledTasks(selectedAutomationBotId, collectScheduledTasks());
       scheduledTasks = await window.quarkfanTools.runScheduledTaskNow(selectedAutomationBotId, String(button.dataset.id));
       render();
+    };
+  });
+  document.querySelectorAll<HTMLSelectElement>('[data-scheduled-field="trigger.type"]').forEach((select) => {
+    select.onchange = () => {
+      const row = select.closest<HTMLElement>("[data-scheduled-task]");
+      if (row) row.dataset.triggerType = select.value;
     };
   });
   document.querySelectorAll<HTMLButtonElement>(".bot-start").forEach((button) => {

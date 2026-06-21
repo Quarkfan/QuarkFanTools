@@ -110,6 +110,17 @@ textarea { resize: vertical; line-height: 1.5; }
 input:focus, select:focus, textarea:focus { border-color: #77f2a1; box-shadow: 0 0 0 2px rgba(119,242,161,.08); }
 label small { color: #536159; line-height: 1.5; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; }
+.field-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.scheduled-task-row { display: grid; gap: 12px; padding: 14px 0; border-bottom: 1px solid #202a25; }
+.scheduled-task-summary .check { padding-top: 0; padding-bottom: 0; }
+.scheduled-task-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid #202a25; }
+.scheduled-task-section strong { padding: 0 17px; color: #dce6e1; font-size: 12px; }
+.scheduled-task-row[data-trigger-type="interval"] .trigger-once,
+.scheduled-task-row[data-trigger-type="interval"] .trigger-cron,
+.scheduled-task-row[data-trigger-type="once"] .trigger-interval,
+.scheduled-task-row[data-trigger-type="once"] .trigger-cron,
+.scheduled-task-row[data-trigger-type="cron"] .trigger-interval,
+.scheduled-task-row[data-trigger-type="cron"] .trigger-once { display: none; }
 .form-actions { justify-content: flex-end; margin-top: 18px; }
 .skill-access { margin: 10px 17px 0; padding: 12px; border: 1px solid #27332d; color: #8ea097; font-size: 11px; }
 .skill-access > small { display: block; margin-bottom: 8px; color: #627269; line-height: 1.5; }

@@ -65,8 +65,9 @@ export function normalizeScheduledTask(input: unknown): ScheduledTask {
   const target = value.target && typeof value.target === "object" ? value.target as Record<string, unknown> : {};
   const policy = value.policy && typeof value.policy === "object" ? value.policy as Record<string, unknown> : {};
   const state = value.state && typeof value.state === "object" ? value.state as Record<string, unknown> : {};
-  const type = trigger.type === "once" ? "once" : "interval";
+  const type = trigger.type === "once" ? "once" : trigger.type === "cron" ? "cron" : "interval";
   const intervalMinutes = Math.max(1, Math.min(10080, Math.floor(Number(trigger.intervalMinutes ?? 60) || 60)));
+  const cronExpression = String(trigger.cronExpression ?? "15 9 * * 1-5").trim().replace(/\s+/g, " ");
   const task: ScheduledTask = {
     id: String(value.id || randomUUID()),
     name: String(value.name || "未命名定时任务").trim() || "未命名定时任务",
@@ -75,6 +76,7 @@ export function normalizeScheduledTask(input: unknown): ScheduledTask {
       type,
       intervalMinutes,
       runAt: validIsoDate(trigger.runAt) ?? undefined,
+      cronExpression: isValidCronExpression(cronExpression) ? cronExpression : "15 9 * * 1-5",
       timezone: String(trigger.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai")
     },
     target: {
@@ -106,7 +108,111 @@ export function nextRunAt(task: ScheduledTask, from: Date): Date {
   if (task.trigger.type === "once") {
     return task.trigger.runAt ? new Date(task.trigger.runAt) : from;
   }
+  if (task.trigger.type === "cron") {
+    return nextCronRunAt(task, from) ?? new Date(from.getTime() + 60 * 60_000);
+  }
   return new Date(from.getTime() + (task.trigger.intervalMinutes ?? 60) * 60_000);
+}
+
+export function isValidCronExpression(expression: string): boolean {
+  return parseCronExpression(expression) !== null;
+}
+
+function nextCronRunAt(task: ScheduledTask, from: Date): Date | null {
+  const cron = parseCronExpression(task.trigger.cronExpression ?? "");
+  if (!cron) return null;
+  const cursor = new Date(Math.floor(from.getTime() / 60_000) * 60_000 + 60_000);
+  const limitMinutes = 366 * 24 * 60;
+  for (let index = 0; index < limitMinutes; index += 1) {
+    const candidate = new Date(cursor.getTime() + index * 60_000);
+    if (matchesCron(cron, wallClockParts(candidate, task.trigger.timezone))) return candidate;
+  }
+  return null;
+}
+
+interface CronField {
+  values: Set<number>;
+  wildcard: boolean;
+}
+
+interface ParsedCron {
+  minute: CronField;
+  hour: CronField;
+  dayOfMonth: CronField;
+  month: CronField;
+  dayOfWeek: CronField;
+}
+
+function parseCronExpression(expression: string): ParsedCron | null {
+  const parts = expression.trim().replace(/\s+/g, " ").split(" ");
+  if (parts.length !== 5) return null;
+  const minute = parseCronField(parts[0], 0, 59);
+  const hour = parseCronField(parts[1], 0, 23);
+  const dayOfMonth = parseCronField(parts[2], 1, 31);
+  const month = parseCronField(parts[3], 1, 12);
+  const dayOfWeek = parseCronField(parts[4], 0, 7, 0);
+  if (!minute || !hour || !dayOfMonth || !month || !dayOfWeek) return null;
+  return { minute, hour, dayOfMonth, month, dayOfWeek };
+}
+
+function parseCronField(raw: string, min: number, max: number, normalizeSevenToZero?: number): CronField | null {
+  const values = new Set<number>();
+  const wildcard = raw === "*" || raw.startsWith("*/");
+  for (const part of raw.split(",")) {
+    const match = part.match(/^(\*|\d+|\d+-\d+)(?:\/(\d+))?$/);
+    if (!match) return null;
+    const step = match[2] ? Number(match[2]) : 1;
+    if (!Number.isInteger(step) || step < 1) return null;
+    const range = match[1];
+    let start = min;
+    let end = max;
+    if (range !== "*") {
+      const [rawStart, rawEnd] = range.split("-");
+      start = Number(rawStart);
+      end = rawEnd === undefined ? start : Number(rawEnd);
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start > end) return null;
+    }
+    if (start < min || end > max) return null;
+    for (let value = start; value <= end; value += step) {
+      values.add(normalizeSevenToZero !== undefined && value === 7 ? normalizeSevenToZero : value);
+    }
+  }
+  if (values.size === 0) return null;
+  return { values, wildcard };
+}
+
+function matchesCron(cron: ParsedCron, parts: ReturnType<typeof wallClockParts>): boolean {
+  const dayOfMonthMatches = cron.dayOfMonth.values.has(parts.day);
+  const dayOfWeekMatches = cron.dayOfWeek.values.has(parts.weekday);
+  const dayMatches = cron.dayOfMonth.wildcard || cron.dayOfWeek.wildcard
+    ? dayOfMonthMatches && dayOfWeekMatches
+    : dayOfMonthMatches || dayOfWeekMatches;
+  return cron.minute.values.has(parts.minute)
+    && cron.hour.values.has(parts.hour)
+    && cron.month.values.has(parts.month)
+    && dayMatches;
+}
+
+function wallClockParts(when: Date, timezone: string): { weekday: number; minute: number; hour: number; day: number; month: number } {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    hour12: false,
+    hourCycle: "h23",
+    weekday: "short",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  const pieces = Object.fromEntries(formatter.formatToParts(when).map((part) => [part.type, part.value]));
+  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    weekday: weekdayMap[pieces.weekday ?? "Sun"] ?? 0,
+    minute: Number(pieces.minute ?? 0),
+    hour: Number(pieces.hour ?? 0),
+    day: Number(pieces.day ?? 1),
+    month: Number(pieces.month ?? 1)
+  };
 }
 
 export function isTaskDue(task: ScheduledTask, now = new Date()): boolean {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BotScheduler, isTaskDue, newScheduledTask, nextRunAt, normalizeScheduledTask } from "../scheduled-tasks.js";
+import { BotScheduler, isTaskDue, isValidCronExpression, newScheduledTask, nextRunAt, normalizeScheduledTask } from "../scheduled-tasks.js";
 
 test("creates a disabled interval scheduled task by default", () => {
   const task = newScheduledTask("Daily check");
@@ -40,6 +40,25 @@ test("computes next interval run from a given time", () => {
     target: { prompt: "Ping" }
   });
   assert.equal(nextRunAt(task, from).toISOString(), "2026-06-21T00:15:00.000Z");
+});
+
+test("normalizes cron scheduled tasks and computes next run", () => {
+  const from = new Date("2026-06-21T00:00:00.000Z");
+  const task = normalizeScheduledTask({
+    enabled: true,
+    trigger: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "15   9 * * 1-5" },
+    target: { prompt: "Ping" }
+  });
+  assert.equal(task.trigger.type, "cron");
+  assert.equal(task.trigger.cronExpression, "15 9 * * 1-5");
+  assert.equal(nextRunAt(task, from).toISOString(), "2026-06-22T01:15:00.000Z");
+});
+
+test("validates cron expressions", () => {
+  assert.equal(isValidCronExpression("*/30 8-20 * * *"), true);
+  assert.equal(isValidCronExpression("15 9 * * 1-5"), true);
+  assert.equal(isValidCronExpression("60 9 * * *"), false);
+  assert.equal(isValidCronExpression("15 9 *"), false);
 });
 
 test("queues one follow-up run for an already running task", async () => {

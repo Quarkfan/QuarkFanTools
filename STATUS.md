@@ -4,12 +4,12 @@
 
 ## 当前基线
 
-- 产品版本：`1.8.2`
-- Git 分支：`codex/v1.8.2-routing-and-skill-diagnostics`
+- 产品版本：`1.8.3`
+- Git 分支：`codex/v1.8.3-cron-scheduled-tasks`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.8.x 针对客户现场日志继续收口消息路由确定性、群聊免 @ 连续对话配置、Skill workspace 入口和诊断日志。
+- 当前阶段：1.8.x 针对客户现场日志继续收口消息路由确定性、定时任务配置能力、Skill workspace 入口和诊断日志。
 
 ## 已实现
 
@@ -70,6 +70,7 @@
 - `v1.8.2` 起，多 Bot 严格群聊路由默认不再仅凭 `sourceAppId` 处理缺少 mention 元数据的普通群消息；配置页可显式开启同一群、同一发送者、同一 Bot 的短窗口免 @ 连续对话。
 - `v1.8.2` 起，运行台新增“飞书事件路由诊断”“群聊免 @ 连续对话已路由”和“Agent Skill 上下文”日志，便于区分平台未投递、路由忽略、Agent 未使用 Skill 和回复失败。
 - `v1.8.2` 起，每个 Agent 会话 workspace 会生成 `CLAUDE.md`，列出当前 Bot 授权 Skill 的 `./skills/<name>/SKILL.md` 入口。
+- `v1.8.3` 起，Bot 定时任务支持 Cron 表达式触发，自动化页配置 UI 按基础信息、触发计划和执行设置分区。
 - arm64 与 x64 独立安装包构建。
 
 ## 已知限制与风险
@@ -80,18 +81,19 @@
 - Agent 使用 `bypassPermissions`，安全主要依赖 Claude sandbox、目录隔离和 Skill 授权边界。
 - PowerPoint 视觉预览依赖 macOS 自带 Quick Look；预览质量受系统支持影响。
 - 自动化测试目前集中在配置迁移、飞书事件解析、Office 提取和会话键，端到端飞书与 UI 覆盖仍有限。
-- 定时任务首版暂不支持 cron 和主动发送飞书消息；输出目标仍只写运行台日志。
+- 定时任务暂不支持主动发送飞书消息；输出目标仍只写运行台日志。Cron 当前支持 5 段基础表达式，不支持秒级、`L/W/#` 或英文月份/星期。
 
 ## 后续优先事项
 
 1. 增加真实飞书事件、机器人隔离和会话清理的集成测试。
-2. 为定时任务补充 cron、飞书输出目标、任务会话重置和更细粒度 missed policy。
+2. 为定时任务补充飞书输出目标、任务会话重置和更细粒度 missed policy。
 3. 补充签名、公证和发布自动化。
 4. 评估会话过期时间、磁盘配额和物化 Skill 缓存清理的用户配置能力。
 5. 增强 Skill 市场来源校验、版本展示和更新可见性。
 
 ## 最近验证
 
+- 2026-06-21：`v1.8.3` 新增 Bot 定时任务 Cron 表达式触发和自动化页配置 UI 分区。`npm test` 通过，54 项测试全部通过；`npm run pack:mac` 通过，已生成并核对 `v1.8.3` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.8.3`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含 `isValidCronExpression`、`cronExpression` 和“Cron 表达式”自动化页代码。
 - 2026-06-21：`v1.8.2` 修复客户日志暴露的群聊无 @ 误回复与 Skill 入口不稳定问题；新增可配置群聊免 @ 连续对话、飞书事件路由诊断、Agent Skill 上下文日志和 workspace `CLAUDE.md`。`npm test` 通过，52 项测试全部通过；`npm run pack:mac` 通过，已生成并核对 `v1.8.2` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.8.2`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含“飞书事件路由诊断”“群聊免 @ 连续对话已路由”“Agent Skill 上下文”和 workspace `CLAUDE.md` 代码。
 - 2026-06-21：`v1.8.1` 完成 Bot 维度定时任务首版：新增 `scheduled-tasks.json`、worker 内 `BotScheduler`、自动化页和手动运行 IPC。`npm test` 通过，50 项测试全部通过；`npm run pack:mac` 通过，已生成并核对 `v1.8.1` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.8.1`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；arm64/x64 `app.asar` 已确认包含 `scheduled-tasks.js`、`runtime.js` 和 UI 资源。
 - 2026-06-21：`v1.8.0` 完成运行治理第一轮加固：授权 Skill 复制物化、防休眠配置、系统唤醒后重建 Bot worker、运行台 ready 状态区分和相关诊断字段。`npm test` 通过，46 项测试全部通过；编译后的 `dist-electron/bot-worker.js` 已通过模块加载烟测。`npm run pack:mac` 的 arm64 阶段通过；x64 阶段在沙箱内因 `github.com` DNS 失败无法获取 Electron distribution，改用外部网络权限执行 x64 builder 后通过。已生成并核对 `v1.8.0` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.8.0`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
