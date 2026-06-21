@@ -25,7 +25,8 @@ const base: AppConfig = {
     sandbox: "workspace-write",
     approvalPolicy: "never",
     maxConcurrentTasks: 2,
-    maxAgentTurns: 60
+    maxAgentTurns: 60,
+    botIsolationMode: "process"
   }
 };
 
@@ -178,6 +179,13 @@ test("adds a bounded max agent turns runtime config", () => {
   assert.equal(mergeConfig(base, {}).runtime.maxAgentTurns, 60);
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, maxAgentTurns: 500 } }).runtime.maxAgentTurns, 100);
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, maxAgentTurns: 1 } }).runtime.maxAgentTurns, 10);
+});
+
+test("defaults bot runtime isolation to process workers", () => {
+  assert.equal(mergeConfig(base, {}).runtime.botIsolationMode, "process");
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, botIsolationMode: "auto" } }).runtime.botIsolationMode, "auto");
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, botIsolationMode: "container" } }).runtime.botIsolationMode, "container");
+  assert.equal(mergeConfig(base, { runtime: { ...base.runtime, botIsolationMode: "invalid" as never } }).runtime.botIsolationMode, "process");
 });
 
 test("detects running bots that share the same Feishu app id", () => {

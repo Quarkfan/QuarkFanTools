@@ -98,3 +98,10 @@
 - 决策：所有 lark-cli 子进程设置当前 Bot 专属 `HOME=state/bots/<bot-id>/lark-home`，使官方 lark-cli 的 OAuth 加密材料和 `keychain-downgrade` 的 `master.key.file` 落在 Bot 状态目录下。Agent sandbox 只放行当前 Bot 状态目录，不再允许真实用户全局 `~/Library/Application Support/lark-cli/`。
 - 原因：源码确认 `LARKSUITE_CLI_CONFIG_DIR` 只能隔离 profile/config，macOS 安全存储路径由 HOME 和固定 service 名决定。继续使用全局目录会让多个 Bot 共享用户态 token 与 master key，破坏 Bot 维度治理。
 - 后果：升级后需要为每个需要读取飞书资料的 Bot 重新完成用户态 OAuth；换取 OAuth、密钥、profile、会话和 Skill 授权在 Bot 维度一致隔离。
+
+## D-017 多 Bot 默认使用独立 worker 进程隔离
+
+- 状态：已采用
+- 决策：`v1.7.0` 起，主进程作为 Supervisor 管理多个 Bot worker；每个运行中的 Bot 在独立 worker 进程内启动飞书监听、消息处理、Agent、会话和去重。`runtime.botIsolationMode` 默认 `process`，`container` 与 `auto` 先作为 Docker driver 预留配置。
+- 原因：单主进程内多个 `lark-cli event +subscribe` 会把 Bot 隔离降低为目录/profile 级，现场已出现交叉投递、重复投递和分流风险。worker 进程隔离能把崩溃、长连接、任务队列和 Agent 状态收敛到 Bot 维度，同时不要求客户安装 Docker。
+- 后果：运行台和诊断日志需要聚合 worker 状态；后续容器隔离应实现同一 RuntimeDriver 合约，而不是重新把多 Bot 逻辑放回主进程。

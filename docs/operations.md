@@ -81,10 +81,11 @@ Codex App 走 Clash，本机网络恢复后应撤回这些环境变量并重启 
 
 ### 多 Bot 群聊艾特路由异常
 
-- `v1.6.17` 起，QuarkfanTools 为每个运行中的飞书 Bot 启动一个使用该 Bot 专属 HOME/profile 的隔离事件订阅。`v1.6.16` 的单共享入口在部分 Intel 客户环境下会只覆盖后启动 Bot 所属飞书应用，导致先启动 Bot 收不到自身事件；新结构保证每个飞书应用至少通过自己的订阅接收事件。
-- 官方 `lark-cli event +subscribe --force` 帮助提示多个订阅会被服务端随机拆分事件；QuarkfanTools 不使用 `--force`，并通过 per-Bot HOME/profile 分离本地单实例锁。若飞书服务端仍把一个 Bot 的事件投递到另一个 Bot 的连接，Runtime 会继续按 mention 目标跨 Bot 路由，后续回复、表情、附件下载和 Agent 执行仍使用目标 Bot 自己的隔离凭据。
-- 如果某个 Bot 对同一条消息连续回复两次，优先确认是否运行 `1.6.18` 或更高版本。该版本会同时按 `event_id` 和 `message_id` 去重，可拦截同一消息被多个订阅投递且 `event_id` 不同的情况。
-- `v1.6.20` 起，每个 Bot 的飞书事件订阅会做低频定期续连：连接成功后约 6 小时加随机抖动主动重建一次订阅，并在运行台记录“飞书事件监听定期续连”。这用于 7x24 运行时维护长期 WebSocket 连接；应用不会把“长时间没有群消息”视为故障，避免安静群聊或夜间低频使用时频繁重启。
+- `v1.7.0` 起，主进程只作为 Bot Supervisor；每个运行中的飞书 Bot 由独立 worker 进程承载。诊断日志中的 `workerPids` 表示 Bot worker，`subscriberPid` 表示该 worker 内启动的 `lark-cli event +subscribe` 进程。排查时先确认目标 Bot 的 worker 和 subscriber 都存在。
+- 每个 worker 只启动当前 Bot 的飞书监听、消息处理、Agent、会话和去重。若日志中某个 Bot 没有“收到飞书消息”，说明事件没有进入该 Bot worker；继续看该 Bot 的 lark-cli 输出、飞书开放平台事件权限和应用可用范围。
+- 官方 `lark-cli event +subscribe --force` 帮助提示多个订阅会被服务端随机拆分事件；QuarkfanTools 不使用 `--force`。`v1.7.0` 通过 worker 进程把多 Bot 的长连接、任务队列和 Agent 状态隔离到运行时进程级，减少单主进程内多订阅互相影响。
+- 如果某个 Bot 对同一条消息连续回复两次，确认是否运行 `1.7.0` 或更高版本，并检查诊断日志中的 `messageId` 去重记录。应用仍按 `event_id` 和稳定的 `message_id` 去重。
+- `runtime.botIsolationMode` 当前默认 `process`。`container` 和 `auto` 会进入配置和诊断日志，但 `1.7.0` 仍使用内置 worker 进程承载 Bot；Docker 容器隔离将在后续 driver 中接入。
 - 配置里的 `cli_...` 是飞书开放平台应用 App ID，用于初始化对应 Bot 的 lark-cli profile。
 - Bot 启动前会规范化自己的隔离 `lark-cli/config.json`，只保留当前 App ID 对应的 `qft-...` 命名 profile。旧版单 Bot 迁移残留的未命名 app 会被合并，避免多 Bot 同时监听时 profile 解析出现歧义。
 - 运行时会记录 `/open-apis/bot/v3/info` 返回的 `bot.open_id` 和应用名。群聊消息有 `message.mentions` 时，应用会先用 mention 目标里的名称、App ID、应用名和 open_id 等值匹配当前 Bot；`mentions[].id.open_id` 只作为命中信号，不作为排他条件，因为现场事件中它可能不同于 bot info 的 `bot.open_id`。

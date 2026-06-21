@@ -4,12 +4,12 @@
 
 ## 当前基线
 
-- 产品版本：`1.6.20`
+- 产品版本：`1.7.0`
 - Git 分支：`codex/v1.6.7-multi-bot-mention-filter`
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：1.6.x 客户线正在修复多飞书 Bot 同时运行后的飞书事件长连接分流、重复投递去重、OAuth 存储隔离、启动无反馈、旧凭据 marker 迁移、Intel 客户环境下单共享入口只覆盖后启动 Bot，以及 `lark-cli` 进程仍在但 WebSocket 不再投递消息的假连接问题，正在进行现场验证
+- 当前阶段：1.7.x 正在把多 Bot 从单主进程 Runtime 重构为主进程 Supervisor + 每 Bot 独立 worker 进程。默认隔离模式为 process worker；Docker 容器隔离先完成配置和能力检测，后续通过 driver 接入。
 
 ## 已实现
 
@@ -25,7 +25,7 @@
 - 顶部拖拽带、侧栏品牌区与页面标题空白区均可用于移动窗口。
 - 按机器人选择可访问的 Skills。
 - 飞书消息处理中表情、最终回复、消息去重和断线重连。
-- 消息去重同时记录飞书 `event_id` 与稳定的 `message_id`，避免每 Bot 独立订阅时同一消息跨订阅重复投递导致目标 Bot 连续回复两次。
+- 消息去重同时记录飞书 `event_id` 与稳定的 `message_id`，避免同一消息重复投递导致目标 Bot 连续回复两次。
 - 24 小时连续会话、主动重置、私聊与群聊用户隔离。
 - 图片消息多模态输入，Agent 可调用隔离身份下的 `lark-cli`。
 - 内置 Word、PowerPoint、Excel Skills 和 Office 文件预处理。
@@ -61,8 +61,8 @@
 - 运行台支持复制诊断日志，包含运行快照、Bot 状态路径、订阅 PID、lark-cli 日志尾部、最近内存日志和持久化日志。
 - 运行台点击启动会立即记录本地启动日志；主进程记录启动请求和飞书身份确认阶段，lark-cli 配置校验、初始化和密钥降级短命令有 30 秒超时，避免启动卡住时无反馈。
 - lark-cli 凭据 marker 加入 per-Bot HOME 版本，升级后会重新初始化 Bot 态配置，避免旧全局或旧 HOME 状态导致 `invalid_client`。
-- `v1.6.17` 起，多飞书 Bot 不再使用单共享事件入口；每个 Bot 维护自己的隔离订阅，连接断开后只重连当前 Bot，避免后启动 Bot 接管入口后先启动 Bot 收不到消息。
-- `v1.6.20` 起，每个飞书事件订阅按约 6 小时加随机抖动做低频定期续连，不再把“长时间没有群消息”视为故障，适配 7x24 长期运行。
+- `v1.7.0` 起，主进程不再直接承载多 Bot 监听和 Agent；每个 Bot 由独立 worker 进程运行自己的飞书订阅、消息处理、会话、Agent 和去重，主进程只聚合日志、状态和 worker PID。
+- 配置新增 `runtime.botIsolationMode`，默认 `process`。`container` 和 `auto` 先作为 Docker driver 预留，并把 Docker 能力检测写入诊断日志。
 - arm64 与 x64 独立安装包构建。
 
 ## 已知限制与风险
@@ -85,6 +85,7 @@
 
 ## 最近验证
 
+- 2026-06-21：`v1.7.0` 已完成第一轮 Bot worker 进程隔离重构：主进程改为 Supervisor，每个 Bot 由独立 worker 承载监听、消息处理、Agent、会话和去重；新增 worker PID 诊断、Docker 能力检测和隔离模式配置，并把 worker 与 lark-cli 的临时目录隔离到当前 Bot 状态目录。`npm test` 通过，43 项测试全部通过；编译后的 `dist-electron/bot-worker.js` 已通过模块加载烟测。`npm run pack:mac` 通过，已生成并核对 `v1.7.0` arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.7.0`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64。
 - 2026-06-21：审查发现 `v1.6.19` 的“无消息健康重启”不适合 7x24 低频群聊场景，已在 `v1.6.20` 调整为约 6 小时加随机抖动的定期续连，不再根据业务消息空闲时间判断连接故障。`npm test` 通过，41 项测试全部通过；`npm run pack:mac` 通过，`v1.6.20` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.20`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认使用 `STREAM_RENEW_INTERVAL_MS` 定期续连代码，不包含旧的 `STREAM_SILENT_RESTART_MS` 无消息重启策略。归档产物位于 `release/v1.6.20/`。
 - 2026-06-21：本机现场日志确认 `v1.6.18` 中两个 Bot 订阅均可连接，但出现 `lark-cli` 进程仍在、重启后长时间没有新的 `im.message.receive_v1` 日志的假连接形态；`v1.6.19` 为每 Bot 事件订阅增加健康检查和退避重启，并记录“飞书事件监听健康重启”。`npm test` 通过，41 项测试全部通过；`npm run pack:mac` 通过，`v1.6.19` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.19`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含健康重启代码。归档产物位于 `release/v1.6.19/`。
 - 2026-06-21：arm 环境反馈 `v1.6.17` 每 Bot 隔离订阅后，同一条群聊消息被多个订阅收到时某个 Bot 会连续回复两次；已将去重从仅按 `event_id` 扩展为同时按 `message_id` 去重。`npm test` 通过，41 项测试全部通过；`npm run pack:mac` 通过，`v1.6.18` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP。两个应用包版本均为 `1.6.18`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli 为 universal，Claude runtime 架构分别为 arm64 与 x86_64；x64 `app.asar` 已确认包含 `message:${messageId}` 去重代码。归档产物位于 `release/v1.6.18/`。

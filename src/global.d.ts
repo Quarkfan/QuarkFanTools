@@ -1,4 +1,4 @@
-import type { AppConfig, AppInfo, LogEntry, RuntimeSnapshot, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
+import type { AppConfig, AppInfo, DockerCapability, LogEntry, RuntimeSnapshot, SkillPreview, StorageSessionDetail, StorageStats } from "../electron/types";
 
 declare global {
   interface Window {
@@ -6,6 +6,7 @@ declare global {
       snapshot(): Promise<RuntimeSnapshot>;
       logs(): Promise<LogEntry[]>;
       diagnosticLog(): Promise<string>;
+      dockerCapability(): Promise<DockerCapability>;
       appInfo(): Promise<AppInfo>;
       storageStats(): Promise<StorageStats>;
       storageSessionDetail(id: string): Promise<StorageSessionDetail>;

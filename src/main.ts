@@ -36,6 +36,7 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   apiKey: { title: "API Key", body: "模型服务认证密钥，仅保存在本机配置文件，不提交到 Git。" },
   maxConcurrentTasks: { title: "最大并发任务数", body: "限制不同会话同时运行的 Agent 数量。同一会话始终串行处理，避免上下文交叉。" },
   maxAgentTurns: { title: "单次 Agent 最大步数", body: "限制一次消息处理中 Agent 可执行的工具调用轮数。复杂检索可适当调高，范围 10-100。" },
+  botIsolationMode: { title: "Bot 运行隔离", body: "1.7.0 起每个 Bot 由独立 worker 进程承载。Docker/自动模式会先记录配置和诊断能力，容器 driver 后续接入。" },
   multimodalEnabled: { title: "多模态视觉能力", body: "开启后图片消息和 PowerPoint 预览可作为视觉输入交给模型；关闭后只处理文本内容。" },
   marketEnabled: { title: "启用技能市场", body: "启用后可从 HTTPS Git 仓库同步 Skill。同步后的 Skill 默认不授权给任何 Bot。" },
   marketRepositoryUrl: { title: "HTTPS Git 仓库", body: "Skill 市场仓库地址。当前只支持 HTTPS，不依赖系统 Git 或 SSH Key。" },
@@ -480,6 +481,7 @@ function renderConfig(): string {
           ${field("API Key", "apiKey", c.model.apiKey, "password")}
           <label><span>最大并发任务数${helpButton("maxConcurrentTasks")}</span><input name="maxConcurrentTasks" type="number" min="1" max="20" value="${c.runtime.maxConcurrentTasks}" /><small>不同会话最多同时运行的 Agent 数量；同一会话仍按顺序处理。</small></label>
           <label><span>单次 Agent 最大步数${helpButton("maxAgentTurns")}</span><input name="maxAgentTurns" type="number" min="10" max="100" value="${c.runtime.maxAgentTurns ?? 60}" /><small>复杂 Skill 或飞书资料检索会消耗更多工具调用步数；默认 60。</small></label>
+          <label><span>Bot 运行隔离${helpButton("botIsolationMode")}</span><select name="botIsolationMode"><option value="process" ${(c.runtime.botIsolationMode ?? "process") === "process" ? "selected" : ""}>进程隔离，推荐</option><option value="auto" ${c.runtime.botIsolationMode === "auto" ? "selected" : ""}>自动选择，预留 Docker</option><option value="container" ${c.runtime.botIsolationMode === "container" ? "selected" : ""}>容器隔离，需要 Docker</option></select><small>当前版本默认使用内置 worker 进程；Docker 状态会进入诊断日志，容器执行后续接入。</small></label>
           <label><span>多模态视觉能力${helpButton("multimodalEnabled")}</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
         </div>
         <div class="panel config-panel">
@@ -765,6 +767,8 @@ function bindEvents(): void {
     next.model.multimodalEnabled = String(form.get("multimodalEnabled") ?? "true") === "true";
     next.runtime.maxConcurrentTasks = Math.max(1, Math.min(20, Number(form.get("maxConcurrentTasks") ?? 2) || 2));
     next.runtime.maxAgentTurns = Math.max(10, Math.min(100, Number(form.get("maxAgentTurns") ?? 60) || 60));
+    const isolationMode = String(form.get("botIsolationMode") ?? "process");
+    next.runtime.botIsolationMode = isolationMode === "auto" || isolationMode === "container" ? isolationMode : "process";
     next.skillMarket.enabled = String(form.get("marketEnabled") ?? "false") === "true";
     next.skillMarket.repositoryUrl = String(form.get("marketRepositoryUrl") ?? "");
     next.skillMarket.branch = String(form.get("marketBranch") ?? "main");

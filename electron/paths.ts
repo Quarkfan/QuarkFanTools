@@ -1,42 +1,59 @@
-import { app } from "electron";
+import electron from "electron";
 import { existsSync } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
 import path from "node:path";
 
+const electronApp = typeof electron === "object" && electron && "app" in electron ? electron.app : null;
+
+function isPackaged(): boolean {
+  return electronApp?.isPackaged ?? process.env.QFT_IS_PACKAGED === "1";
+}
+
+function resourcesPath(): string {
+  return process.env.QFT_RESOURCES_PATH ?? process.resourcesPath ?? process.cwd();
+}
+
+function appPath(name: "userData" | "appData"): string {
+  const envName = name === "userData" ? "QFT_USER_DATA_PATH" : "QFT_APP_DATA_PATH";
+  const fromEnv = process.env[envName];
+  if (fromEnv) return fromEnv;
+  return electronApp?.getPath(name) ?? projectRoot();
+}
+
 export function projectRoot(): string {
-  if (!app.isPackaged) {
+  if (!isPackaged()) {
     return process.cwd();
   }
-  return process.resourcesPath;
+  return resourcesPath();
 }
 
 export function skillsRoot(): string {
-  return app.isPackaged
-    ? path.join(app.getPath("userData"), "workspace", "skills")
+  return isPackaged()
+    ? path.join(appPath("userData"), "workspace", "skills")
     : path.join(projectRoot(), "skills");
 }
 
 export function builtinSkillsRoot(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "builtin-skills")
+  return isPackaged()
+    ? path.join(resourcesPath(), "builtin-skills")
     : path.join(projectRoot(), "builtin-skills");
 }
 
 export function marketSkillsRoot(): string {
-  return app.isPackaged
-    ? path.join(app.getPath("userData"), "workspace", "market-skills")
+  return isPackaged()
+    ? path.join(appPath("userData"), "workspace", "market-skills")
     : path.join(projectRoot(), "market-skills");
 }
 
 export function stateRoot(): string {
-  const root = app.isPackaged
-    ? path.join(app.getPath("userData"), "state")
+  const root = isPackaged()
+    ? path.join(appPath("userData"), "state")
     : path.join(projectRoot(), "state");
   return root;
 }
 
 export function workspaceRoot(): string {
-  return app.isPackaged ? path.join(app.getPath("userData"), "workspace") : projectRoot();
+  return isPackaged() ? path.join(appPath("userData"), "workspace") : projectRoot();
 }
 
 export function botLarkHomeRoot(botId: string): string {
@@ -53,16 +70,16 @@ export function defaultConfigPath(): string {
 
 export function localConfigPath(): string {
   const devPath = path.join(projectRoot(), "config", "local.json");
-  if (!app.isPackaged || existsSync(devPath)) {
+  if (!isPackaged() || existsSync(devPath)) {
     return devPath;
   }
-  return path.join(app.getPath("userData"), "config", "local.json");
+  return path.join(appPath("userData"), "config", "local.json");
 }
 
 export async function migrateLegacyData(): Promise<void> {
-  if (!app.isPackaged) return;
-  const legacyRoot = path.join(app.getPath("appData"), "qah");
-  const targetRoot = app.getPath("userData");
+  if (!isPackaged()) return;
+  const legacyRoot = path.join(appPath("appData"), "qah");
+  const targetRoot = appPath("userData");
   for (const name of ["config", "workspace", "state"]) {
     const source = path.join(legacyRoot, name);
     const target = path.join(targetRoot, name);

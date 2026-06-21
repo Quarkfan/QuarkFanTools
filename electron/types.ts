@@ -40,6 +40,7 @@ export interface AppConfig {
     approvalPolicy: "untrusted" | "on-request" | "never";
     maxConcurrentTasks: number;
     maxAgentTurns?: number;
+    botIsolationMode?: "process" | "container" | "auto";
   };
 }
 
@@ -95,10 +96,18 @@ export interface RuntimeSnapshot {
   running: boolean;
   runningBotIds: string[];
   connectedBotIds: string[];
+  workerPids?: Record<string, number>;
   activeTasks: number;
   queuedTasks: number;
   skills: SkillSummary[];
   config: AppConfig;
+}
+
+export interface DockerCapability {
+  installed: boolean;
+  daemonRunning: boolean;
+  version: string;
+  error: string;
 }
 
 export interface StorageStats {

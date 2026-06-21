@@ -3,6 +3,7 @@ import test from "node:test";
 import { normalizeLarkEvent } from "../lark-event.js";
 import { messageTargetsBot } from "../message-target.js";
 import { selectLarkMessageTarget } from "../lark-message-router.js";
+import { larkRuntimeEnvironment } from "../lark-cli.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "../lark-commands.js";
 import { normalizeLarkConfigProfilesContent } from "../lark-config-profiles.js";
 import type { BotConfig, LarkBotIdentity } from "../types.js";
@@ -42,6 +43,14 @@ test("recognizes only lark event subscriber processes for stale PID cleanup", ()
   assert.equal(isLarkEventSubscribeCommand("/Applications/QuarkfanTools.app/runtime/lark-cli event +subscribe --as bot"), true);
   assert.equal(isLarkEventSubscribeCommand("/Applications/QuarkfanTools.app/runtime/lark-cli event stop --force"), false);
   assert.equal(isLarkEventSubscribeCommand("/usr/bin/node other-process.js"), false);
+});
+
+test("lark runtime uses per-bot temp and config directories", () => {
+  const env = larkRuntimeEnvironment(bot);
+  assert.match(env.HOME ?? "", /mentor/);
+  assert.match(env.TMPDIR ?? "", /bots\/mentor\/tmp$/);
+  assert.match(env.LARKSUITE_CLI_CONFIG_DIR ?? "", /bots\/mentor\/lark-cli$/);
+  assert.match(env.LARKSUITE_CLI_LOG_DIR ?? "", /bots\/mentor\/lark-cli\/logs$/);
 });
 
 test("user login requests the document search scope", () => {

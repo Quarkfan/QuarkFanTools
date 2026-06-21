@@ -1,5 +1,5 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { app } from "electron";
+import electron from "electron";
 import { access, mkdir, readFile, readdir, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
@@ -8,6 +8,12 @@ import { larkRuntimeEnvironment } from "./lark-cli.js";
 import type { AppConfig, BotConfig, LarkMessage, SkillSummary } from "./types.js";
 import { cacheWorkspaceFiles } from "./file-cache.js";
 import { buildSandboxFilesystem } from "./sandbox-filesystem.js";
+
+const electronApp = typeof electron === "object" && electron && "app" in electron ? electron.app : null;
+
+function appVersion(): string {
+  return process.env.QFT_APP_VERSION ?? electronApp?.getVersion() ?? "dev";
+}
 
 async function syncSkillLinks(targetRoot: string, skills: SkillSummary[]): Promise<void> {
   await mkdir(targetRoot, { recursive: true });
@@ -37,8 +43,10 @@ async function ensureBotWorkspace(bot: BotConfig, conversationKey: string, skill
 }
 
 function claudeExecutable(): string | undefined {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "runtime", "claude", process.arch, "claude")
+  const packaged = electronApp?.isPackaged ?? process.env.QFT_IS_PACKAGED === "1";
+  const resourcesPath = process.env.QFT_RESOURCES_PATH ?? process.resourcesPath;
+  return packaged && resourcesPath
+    ? path.join(resourcesPath, "runtime", "claude", process.arch, "claude")
     : undefined;
 }
 
@@ -93,7 +101,7 @@ export async function runClaude(
     ...process.env,
     ...larkRuntimeEnvironment(bot),
     CLAUDE_CONFIG_DIR: claudeHome,
-    CLAUDE_AGENT_SDK_CLIENT_APP: `quarkfantools/${app.getVersion()}`,
+    CLAUDE_AGENT_SDK_CLIENT_APP: `quarkfantools/${appVersion()}`,
     ANTHROPIC_BASE_URL: config.model.baseUrl,
     ANTHROPIC_MODEL: config.model.model,
     ANTHROPIC_AUTH_TOKEN: config.model.apiKey,

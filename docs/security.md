@@ -12,6 +12,7 @@
 - 配置文件以本机权限 `0600` 保存。
 - 凭据、状态、workspace 和发布产物均不应提交到 Git。
 - 每个机器人使用独立飞书 CLI 配置、Claude home、会话状态和 workspace。
+- 每个运行中的机器人由独立 worker 进程承载；主进程只做 Supervisor、日志聚合和状态聚合。
 - 每个机器人只映射明确授权的 Skills。
 - 删除本地导入 Skill 时同步撤销所有机器人对该名称的授权，避免同名市场或内置 Skill 自动继承权限。
 - Owner 人工请求只接受配置的 Owner open_id 发出的处理指令；待处理请求按机器人隔离保存。
@@ -34,6 +35,10 @@ Claude Agent 允许 `Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`、`Skil
 macOS 上启用 `enableWeakerNetworkIsolation` 会开放对 `com.apple.trustd.agent` 的访问，以支持 lark-cli 等 Go CLI 在 sandbox 网络代理下验证 TLS。该能力比默认网络隔离更弱，存在额外数据外传面；不得同时允许 unsandboxed 命令，且应继续限制可访问目录和外部能力。
 
 `state/bots/<bot-id>/lark-home/Library/Application Support/lark-cli/` 是当前 Bot 的 lark-cli 安全存储目录，包含该 Bot 的用户态 OAuth 加密凭据和 `master.key.file`。该目录随 Bot 状态隔离，不能授权给其他 Bot 或全局 workspace。
+
+### Bot worker 隔离
+
+`v1.7.0` 的默认隔离方式是进程级 worker。worker 仍运行在同一用户账户下，不等同于容器或系统用户级隔离；它的价值是隔离 lark-cli 长连接、Agent 会话、任务队列和崩溃影响面。Docker 容器隔离作为后续可选 driver，必须在不破坏默认自包含交付的前提下接入。
 
 ### Skill 供应链
 

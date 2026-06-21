@@ -1,4 +1,4 @@
-import { app, shell } from "electron";
+import electron from "electron";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import path from "node:path";
@@ -13,20 +13,26 @@ import { effectiveBotProfile } from "./bot-identity.js";
 
 const preparedCredentials = new Map<string, string>();
 const LARK_CAPTURE_TIMEOUT_MS = 30_000;
+const electronApp = typeof electron === "object" && electron && "app" in electron ? electron.app : null;
+const electronShell = typeof electron === "object" && electron && "shell" in electron ? electron.shell : null;
 
 function bundledLarkBinary(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "runtime", "lark-cli", "bin", "lark-cli")
+  const packaged = electronApp?.isPackaged ?? process.env.QFT_IS_PACKAGED === "1";
+  const resourcesPath = process.env.QFT_RESOURCES_PATH ?? process.resourcesPath ?? projectRoot();
+  return packaged
+    ? path.join(resourcesPath, "runtime", "lark-cli", "bin", "lark-cli")
     : path.join(projectRoot(), "node_modules", "@larksuite", "cli", "bin", "lark-cli");
 }
 
 export function larkRuntimeEnvironment(bot: BotConfig): NodeJS.ProcessEnv {
   const binaryDir = path.dirname(bot.cliPath || bundledLarkBinary());
   const botHome = botLarkHomeRoot(bot.id);
+  const botRoot = botStateRoot(bot);
   return {
     HOME: botHome,
-    LARKSUITE_CLI_CONFIG_DIR: path.join(botStateRoot(bot), "lark-cli"),
-    LARKSUITE_CLI_LOG_DIR: path.join(botStateRoot(bot), "lark-cli", "logs"),
+    TMPDIR: path.join(botRoot, "tmp"),
+    LARKSUITE_CLI_CONFIG_DIR: path.join(botRoot, "lark-cli"),
+    LARKSUITE_CLI_LOG_DIR: path.join(botRoot, "lark-cli", "logs"),
     LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
     LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1",
     PATH: `${binaryDir}${path.delimiter}${process.env.PATH ?? ""}`
@@ -59,6 +65,7 @@ export async function prepareLarkConfig(bot: BotConfig): Promise<void> {
   const dir = path.join(botStateRoot(bot), "lark-cli");
   await Promise.all([
     mkdir(dir, { recursive: true }),
+    mkdir(path.join(botStateRoot(bot), "tmp"), { recursive: true }),
     mkdir(botLarkHomeRoot(bot.id), { recursive: true })
   ]);
   if (!bot.appId) return;
@@ -466,6 +473,7 @@ export async function loginLarkUser(bot: BotConfig): Promise<string> {
   if (!verificationUrl || !deviceCode) {
     throw new Error(`无法读取飞书 OAuth 授权链接或设备码: ${initiated}`);
   }
-  await shell.openExternal(verificationUrl);
+  if (!electronShell) throw new Error("当前运行环境无法打开飞书 OAuth 授权页面");
+  await electronShell.openExternal(verificationUrl);
   return runLarkCapture(bot, ["auth", "login", "--device-code", deviceCode, "--json"]);
 }

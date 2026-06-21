@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("quarkfanTools", {
   snapshot: () => ipcRenderer.invoke("runtime:snapshot"),
   logs: () => ipcRenderer.invoke("runtime:logs"),
   diagnosticLog: () => ipcRenderer.invoke("runtime:diagnostic-log"),
+  dockerCapability: () => ipcRenderer.invoke("runtime:docker-capability"),
   appInfo: () => ipcRenderer.invoke("app:info"),
   storageStats: () => ipcRenderer.invoke("storage:stats"),
   storageSessionDetail: (id) => ipcRenderer.invoke("storage:session-detail", id),

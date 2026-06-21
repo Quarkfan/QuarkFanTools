@@ -11,6 +11,11 @@ export class Logger extends EventEmitter {
     return [...this.entries];
   }
 
+  record(entry: LogEntry): void {
+    this.entries = [...this.entries.slice(-499), entry];
+    this.emit("entry", entry);
+  }
+
   async write(level: LogEntry["level"], message: string, detail?: string, botId?: string): Promise<void> {
     const entry: LogEntry = {
       id: crypto.randomUUID(),
@@ -20,8 +25,7 @@ export class Logger extends EventEmitter {
       detail,
       botId
     };
-    this.entries = [...this.entries.slice(-499), entry];
-    this.emit("entry", entry);
+    this.record(entry);
     const logDir = path.join(stateRoot(), "logs");
     await mkdir(logDir, { recursive: true });
     await appendFile(path.join(logDir, "quarkfantools.jsonl"), `${JSON.stringify(entry)}\n`, "utf8");

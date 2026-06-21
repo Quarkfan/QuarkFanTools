@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { QuarkfanToolsRuntime } from "./runtime.js";
+import { QuarkfanToolsSupervisor } from "./runtime-supervisor.js";
 import { saveConfig } from "./config.js";
 import { botLarkCliSupportRoot, botLarkHomeRoot, migrateLegacyData, stateRoot } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
@@ -10,9 +10,10 @@ import { syncSkillMarket } from "./skill-market.js";
 import { clearAllSessionStorage, clearExpiredStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
 import { maskAppId } from "./bot-identity.js";
+import { detectDocker } from "./docker.js";
 import type { AppConfig } from "./types.js";
 
-const runtime = new QuarkfanToolsRuntime();
+const runtime = new QuarkfanToolsSupervisor();
 let mainWindow: BrowserWindow | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let quittingAfterRuntimeStop = false;
@@ -105,6 +106,7 @@ runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
 ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
 ipcMain.handle("runtime:diagnostic-log", async () => diagnosticLogText());
+ipcMain.handle("runtime:docker-capability", () => detectDocker());
 ipcMain.handle("app:info", () => appInfo(app.getVersion()));
 ipcMain.handle("storage:stats", () => storageStats());
 ipcMain.handle("storage:session-detail", (_event, id: string) => storageSessionDetail(id));
@@ -198,6 +200,7 @@ ipcMain.handle("lark:login-user", async (_event, botId: string) => {
 
 async function diagnosticLogText(): Promise<string> {
   const snapshot = runtime.snapshot();
+  const docker = await detectDocker();
   const persistentLog = await readFile(path.join(stateRoot(), "logs", "quarkfantools.jsonl"), "utf8").catch(() => "");
   const persistentLines = persistentLog.trim().split(/\r?\n/).filter(Boolean).slice(-2000);
   const botDiagnostics = await Promise.all(snapshot.config.bots.map(async (bot) => {
@@ -227,6 +230,7 @@ async function diagnosticLogText(): Promise<string> {
       running: snapshot.running,
       runningBotIds: snapshot.runningBotIds,
       connectedBotIds: snapshot.connectedBotIds,
+      workerPids: snapshot.workerPids ?? {},
       activeTasks: snapshot.activeTasks,
       queuedTasks: snapshot.queuedTasks,
       bots: snapshot.config.bots.map((bot) => ({
@@ -248,7 +252,8 @@ async function diagnosticLogText(): Promise<string> {
         apiKeyConfigured: Boolean(snapshot.config.model.apiKey),
         multimodalEnabled: snapshot.config.model.multimodalEnabled
       },
-      runtime: snapshot.config.runtime
+      runtime: snapshot.config.runtime,
+      docker
     }, null, 2),
     "",
     "BOT STATE AND LARK CLI LOGS",

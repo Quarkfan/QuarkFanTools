@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "1.7.0",
+    date: "2026-06-21",
+    highlights: [
+      "多 Bot 运行改为主进程管理多个独立 Bot worker，降低多个飞书机器人互相影响的风险。",
+      "每个 Bot 的监听、消息处理、Agent、会话和去重在独立进程中运行，运行台继续聚合展示状态和日志。",
+      "配置新增 Bot 运行隔离模式；Docker 状态进入诊断日志，容器隔离作为后续增强 driver 接入。"
+    ]
+  },
+  {
     version: "1.6.20",
     date: "2026-06-21",
     highlights: [

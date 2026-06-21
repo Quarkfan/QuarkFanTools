@@ -19,6 +19,7 @@
     "sandbox": "workspace-write",
     "approvalPolicy": "never",
     "maxConcurrentTasks": 2,
-    "maxAgentTurns": 60
+    "maxAgentTurns": 60,
+    "botIsolationMode": "process"
   }
 }
