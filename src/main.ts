@@ -21,6 +21,7 @@ let marketSource = "all";
 let marketSearch = "";
 let preview: { title: string; body?: string; html?: string } | null = null;
 let editingBotId = "";
+let editingScheduledTaskId = "";
 let helpTopicKey = "";
 let showManual = false;
 const systemThemeMedia = window.matchMedia("(prefers-color-scheme: dark)");
@@ -72,7 +73,7 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   customAppAccess: { title: "允许访问的自定义应用", body: "自定义应用通过 app.json 导入，并作为 Bot 可治理能力授权。导入不等于授权；只有勾选后，后续命令或定时任务才能调用。" },
   suiteAccess: { title: "允许访问的套件", body: "套件用于面向角色或行业组合 Skills、自定义应用、MCP 和工作流说明。当前支持导入、预览、Bot 挂载授权，并可作为命令目标向 Agent 注入套件上下文。" },
   commandBindings: { title: "命令映射", body: "将 /xxx 映射到某个 Skill、套件、Workflow 或自定义应用。保留命令 /new、/continue、/owner 不能占用；命令名建议使用小写字母、数字、短横线或下划线。" },
-  scheduledTasks: { title: "定时任务", body: "定时任务属于单个 Bot，当前支持 interval、daily、weekly 三种计划类型，目标可选 agent、command 或 capability，并把结果投递到指定 chat_id。可手动立即运行已保存且启用的任务，结果同样写入运行历史。" }
+  scheduledTasks: { title: "定时任务", body: "定时任务属于单个 Bot，当前支持 interval、daily、weekly 和 cron 四种计划类型，目标可选 agent、command 或 capability，并把结果投递到指定 chat_id。cron 使用 5 段表达式：分钟 小时 日 月 周，例如 15 9 * * 1-5 表示工作日 09:15。可手动立即运行已保存且启用的任务，结果同样写入运行历史。" }
 };
 
 function closeReleaseNotes(): void {
@@ -577,7 +578,8 @@ function renderManual(): string {
           </section>
           <section>
             <h3>定时任务</h3>
-            <p>Bot 编辑弹窗中的“定时任务”支持按 Bot 配置本机调度任务。当前支持 <code>interval</code>、<code>daily</code>、<code>weekly</code> 三种计划类型。</p>
+            <p>Bot 编辑弹窗中的“定时任务”支持按 Bot 配置本机调度任务。当前支持 <code>interval</code>、<code>daily</code>、<code>weekly</code> 和 <code>cron</code> 四种计划类型。</p>
+            <p><code>cron</code> 使用 5 段表达式：分钟 小时 日 月 周，支持 <code>*</code>、列表、范围和步进，例如 <code>15 9 * * 1-5</code> 表示工作日 09:15，<code>*/30 8-20 * * *</code> 表示每天 08:00 到 20:59 每 30 分钟。</p>
             <p>任务目标可选 <code>agent</code>、<code>command</code>、<code>capability</code>。命令目标会复用该 Bot 已启用的命令映射；能力目标当前支持 Skill、套件、Workflow，以及声明 <code>scheduledCallable</code> 的自定义应用。</p>
             <p>定时任务结果会投递到指定 <code>chat_id</code>。任务只在应用运行期间触发，并与普通消息共享并发上限。已保存且启用的任务可在 Bot 编辑弹窗中立即运行；最近运行结果可在“存储管理”的定时任务运行历史中查看，并可按 Bot 和状态筛选；Workflow 任务会展示步骤摘要。</p>
           </section>
@@ -824,6 +826,7 @@ function botTextarea(bot: BotConfig, label: string, fieldName: keyof BotConfig, 
 function renderBotEditor(): string {
   const bot = snapshot.config.bots.find((item) => item.id === editingBotId);
   if (!bot) return "";
+  const editingTask = bot.scheduledTasks?.find((task) => task.id === editingScheduledTaskId);
   return `
     <div class="modal-backdrop" id="bot-editor-backdrop">
       <section class="release-modal bot-editor-modal" role="dialog" aria-modal="true">
@@ -946,39 +949,9 @@ function renderBotEditor(): string {
       </div>
       <div class="skill-access">
         <div class="skill-access-heading"><span>定时任务${helpButton("scheduledTasks")}</span><small>${bot.scheduledTasks?.filter((task) => task.enabled).length ?? 0} enabled</small></div>
-        <small>定时任务会在应用运行期间由本机调度执行，并把结果投递到指定 chat_id。命令目标要求先配置并启用对应命令；能力目标当前支持 Skill、套件、Workflow 和声明 scheduledCallable 的自定义应用。</small>
-        <div class="command-binding-list">
-          ${(bot.scheduledTasks ?? []).map((task, index) => `
-            <div class="command-binding-row scheduled-task-row">
-              <label><span>任务名</span><input data-task-name="${index}" value="${escapeHtml(task.name)}" placeholder="例如 每日质量日报" /></label>
-              <label><span>计划类型</span><select data-task-schedule-type="${index}">
-                <option value="interval" ${task.schedule.type === "interval" ? "selected" : ""}>interval</option>
-                <option value="daily" ${task.schedule.type === "daily" ? "selected" : ""}>daily</option>
-                <option value="weekly" ${task.schedule.type === "weekly" ? "selected" : ""}>weekly</option>
-              </select></label>
-              <label><span>启用</span><select data-task-enabled="${index}"><option value="true" ${task.enabled ? "selected" : ""}>启用</option><option value="false" ${!task.enabled ? "selected" : ""}>停用</option></select></label>
-              <label><span>时区</span><input data-task-timezone="${index}" value="${escapeHtml(task.schedule.timezone)}" placeholder="Asia/Shanghai" /></label>
-              <label><span>间隔分钟</span><input data-task-every-minutes="${index}" type="number" min="5" value="${escapeHtml(task.schedule.everyMinutes ?? 60)}" /></label>
-              <label><span>时间点</span><input data-task-time-of-day="${index}" value="${escapeHtml(task.schedule.timeOfDay ?? "09:00")}" placeholder="09:00" /></label>
-              <label class="command-wide"><span>周几</span><input data-task-weekdays="${index}" value="${escapeHtml((task.schedule.weekdays ?? [1]).join(","))}" placeholder="0-6，逗号分隔；0=周日" /></label>
-              <label><span>目标类型</span><select data-task-target-type="${index}">
-                <option value="agent" ${task.target.type === "agent" ? "selected" : ""}>agent</option>
-                <option value="command" ${task.target.type === "command" ? "selected" : ""}>command</option>
-                <option value="capability" ${task.target.type === "capability" ? "selected" : ""}>capability</option>
-              </select></label>
-              <label><span>命令目标</span><select data-task-command-name="${index}">
-                ${scheduledCommandOptions(bot).map((name) => `<option value="${escapeHtml(name)}" ${name === task.target.commandName ? "selected" : ""}>/${escapeHtml(name)}</option>`).join("")}
-              </select></label>
-              <label><span>能力目标</span><select data-task-capability="${index}">
-                ${scheduledCapabilityOptions(bot).map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === `${task.target.capability?.kind ?? ""}:${task.target.capability?.id ?? ""}` ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
-              </select></label>
-              <label class="command-wide"><span>Prompt</span><input data-task-prompt="${index}" value="${escapeHtml(task.target.prompt)}" placeholder="输入定时执行时使用的 prompt" /></label>
-              <label class="command-wide"><span>投递 chat_id</span><input data-task-chat-id="${index}" value="${escapeHtml(task.delivery.chatId)}" placeholder="oc_xxx" /></label>
-              <div class="scheduled-task-actions">
-                <button type="button" class="ghost run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled ? "" : "disabled"}>立即运行</button>
-                <button type="button" class="danger remove-scheduled-task" data-index="${index}">删除任务</button>
-              </div>
-            </div>`).join("") || `<div class="empty">当前没有定时任务。</div>`}
+        <small>定时任务会在应用运行期间由本机调度执行，并把结果投递到指定 chat_id。支持 interval、daily、weekly 和 cron；命令目标要求先配置并启用对应命令；能力目标当前支持 Skill、套件、Workflow 和声明 scheduledCallable 的自定义应用。</small>
+        <div class="scheduled-task-list">
+          ${(bot.scheduledTasks ?? []).map((task, index) => renderScheduledTaskSummary(bot, task, index)).join("") || `<div class="empty">当前没有定时任务。</div>`}
         </div>
         <div class="form-actions inline-actions"><button type="button" class="ghost add-scheduled-task" data-id="${bot.id}">新增定时任务</button></div>
       </div>
@@ -989,8 +962,146 @@ function renderBotEditor(): string {
       </div>
         </form>
       </section>
+      ${editingTask ? renderScheduledTaskEditor(bot, editingTask, (bot.scheduledTasks ?? []).findIndex((task) => task.id === editingTask.id)) : ""}
     </div>
   `;
+}
+
+function scheduledTaskScheduleText(task: ScheduledTask): string {
+  if (task.schedule.type === "interval") return `间隔 / ${task.schedule.everyMinutes ?? 60} 分钟`;
+  if (task.schedule.type === "daily") return `每天 / ${task.schedule.timeOfDay ?? "09:00"}`;
+  if (task.schedule.type === "weekly") return `每周 / ${task.schedule.timeOfDay ?? "09:00"} / ${(task.schedule.weekdays ?? []).join(",") || "未配置"}`;
+  return `Cron / ${task.schedule.cronExpression ?? "未配置"}`;
+}
+
+function scheduledTaskTargetText(task: ScheduledTask): string {
+  if (task.target.type === "command") return `命令 / ${task.target.commandName ? `/${task.target.commandName}` : "未配置"}`;
+  if (task.target.type === "capability") return `能力 / ${task.target.capability ? `${task.target.capability.kind}:${task.target.capability.id}` : "未配置"}`;
+  return "Agent";
+}
+
+function renderScheduledTaskSummary(bot: BotConfig, task: ScheduledTask, index: number): string {
+  return `
+    <article class="scheduled-task-list-row">
+      <div>
+        <strong>${escapeHtml(task.name)}</strong>
+        <small>${task.enabled ? "启用" : "停用"} / ${escapeHtml(scheduledTaskScheduleText(task))} / ${escapeHtml(scheduledTaskTargetText(task))}</small>
+        <small>投递：${escapeHtml(task.delivery.chatId || "未配置")} / 下次：${escapeHtml(task.nextRunAt ? new Date(task.nextRunAt).toLocaleString() : "未计划")}</small>
+      </div>
+      <div class="scheduled-task-list-actions">
+        <button type="button" class="ghost compact run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled ? "" : "disabled"}>立即执行</button>
+        <button type="button" class="ghost compact edit-scheduled-task" data-task-id="${escapeHtml(task.id)}">编辑</button>
+        <button type="button" class="danger compact remove-scheduled-task" data-index="${index}">删除</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderScheduledTaskEditor(bot: BotConfig, task: ScheduledTask, index: number): string {
+  return `
+    <div class="modal-backdrop" id="scheduled-task-backdrop">
+      <section class="release-modal scheduled-task-modal" data-task-card="${index}" data-schedule-type="${escapeHtml(task.schedule.type)}" data-target-type="${escapeHtml(task.target.type)}">
+        <div class="release-modal-header">
+          <div><p class="eyebrow">SCHEDULED TASK</p><h2>${escapeHtml(task.name)}</h2></div>
+          <button class="ghost release-close" id="close-scheduled-task-editor">关闭</button>
+        </div>
+        <div class="scheduled-task-editor-body">
+          <div class="scheduled-task-header">
+            <label><span>任务名</span><input data-task-name="${index}" value="${escapeHtml(task.name)}" placeholder="例如 每日质量日报" /></label>
+            <label><span>启用</span><select data-task-enabled="${index}"><option value="true" ${task.enabled ? "selected" : ""}>启用</option><option value="false" ${!task.enabled ? "selected" : ""}>停用</option></select></label>
+          </div>
+          <div class="scheduled-task-section">
+            <strong>计划</strong>
+            <div class="scheduled-task-grid">
+              <label><span>计划类型</span><select data-task-schedule-type="${index}">
+                <option value="interval" ${task.schedule.type === "interval" ? "selected" : ""}>间隔 interval</option>
+                <option value="daily" ${task.schedule.type === "daily" ? "selected" : ""}>每天 daily</option>
+                <option value="weekly" ${task.schedule.type === "weekly" ? "selected" : ""}>每周 weekly</option>
+                <option value="cron" ${task.schedule.type === "cron" ? "selected" : ""}>Cron 表达式</option>
+              </select></label>
+              <label><span>时区</span><input data-task-timezone="${index}" value="${escapeHtml(task.schedule.timezone)}" placeholder="Asia/Shanghai" /></label>
+              <label class="schedule-interval"><span>间隔分钟</span><input data-task-every-minutes="${index}" type="number" min="5" value="${escapeHtml(task.schedule.everyMinutes ?? 60)}" /></label>
+              <label class="schedule-daily schedule-weekly"><span>时间点</span><input data-task-time-of-day="${index}" value="${escapeHtml(task.schedule.timeOfDay ?? "09:00")}" placeholder="09:00" /></label>
+              <label class="schedule-weekly"><span>周几</span><input data-task-weekdays="${index}" value="${escapeHtml((task.schedule.weekdays ?? [1]).join(","))}" placeholder="0-6，逗号分隔；0=周日" /></label>
+              <label class="schedule-cron command-wide"><span>Cron 表达式</span><input data-task-cron-expression="${index}" value="${escapeHtml(task.schedule.cronExpression ?? "15 9 * * 1-5")}" placeholder="15 9 * * 1-5" /><small>5 段：分钟 小时 日 月 周；支持 *、列表、范围和步进。</small></label>
+            </div>
+          </div>
+          <div class="scheduled-task-section">
+            <strong>目标</strong>
+            <div class="scheduled-task-grid">
+              <label><span>目标类型</span><select data-task-target-type="${index}">
+                <option value="agent" ${task.target.type === "agent" ? "selected" : ""}>Agent</option>
+                <option value="command" ${task.target.type === "command" ? "selected" : ""}>命令</option>
+                <option value="capability" ${task.target.type === "capability" ? "selected" : ""}>能力</option>
+              </select></label>
+              <label class="target-command"><span>命令目标</span><select data-task-command-name="${index}">
+                ${scheduledCommandOptions(bot).map((name) => `<option value="${escapeHtml(name)}" ${name === task.target.commandName ? "selected" : ""}>/${escapeHtml(name)}</option>`).join("")}
+              </select></label>
+              <label class="target-capability"><span>能力目标</span><select data-task-capability="${index}">
+                ${scheduledCapabilityOptions(bot).map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === `${task.target.capability?.kind ?? ""}:${task.target.capability?.id ?? ""}` ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+              </select></label>
+              <label class="command-wide"><span>Prompt</span><input data-task-prompt="${index}" value="${escapeHtml(task.target.prompt)}" placeholder="输入定时执行时使用的 prompt" /></label>
+            </div>
+          </div>
+          <div class="scheduled-task-section">
+            <strong>投递</strong>
+            <div class="scheduled-task-grid">
+              <label class="command-wide"><span>投递 chat_id</span><input data-task-chat-id="${index}" value="${escapeHtml(task.delivery.chatId)}" placeholder="oc_xxx" /></label>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="ghost" id="cancel-scheduled-task-editor">取消</button>
+            <button type="button" class="primary" id="save-scheduled-task-editor">保存任务</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function readScheduledTaskFromEditor(bot: BotConfig, index: number): ScheduledTask | null {
+  const name = document.querySelector<HTMLInputElement>(`[data-task-name="${index}"]`)?.value.trim() ?? "";
+  const scheduleType = (document.querySelector<HTMLSelectElement>(`[data-task-schedule-type="${index}"]`)?.value ?? "daily") as ScheduledTask["schedule"]["type"];
+  const timezone = document.querySelector<HTMLInputElement>(`[data-task-timezone="${index}"]`)?.value.trim() || "Asia/Shanghai";
+  const prompt = document.querySelector<HTMLInputElement>(`[data-task-prompt="${index}"]`)?.value.trim() || "";
+  const chatId = document.querySelector<HTMLInputElement>(`[data-task-chat-id="${index}"]`)?.value.trim() || "";
+  const targetType = (document.querySelector<HTMLSelectElement>(`[data-task-target-type="${index}"]`)?.value ?? "agent") as ScheduledTask["target"]["type"];
+  if (!name || !prompt || !chatId) return null;
+  const task = (bot.scheduledTasks ?? [])[index];
+  const normalized: ScheduledTask = {
+    id: task?.id ?? crypto.randomUUID(),
+    botId: bot.id,
+    enabled: (document.querySelector<HTMLSelectElement>(`[data-task-enabled="${index}"]`)?.value ?? "true") === "true",
+    name,
+    schedule: {
+      type: scheduleType,
+      timezone
+    },
+    target: {
+      type: targetType,
+      prompt
+    },
+    delivery: {
+      type: "chat",
+      chatId
+    }
+  };
+  if (scheduleType === "interval") normalized.schedule.everyMinutes = Math.max(5, Number(document.querySelector<HTMLInputElement>(`[data-task-every-minutes="${index}"]`)?.value ?? 60) || 60);
+  if (scheduleType === "daily" || scheduleType === "weekly") normalized.schedule.timeOfDay = document.querySelector<HTMLInputElement>(`[data-task-time-of-day="${index}"]`)?.value.trim() || "09:00";
+  if (scheduleType === "weekly") {
+    normalized.schedule.weekdays = [...new Set((document.querySelector<HTMLInputElement>(`[data-task-weekdays="${index}"]`)?.value ?? "")
+      .split(",")
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item) && item >= 0 && item <= 6))];
+  }
+  if (scheduleType === "cron") normalized.schedule.cronExpression = document.querySelector<HTMLInputElement>(`[data-task-cron-expression="${index}"]`)?.value.trim().replace(/\s+/g, " ") || "";
+  if (targetType === "command") normalized.target.commandName = document.querySelector<HTMLSelectElement>(`[data-task-command-name="${index}"]`)?.value.trim() || "";
+  if (targetType === "capability") {
+    const raw = document.querySelector<HTMLSelectElement>(`[data-task-capability="${index}"]`)?.value ?? "";
+    const [kind, id] = raw.split(":");
+    if (kind && id) normalized.target.capability = { kind: kind as "skill" | "app" | "suite" | "workflow", id };
+  }
+  return normalized;
 }
 
 function renderConfig(): string {
@@ -1436,8 +1547,43 @@ function bindEvents(): void {
       }];
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
+      editingScheduledTaskId = bot.scheduledTasks.at(-1)?.id ?? "";
       render();
     };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".edit-scheduled-task").forEach((button) => {
+    button.onclick = () => {
+      editingScheduledTaskId = String(button.dataset.taskId ?? "");
+      render();
+    };
+  });
+  document.querySelector<HTMLButtonElement>("#close-scheduled-task-editor")?.addEventListener("click", () => {
+    editingScheduledTaskId = "";
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#cancel-scheduled-task-editor")?.addEventListener("click", () => {
+    editingScheduledTaskId = "";
+    render();
+  });
+  document.querySelector<HTMLElement>("#scheduled-task-backdrop")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) {
+      editingScheduledTaskId = "";
+      render();
+    }
+  });
+  document.querySelector<HTMLButtonElement>("#save-scheduled-task-editor")?.addEventListener("click", async () => {
+    if (!editingBotId) return;
+    const next = structuredClone(snapshot.config);
+    const bot = next.bots.find((item) => item.id === editingBotId);
+    const taskIndex = bot?.scheduledTasks?.findIndex((task) => task.id === editingScheduledTaskId) ?? -1;
+    if (!bot || taskIndex < 0) return;
+    const saved = readScheduledTaskFromEditor(bot, taskIndex);
+    if (!saved) return;
+    bot.scheduledTasks = (bot.scheduledTasks ?? []).map((task, index) => index === taskIndex ? saved : task);
+    snapshot = await window.quarkfanTools.saveConfig(next);
+    editingBotId = bot.id;
+    editingScheduledTaskId = "";
+    render();
   });
   document.querySelectorAll<HTMLButtonElement>(".remove-scheduled-task").forEach((button) => {
     button.onclick = async () => {
@@ -1447,6 +1593,7 @@ function bindEvents(): void {
       bot.scheduledTasks = (bot.scheduledTasks ?? []).filter((_, index) => index !== Number(button.dataset.index));
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
+      if (!(bot.scheduledTasks ?? []).some((task) => task.id === editingScheduledTaskId)) editingScheduledTaskId = "";
       render();
     };
   });
@@ -1462,6 +1609,18 @@ function bindEvents(): void {
         window.alert(String(error instanceof Error ? error.message : error));
       }
       render();
+    };
+  });
+  document.querySelectorAll<HTMLSelectElement>("[data-task-schedule-type]").forEach((select) => {
+    select.onchange = () => {
+      const card = select.closest<HTMLElement>(".scheduled-task-modal");
+      if (card) card.dataset.scheduleType = select.value;
+    };
+  });
+  document.querySelectorAll<HTMLSelectElement>("[data-task-target-type]").forEach((select) => {
+    select.onchange = () => {
+      const card = select.closest<HTMLElement>(".scheduled-task-modal");
+      if (card) card.dataset.targetType = select.value;
     };
   });
   document.querySelector<HTMLFormElement>("#bot-editor-form")?.addEventListener("submit", async (event) => {
@@ -1574,51 +1733,11 @@ function bindEvents(): void {
         };
       })
       .filter((binding): binding is NonNullable<BotConfig["commandBindings"]>[number] => Boolean(binding));
-    bot.scheduledTasks = [...document.querySelectorAll<HTMLInputElement>("[data-task-name]")]
-      .map((input, index) => {
-        const name = input.value.trim();
-        const scheduleType = (document.querySelector<HTMLSelectElement>(`[data-task-schedule-type="${index}"]`)?.value ?? "daily") as ScheduledTask["schedule"]["type"];
-        const timezone = document.querySelector<HTMLInputElement>(`[data-task-timezone="${index}"]`)?.value.trim() || "Asia/Shanghai";
-        const prompt = document.querySelector<HTMLInputElement>(`[data-task-prompt="${index}"]`)?.value.trim() || "";
-        const chatId = document.querySelector<HTMLInputElement>(`[data-task-chat-id="${index}"]`)?.value.trim() || "";
-        const targetType = (document.querySelector<HTMLSelectElement>(`[data-task-target-type="${index}"]`)?.value ?? "agent") as ScheduledTask["target"]["type"];
-        if (!name || !prompt || !chatId) return null;
-        const task = (bot.scheduledTasks ?? [])[index];
-        const normalized: ScheduledTask = {
-          id: task?.id ?? crypto.randomUUID(),
-          botId: bot.id,
-          enabled: (document.querySelector<HTMLSelectElement>(`[data-task-enabled="${index}"]`)?.value ?? "true") === "true",
-          name,
-          schedule: {
-            type: scheduleType,
-            timezone
-          },
-          target: {
-            type: targetType,
-            prompt
-          },
-          delivery: {
-            type: "chat",
-            chatId
-          }
-        };
-        if (scheduleType === "interval") normalized.schedule.everyMinutes = Math.max(5, Number(document.querySelector<HTMLInputElement>(`[data-task-every-minutes="${index}"]`)?.value ?? 60) || 60);
-        if (scheduleType === "daily" || scheduleType === "weekly") normalized.schedule.timeOfDay = document.querySelector<HTMLInputElement>(`[data-task-time-of-day="${index}"]`)?.value.trim() || "09:00";
-        if (scheduleType === "weekly") {
-          normalized.schedule.weekdays = [...new Set((document.querySelector<HTMLInputElement>(`[data-task-weekdays="${index}"]`)?.value ?? "")
-            .split(",")
-            .map((item) => Number(item.trim()))
-            .filter((item) => Number.isInteger(item) && item >= 0 && item <= 6))];
-        }
-        if (targetType === "command") normalized.target.commandName = document.querySelector<HTMLSelectElement>(`[data-task-command-name="${index}"]`)?.value.trim() || "";
-        if (targetType === "capability") {
-          const raw = document.querySelector<HTMLSelectElement>(`[data-task-capability="${index}"]`)?.value ?? "";
-          const [kind, id] = raw.split(":");
-          if (kind && id) normalized.target.capability = { kind: kind as "skill" | "app" | "suite" | "workflow", id };
-        }
-        return normalized;
-      })
-      .filter((task): task is ScheduledTask => Boolean(task));
+    const editedTaskIndex = (bot.scheduledTasks ?? []).findIndex((task) => task.id === editingScheduledTaskId);
+    if (editedTaskIndex >= 0 && document.querySelector<HTMLInputElement>(`[data-task-name="${editedTaskIndex}"]`)) {
+      const saved = readScheduledTaskFromEditor(bot, editedTaskIndex);
+      if (saved) bot.scheduledTasks = (bot.scheduledTasks ?? []).map((task, index) => index === editedTaskIndex ? saved : task);
+    }
     snapshot = await window.quarkfanTools.saveConfig(next);
     selectedBotId = bot.id;
     editingBotId = "";

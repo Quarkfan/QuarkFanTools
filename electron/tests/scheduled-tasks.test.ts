@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dueScheduledTasks, nextTaskRun, refreshBotScheduledTasks } from "../scheduled-task-core.js";
+import { dueScheduledTasks, isValidCronExpression, nextTaskRun, refreshBotScheduledTasks } from "../scheduled-task-core.js";
 import type { BotConfig, ScheduledTask } from "../types.js";
 
 const baseTask: ScheduledTask = {
@@ -19,6 +19,21 @@ test("computes next interval run", () => {
     schedule: { type: "interval", timezone: "Asia/Shanghai", everyMinutes: 30 }
   }, new Date("2026-06-16T01:00:00.000Z"));
   assert.equal(next, "2026-06-16T01:30:00.000Z");
+});
+
+test("computes next cron run with timezone", () => {
+  const next = nextTaskRun({
+    ...baseTask,
+    schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "15 9 * * 1-5" }
+  }, new Date("2026-06-16T00:00:00.000Z"));
+  assert.equal(next, "2026-06-16T01:15:00.000Z");
+});
+
+test("validates cron expression syntax", () => {
+  assert.equal(isValidCronExpression("*/30 8-20 * * *"), true);
+  assert.equal(isValidCronExpression("15 9 * * 1-5"), true);
+  assert.equal(isValidCronExpression("60 9 * * *"), false);
+  assert.equal(isValidCronExpression("15 9 *"), false);
 });
 
 test("refreshes bot task nextRunAt and finds due tasks", () => {

@@ -1,6 +1,6 @@
 # 当前状态
 
-最后更新：2026-06-19
+最后更新：2026-06-22
 
 ## 当前基线
 
@@ -70,7 +70,7 @@
 - 套件下派生的 Workflow 已进入能力目录，可直接作为命令或定时任务 capability 目标执行，并复用父套件上下文。
 - Workflow 已支持声明式步骤编排：当前支持 `prompt` 步骤和 `capability` 步骤，按顺序执行并把上一步输出传给下一步。
 - Workflow 步骤执行已接入运行台日志；定时任务触发的 Workflow 会把步骤状态和短输出摘要写入 `scheduled-runs.jsonl`。
-- Bot 级定时任务已接入：支持 `interval/daily/weekly` 计划、`agent/command/capability` 目标、本机调度、chat 投递和运行记录。
+- Bot 级定时任务已接入：支持 `interval/daily/weekly/cron` 计划、`agent/command/capability` 目标、本机调度、chat 投递和运行记录。
 - Bot 定时任务支持手动立即运行已保存且启用的任务，运行结果进入同一审计历史，且不扰动原本已计算的下一次计划时间。
 - 存储管理已展示最近定时任务运行历史，可查看 Bot、任务、状态、耗时和详情；Workflow 定时任务会展示步骤摘要。
 - 定时任务的 `capability` 目标已支持 Skill、套件和声明 `scheduledCallable` 的自定义应用，并补齐 `allowScheduledUse` 治理校验。
@@ -97,7 +97,7 @@
 - 自定义应用首版仅覆盖导入、预览、Bot 授权、`node` 入口、命令调用和定时调用；`webview/ui`、`mcp-adapter`、市场、版本升级、签名校验和完整生命周期未完成。
 - MCP 当前仅支持 `stdio` 配置、Claude Agent SDK 严格注入、静态配置诊断和手动协议探测；探测失败会展示退出码、signal 和 stderr 尾部。HTTP/SSE、持久化启动日志、直接命令绑定 MCP 和真实服务端到端专项验证未完成。
 - Workflow 当前支持 prompt workflow 和顺序 steps；条件分支、循环、重试、超时、结构化变量、失败恢复、单步重跑和专门运行历史页未完成。
-- 定时任务当前是本机应用运行期间触发；应用关闭期间不补偿执行，复杂日历、失败重试、告警和运行历史专页未完成。
+- 定时任务当前是本机应用运行期间触发；应用关闭期间不补偿执行，失败重试、告警和运行历史专页未完成。复杂日历已先通过 5 段 cron 表达式覆盖基础场景，但不支持秒级、`L/W/#` 等高级 cron 扩展。
 - 飞书消息附件、受控云盘下载和受控云文档导出已支持下载前缓存命中；裸调 `lark-cli drive +download/+export` 已有运行时拦截，但其他未来下载入口仍需逐步纳入治理。缓存索引当前只读展示，不支持单条删除或自动失效策略。
 - 企业微信 Provider 当前是官方 `wecom-cli <category> <method> <json_args>` 调用模型首版适配，已覆盖配置、事件归一化、回复、资源下载和投递路由代码路径；官方 wecom-cli 不提供事件长连接，监听当前需要配置 `providerOptions.eventCommand` 事件桥。尚未用真实企业微信 CLI 和企业微信环境做端到端验证。钉钉只完成结构预留，尚未实现 Provider。
 
@@ -112,6 +112,8 @@
 
 ## 最近验证
 
+- 2026-06-22：同步 1.8.x 的定时任务 UI 优化到 2.0，Bot 编辑弹窗中的任务区改为列表操作 + 编辑弹窗模式，列表提供“立即执行”“编辑”“删除”；`npm test` 通过，72 项测试全部通过；`git diff --check` 通过。
+- 2026-06-22：新增 Bot 定时任务 5 段 cron 表达式计划类型，并优化 Bot 编辑弹窗中的定时任务配置 UI；`npm test` 通过，72 项测试全部通过；`git diff --check` 通过。
 - 2026-06-21：已将 `v1.6.17` 每 Bot 隔离飞书事件订阅修复同步到 2.0 未发布变更；`npm test` 通过，70 项测试全部通过。
 - 2026-06-20：`v2.0.3` 已同步 `v1.6.16` 修复并完成封版验证：`npm test` 通过，70 项测试全部通过；`npm run pack:mac` 已生成 arm64 与 x64 双平台安装包。产物版本均为 `2.0.3`，arm64/x64 主程序架构正确，内置 lark-cli 与 wecom-cli 为 universal binary，Claude runtime 分别为 arm64/x86_64。归档产物位于 `release/v2.0.3/`。
 - 2026-06-19：`npm run pack:mac` 通过，`v2.0.2` 已生成并核对 arm64 与 x64 的 DMG 和 ZIP；两个应用包版本均为 `2.0.2`，主程序架构分别为 arm64 与 x86_64，内置 lark-cli/wecom-cli 均为 universal。

@@ -89,11 +89,12 @@ export interface ScheduledTask {
   enabled: boolean;
   name: string;
   schedule: {
-    type: "interval" | "daily" | "weekly";
+    type: "interval" | "daily" | "weekly" | "cron";
     timezone: string;
     everyMinutes?: number;
     timeOfDay?: string;
     weekdays?: number[];
+    cronExpression?: string;
   };
   target: {
     type: "agent" | "command" | "capability";

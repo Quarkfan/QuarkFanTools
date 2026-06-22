@@ -1,4 +1,5 @@
 import type { AppConfig, BotConfig } from "./types.js";
+import { isValidCronExpression } from "./scheduled-task-core.js";
 
 export type LegacyConfig = Partial<AppConfig> & {
   lark?: Partial<Omit<BotConfig, "id" | "name" | "enabled" | "skillNames" | "pendingReaction" | "ownerOpenId">>;
@@ -233,7 +234,7 @@ function normalizeScheduledTasks(tasks: unknown, botId: string): BotConfig["sche
     const schedule = value.schedule && typeof value.schedule === "object" ? value.schedule as Record<string, unknown> : null;
     const scheduleType = String(schedule?.type ?? "");
     const timezone = String(schedule?.timezone ?? "").trim() || "Asia/Shanghai";
-    if (!["interval", "daily", "weekly"].includes(scheduleType)) continue;
+    if (!["interval", "daily", "weekly", "cron"].includes(scheduleType)) continue;
     const target = value.target && typeof value.target === "object" ? value.target as Record<string, unknown> : null;
     const targetType = String(target?.type ?? "");
     const prompt = String(target?.prompt ?? "").trim();
@@ -278,6 +279,11 @@ function normalizeScheduledTasks(tasks: unknown, botId: string): BotConfig["sche
         : [];
       if (weekdays.length === 0) continue;
       normalized.schedule.weekdays = weekdays;
+    }
+    if (scheduleType === "cron") {
+      const cronExpression = String(schedule?.cronExpression ?? "").trim().replace(/\s+/g, " ");
+      if (!isValidCronExpression(cronExpression)) continue;
+      normalized.schedule.cronExpression = cronExpression;
     }
     if (targetType === "command") {
       const commandName = String(target?.commandName ?? "").trim().toLowerCase();

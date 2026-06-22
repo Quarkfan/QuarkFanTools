@@ -250,6 +250,33 @@ label small { color: #536159; line-height: 1.5; }
 .command-binding-list { display: grid; gap: 10px; }
 .command-binding-row { display: grid; grid-template-columns: 160px minmax(180px, 1fr) 112px; gap: 8px 10px; padding: 10px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 76%, transparent); }
 .command-binding-row .danger { align-self: end; justify-self: end; }
+.scheduled-task-list { display: grid; gap: 8px; }
+.scheduled-task-list-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 76%, transparent); }
+.scheduled-task-list-row strong { color: var(--text); font-size: 13px; }
+.scheduled-task-list-row small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.scheduled-task-list-actions { display: flex; gap: 7px; }
+.scheduled-task-modal { width: min(860px, calc(100vw - 80px)); }
+.scheduled-task-editor-body { max-height: min(650px, calc(100vh - 180px)); overflow: auto; padding: 14px 0 20px; }
+.scheduled-task-header { display: grid; grid-template-columns: minmax(240px, 1fr) 120px; gap: 10px; }
+.scheduled-task-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--panel-border); }
+.scheduled-task-section strong { color: var(--text); font-size: 12px; }
+.scheduled-task-grid { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 8px 10px; }
+.scheduled-task-modal[data-schedule-type="interval"] .schedule-daily,
+.scheduled-task-modal[data-schedule-type="interval"] .schedule-weekly,
+.scheduled-task-modal[data-schedule-type="interval"] .schedule-cron,
+.scheduled-task-modal[data-schedule-type="daily"] .schedule-interval,
+.scheduled-task-modal[data-schedule-type="daily"] .schedule-weekly,
+.scheduled-task-modal[data-schedule-type="daily"] .schedule-cron,
+.scheduled-task-modal[data-schedule-type="weekly"] .schedule-interval,
+.scheduled-task-modal[data-schedule-type="weekly"] .schedule-daily,
+.scheduled-task-modal[data-schedule-type="weekly"] .schedule-cron,
+.scheduled-task-modal[data-schedule-type="cron"] .schedule-interval,
+.scheduled-task-modal[data-schedule-type="cron"] .schedule-daily,
+.scheduled-task-modal[data-schedule-type="cron"] .schedule-weekly,
+.scheduled-task-modal[data-target-type="agent"] .target-command,
+.scheduled-task-modal[data-target-type="agent"] .target-capability,
+.scheduled-task-modal[data-target-type="command"] .target-capability,
+.scheduled-task-modal[data-target-type="capability"] .target-command { display: none; }
 .scheduled-task-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
 .command-wide { grid-column: 1 / -1; }
 .inline-actions { justify-content: flex-start; }
@@ -262,6 +289,7 @@ label small { color: #536159; line-height: 1.5; }
   .skill-access-controls { grid-template-columns: 1fr 1fr; }
   .skill-access-controls input { grid-column: 1 / -1; }
   .command-binding-row { grid-template-columns: 1fr; }
+  .scheduled-task-header, .scheduled-task-grid { grid-template-columns: 1fr; }
   .command-wide { grid-column: auto; }
   .scheduled-task-actions { grid-column: auto; flex-direction: column; }
   .command-binding-row .danger { justify-self: stretch; }

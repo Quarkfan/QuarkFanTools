@@ -422,6 +422,24 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
           schedule: { type: "daily", timezone: "Asia/Shanghai", timeOfDay: "11:00" },
           target: { type: "capability", capability: { kind: "workflow", id: "manufacturing-qa/root-cause-analysis" }, prompt: "分析当日异常" },
           delivery: { type: "chat", chatId: "oc_789" }
+        },
+        {
+          id: "task-5",
+          botId: "bot-1",
+          enabled: true,
+          name: "工作日巡检",
+          schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "15   9 * * 1-5" },
+          target: { type: "agent", prompt: "执行工作日巡检" },
+          delivery: { type: "chat", chatId: "oc_999" }
+        },
+        {
+          id: "task-6",
+          botId: "bot-1",
+          enabled: true,
+          name: "bad cron",
+          schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "60 9 * * *" },
+          target: { type: "agent", prompt: "不会保留" },
+          delivery: { type: "chat", chatId: "oc_bad" }
         }
       ],
       pendingReaction: "OnIt",
@@ -461,6 +479,18 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       schedule: { type: "daily", timezone: "Asia/Shanghai", timeOfDay: "11:00" },
       target: { type: "capability", capability: { kind: "workflow", id: "manufacturing-qa/root-cause-analysis" }, prompt: "分析当日异常" },
       delivery: { type: "chat", chatId: "oc_789", replyIdentity: undefined },
+      lastRunAt: undefined,
+      nextRunAt: undefined,
+      lastStatus: undefined
+    },
+    {
+      id: "task-5",
+      botId: "bot-1",
+      enabled: true,
+      name: "工作日巡检",
+      schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "15 9 * * 1-5" },
+      target: { type: "agent", prompt: "执行工作日巡检" },
+      delivery: { type: "chat", chatId: "oc_999", replyIdentity: undefined },
       lastRunAt: undefined,
       nextRunAt: undefined,
       lastStatus: undefined
