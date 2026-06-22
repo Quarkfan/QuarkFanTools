@@ -309,6 +309,12 @@ release/x64/
 
 当前没有配置代码签名和 Apple 公证，安装时可能出现系统安全提示。
 
+### 当前分支状态
+
+截至 2026-06-22，2.0 已进入远端 `main` 主线，`main` 与 `codex/2.0.0-stabilize` 指向同一接续提交。远端 1.x 维护分支已清理，只保留最新的 `codex/v1.8.3-cron-scheduled-tasks` 作为 1.x 参考线。
+
+下一轮继续 2.0 时，优先处理定时任务版本合并治理：将任务定义字段与 `failureCount`、`retryAt`、`pausedReason`、`lastRunAt`、`nextRunAt`、`lastStatus` 等运行态字段拆成明确 merge helper，并补齐 `1.8.x` cron 任务、2.0 retry 任务、旧状态文件和回滚后再升级的兼容测试。
+
 ### 版本号规则
 
 版本号使用 `主版本.次版本.修订版本`：

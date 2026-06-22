@@ -5,8 +5,9 @@
 ## 当前基线
 
 - 产品版本：`2.0.3`
-- Git 分支：`codex/2.0.0-stabilize`
+- Git 分支：当前工作分支 `codex/2.0.0-stabilize`，远端 `main` 已同步到同一提交
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
+- 远端分支：`main` 与 `codex/2.0.0-stabilize` 指向 2.0 最新接续提交；1.x 维护线仅保留 `codex/v1.8.3-cron-scheduled-tasks`
 - 运行平台：macOS Apple Silicon 与 Intel
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
 - 当前阶段：2.0.3 已同步 1.6.16 多飞书 Bot 修复；当前未发布变更已继续同步 1.6.17 每 Bot 隔离飞书事件订阅、Bot 专属 lark-cli HOME、启动可见日志和旧凭据 marker 迁移修复，并继续围绕真实 IM 端到端、诊断、版本合并治理和发布签名收口
@@ -116,6 +117,7 @@
 ## 最近验证
 
 - 2026-06-22：定时任务新增失败重试和暂停原因治理；`npm test` 通过，74 项测试全部通过；`git diff --check` 通过。
+- 2026-06-22：远端分支已整理：删除旧 1.x 维护分支，仅保留 `codex/v1.8.3-cron-scheduled-tasks`；`codex/2.0.0-stabilize` 已推送并同步进入远端 `main`。
 - 2026-06-22：存储管理文件缓存索引新增单条删除，删除时保护仍被其他索引引用的共享内容 hash；`npm test` 通过，73 项测试全部通过；`git diff --check` 通过。
 - 2026-06-22：同步 1.8.x 的定时任务 UI 优化到 2.0，Bot 编辑弹窗中的任务区改为列表操作 + 编辑弹窗模式，列表提供“立即执行”“编辑”“删除”；`npm test` 通过，72 项测试全部通过；`git diff --check` 通过。
 - 2026-06-22：新增 Bot 定时任务 5 段 cron 表达式计划类型，并优化 Bot 编辑弹窗中的定时任务配置 UI；`npm test` 通过，72 项测试全部通过；`git diff --check` 通过。
