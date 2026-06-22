@@ -9,6 +9,7 @@ const releases: AppInfo["releases"] = [
       "飞书 OAuth 和 lark-cli 本地密钥改为按 Bot 专属 HOME 隔离，不再复用 macOS 用户全局 lark-cli 目录。",
       "启动阶段新增可见日志和 30 秒 CLI 超时，旧凭据 marker 会刷新，避免 invalid_client 启动失败。",
       "定时任务新增 cron 表达式计划类型，Bot 编辑弹窗中的定时任务配置改为计划、目标、投递分区展示。",
+      "定时任务支持失败重试和自动停用暂停原因，便于治理长期失败任务。",
       "存储管理的文件缓存索引支持单条删除，便于清理指定大文件缓存。"
     ]
   },

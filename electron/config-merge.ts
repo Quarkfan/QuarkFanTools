@@ -262,8 +262,17 @@ function normalizeScheduledTasks(tasks: unknown, botId: string): BotConfig["sche
       },
       lastRunAt: typeof value.lastRunAt === "string" && value.lastRunAt.trim() ? value.lastRunAt.trim() : undefined,
       nextRunAt: typeof value.nextRunAt === "string" && value.nextRunAt.trim() ? value.nextRunAt.trim() : undefined,
-      lastStatus: ["success", "failed", "skipped"].includes(String(value.lastStatus ?? "")) ? String(value.lastStatus) as NonNullable<BotConfig["scheduledTasks"]>[number]["lastStatus"] : undefined
+      lastStatus: ["success", "failed", "skipped"].includes(String(value.lastStatus ?? "")) ? String(value.lastStatus) as NonNullable<BotConfig["scheduledTasks"]>[number]["lastStatus"] : undefined,
+      failureCount: Math.max(0, Math.floor(Number(value.failureCount ?? 0) || 0)) || undefined,
+      retryAt: typeof value.retryAt === "string" && value.retryAt.trim() ? value.retryAt.trim() : undefined,
+      pausedReason: typeof value.pausedReason === "string" && value.pausedReason.trim() ? value.pausedReason.trim() : undefined
     };
+    const retry = value.retry && typeof value.retry === "object" ? value.retry as Record<string, unknown> : null;
+    if (retry) {
+      const maxRetries = Math.max(0, Math.min(20, Math.floor(Number(retry.maxRetries ?? 0) || 0)));
+      const delayMinutes = Math.max(1, Math.min(24 * 60, Math.floor(Number(retry.delayMinutes ?? 10) || 10)));
+      if (maxRetries > 0) normalized.retry = { maxRetries, delayMinutes };
+    }
     if (scheduleType === "interval") {
       const everyMinutes = Math.max(5, Math.min(7 * 24 * 60, Number(schedule?.everyMinutes ?? 60) || 60));
       normalized.schedule.everyMinutes = everyMinutes;

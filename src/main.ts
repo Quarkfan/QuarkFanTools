@@ -73,7 +73,7 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   customAppAccess: { title: "允许访问的自定义应用", body: "自定义应用通过 app.json 导入，并作为 Bot 可治理能力授权。导入不等于授权；只有勾选后，后续命令或定时任务才能调用。" },
   suiteAccess: { title: "允许访问的套件", body: "套件用于面向角色或行业组合 Skills、自定义应用、MCP 和工作流说明。当前支持导入、预览、Bot 挂载授权，并可作为命令目标向 Agent 注入套件上下文。" },
   commandBindings: { title: "命令映射", body: "将 /xxx 映射到某个 Skill、套件、Workflow 或自定义应用。保留命令 /new、/continue、/owner 不能占用；命令名建议使用小写字母、数字、短横线或下划线。" },
-  scheduledTasks: { title: "定时任务", body: "定时任务属于单个 Bot，当前支持 interval、daily、weekly 和 cron 四种计划类型，目标可选 agent、command 或 capability，并把结果投递到指定 chat_id。cron 使用 5 段表达式：分钟 小时 日 月 周，例如 15 9 * * 1-5 表示工作日 09:15。可手动立即运行已保存且启用的任务，结果同样写入运行历史。" }
+  scheduledTasks: { title: "定时任务", body: "定时任务属于单个 Bot，当前支持 interval、daily、weekly 和 cron 四种计划类型，目标可选 agent、command 或 capability，并把结果投递到指定 chat_id。cron 使用 5 段表达式：分钟 小时 日 月 周，例如 15 9 * * 1-5 表示工作日 09:15。可配置失败重试；超过上限后任务会自动停用并显示暂停原因。" }
 };
 
 function closeReleaseNotes(): void {
@@ -581,7 +581,7 @@ function renderManual(): string {
             <p>Bot 编辑弹窗中的“定时任务”支持按 Bot 配置本机调度任务。当前支持 <code>interval</code>、<code>daily</code>、<code>weekly</code> 和 <code>cron</code> 四种计划类型。</p>
             <p><code>cron</code> 使用 5 段表达式：分钟 小时 日 月 周，支持 <code>*</code>、列表、范围和步进，例如 <code>15 9 * * 1-5</code> 表示工作日 09:15，<code>*/30 8-20 * * *</code> 表示每天 08:00 到 20:59 每 30 分钟。</p>
             <p>任务目标可选 <code>agent</code>、<code>command</code>、<code>capability</code>。命令目标会复用该 Bot 已启用的命令映射；能力目标当前支持 Skill、套件、Workflow，以及声明 <code>scheduledCallable</code> 的自定义应用。</p>
-            <p>定时任务结果会投递到指定 <code>chat_id</code>。任务只在应用运行期间触发，并与普通消息共享并发上限。已保存且启用的任务可在 Bot 编辑弹窗中立即运行；最近运行结果可在“存储管理”的定时任务运行历史中查看，并可按 Bot 和状态筛选；Workflow 任务会展示步骤摘要。</p>
+            <p>定时任务结果会投递到指定 <code>chat_id</code>。任务只在应用运行期间触发，并与普通消息共享并发上限。已保存且启用的任务可在 Bot 编辑弹窗中立即运行；计划触发失败时可按配置重试，超过上限后会自动停用并展示暂停原因；最近运行结果可在“存储管理”的定时任务运行历史中查看，并可按 Bot 和状态筛选。</p>
           </section>
           <section>
             <h3>运行台</h3>
@@ -988,6 +988,7 @@ function renderScheduledTaskSummary(bot: BotConfig, task: ScheduledTask, index: 
         <strong>${escapeHtml(task.name)}</strong>
         <small>${task.enabled ? "启用" : "停用"} / ${escapeHtml(scheduledTaskScheduleText(task))} / ${escapeHtml(scheduledTaskTargetText(task))}</small>
         <small>投递：${escapeHtml(task.delivery.chatId || "未配置")} / 下次：${escapeHtml(task.nextRunAt ? new Date(task.nextRunAt).toLocaleString() : "未计划")}</small>
+        ${(task.failureCount ?? 0) > 0 || task.retryAt || task.pausedReason ? `<small>治理：失败 ${escapeHtml(String(task.failureCount ?? 0))} 次${task.retryAt ? ` / 重试 ${escapeHtml(new Date(task.retryAt).toLocaleString())}` : ""}${task.pausedReason ? ` / 暂停：${escapeHtml(task.pausedReason)}` : ""}</small>` : ""}
       </div>
       <div class="scheduled-task-list-actions">
         <button type="button" class="ghost compact run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled ? "" : "disabled"}>立即执行</button>
@@ -1050,6 +1051,14 @@ function renderScheduledTaskEditor(bot: BotConfig, task: ScheduledTask, index: n
               <label class="command-wide"><span>投递 chat_id</span><input data-task-chat-id="${index}" value="${escapeHtml(task.delivery.chatId)}" placeholder="oc_xxx" /></label>
             </div>
           </div>
+          <div class="scheduled-task-section">
+            <strong>治理</strong>
+            <div class="scheduled-task-grid">
+              <label><span>最大重试次数</span><input data-task-max-retries="${index}" type="number" min="0" max="20" value="${escapeHtml(task.retry?.maxRetries ?? 0)}" /><small>0 表示失败后不立即重试。</small></label>
+              <label><span>重试延迟分钟</span><input data-task-retry-delay="${index}" type="number" min="1" max="1440" value="${escapeHtml(task.retry?.delayMinutes ?? 10)}" /></label>
+              <label class="command-wide"><span>暂停原因</span><input value="${escapeHtml(task.pausedReason ?? "")}" placeholder="自动停用后显示" disabled /></label>
+            </div>
+          </div>
           <div class="form-actions">
             <button type="button" class="ghost" id="cancel-scheduled-task-editor">取消</button>
             <button type="button" class="primary" id="save-scheduled-task-editor">保存任务</button>
@@ -1067,12 +1076,13 @@ function readScheduledTaskFromEditor(bot: BotConfig, index: number): ScheduledTa
   const prompt = document.querySelector<HTMLInputElement>(`[data-task-prompt="${index}"]`)?.value.trim() || "";
   const chatId = document.querySelector<HTMLInputElement>(`[data-task-chat-id="${index}"]`)?.value.trim() || "";
   const targetType = (document.querySelector<HTMLSelectElement>(`[data-task-target-type="${index}"]`)?.value ?? "agent") as ScheduledTask["target"]["type"];
+  const enabled = (document.querySelector<HTMLSelectElement>(`[data-task-enabled="${index}"]`)?.value ?? "true") === "true";
   if (!name || !prompt || !chatId) return null;
   const task = (bot.scheduledTasks ?? [])[index];
   const normalized: ScheduledTask = {
     id: task?.id ?? crypto.randomUUID(),
     botId: bot.id,
-    enabled: (document.querySelector<HTMLSelectElement>(`[data-task-enabled="${index}"]`)?.value ?? "true") === "true",
+    enabled,
     name,
     schedule: {
       type: scheduleType,
@@ -1085,8 +1095,17 @@ function readScheduledTaskFromEditor(bot: BotConfig, index: number): ScheduledTa
     delivery: {
       type: "chat",
       chatId
-    }
+    },
+    lastRunAt: task?.lastRunAt,
+    nextRunAt: task?.nextRunAt,
+    lastStatus: task?.lastStatus,
+    failureCount: enabled ? undefined : task?.failureCount,
+    retryAt: enabled ? undefined : task?.retryAt,
+    pausedReason: enabled ? undefined : task?.pausedReason
   };
+  const maxRetries = Math.max(0, Math.min(20, Number(document.querySelector<HTMLInputElement>(`[data-task-max-retries="${index}"]`)?.value ?? 0) || 0));
+  const delayMinutes = Math.max(1, Math.min(1440, Number(document.querySelector<HTMLInputElement>(`[data-task-retry-delay="${index}"]`)?.value ?? 10) || 10));
+  if (maxRetries > 0) normalized.retry = { maxRetries, delayMinutes };
   if (scheduleType === "interval") normalized.schedule.everyMinutes = Math.max(5, Number(document.querySelector<HTMLInputElement>(`[data-task-every-minutes="${index}"]`)?.value ?? 60) || 60);
   if (scheduleType === "daily" || scheduleType === "weekly") normalized.schedule.timeOfDay = document.querySelector<HTMLInputElement>(`[data-task-time-of-day="${index}"]`)?.value.trim() || "09:00";
   if (scheduleType === "weekly") {

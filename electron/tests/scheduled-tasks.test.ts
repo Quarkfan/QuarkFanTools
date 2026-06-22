@@ -29,6 +29,14 @@ test("computes next cron run with timezone", () => {
   assert.equal(next, "2026-06-16T01:15:00.000Z");
 });
 
+test("prefers scheduled retry time", () => {
+  const next = nextTaskRun({
+    ...baseTask,
+    retryAt: "2026-06-16T00:10:00.000Z"
+  }, new Date("2026-06-16T00:00:00.000Z"));
+  assert.equal(next, "2026-06-16T00:10:00.000Z");
+});
+
 test("validates cron expression syntax", () => {
   assert.equal(isValidCronExpression("*/30 8-20 * * *"), true);
   assert.equal(isValidCronExpression("15 9 * * 1-5"), true);

@@ -430,7 +430,11 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
           name: "工作日巡检",
           schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "15   9 * * 1-5" },
           target: { type: "agent", prompt: "执行工作日巡检" },
-          delivery: { type: "chat", chatId: "oc_999" }
+          delivery: { type: "chat", chatId: "oc_999" },
+          retry: { maxRetries: 3, delayMinutes: 15 },
+          failureCount: 2,
+          retryAt: "2026-06-16T02:15:00.000Z",
+          pausedReason: "等待人工处理"
         },
         {
           id: "task-6",
@@ -457,7 +461,10 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       delivery: { type: "chat", chatId: "oc_123", replyIdentity: undefined },
       lastRunAt: undefined,
       nextRunAt: undefined,
-      lastStatus: undefined
+      lastStatus: undefined,
+      failureCount: undefined,
+      retryAt: undefined,
+      pausedReason: undefined
     },
     {
       id: "task-3",
@@ -469,7 +476,10 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       delivery: { type: "chat", chatId: "oc_456", replyIdentity: undefined },
       lastRunAt: undefined,
       nextRunAt: undefined,
-      lastStatus: undefined
+      lastStatus: undefined,
+      failureCount: undefined,
+      retryAt: undefined,
+      pausedReason: undefined
     },
     {
       id: "task-4",
@@ -481,7 +491,10 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       delivery: { type: "chat", chatId: "oc_789", replyIdentity: undefined },
       lastRunAt: undefined,
       nextRunAt: undefined,
-      lastStatus: undefined
+      lastStatus: undefined,
+      failureCount: undefined,
+      retryAt: undefined,
+      pausedReason: undefined
     },
     {
       id: "task-5",
@@ -491,9 +504,13 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "15 9 * * 1-5" },
       target: { type: "agent", prompt: "执行工作日巡检" },
       delivery: { type: "chat", chatId: "oc_999", replyIdentity: undefined },
+      retry: { maxRetries: 3, delayMinutes: 15 },
       lastRunAt: undefined,
       nextRunAt: undefined,
-      lastStatus: undefined
+      lastStatus: undefined,
+      failureCount: 2,
+      retryAt: "2026-06-16T02:15:00.000Z",
+      pausedReason: "等待人工处理"
     }
   ]);
 });

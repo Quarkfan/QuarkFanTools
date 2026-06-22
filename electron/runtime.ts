@@ -779,10 +779,12 @@ export class QuarkfanToolsRuntime extends EventEmitter {
 
   private async completeScheduledTask(bot: BotConfig, task: ScheduledTask, startedAt: Date, status: "success" | "failed" | "skipped", detail: string, trigger: "scheduled" | "manual" = "scheduled"): Promise<void> {
     const previousNextRunAt = task.nextRunAt;
+    const previousRetryAt = task.retryAt;
     task.lastRunAt = startedAt.toISOString();
     task.lastStatus = status;
-    task.nextRunAt = trigger === "manual" && previousNextRunAt ? previousNextRunAt : nextTaskRun(task, startedAt);
-    const recordDetail = trigger === "manual" ? `手动触发\n${detail}` : detail;
+    const retryDetail = this.updateScheduledTaskRetryState(task, startedAt, status, detail, trigger);
+    task.nextRunAt = trigger === "manual" && previousNextRunAt && !(status === "success" && previousRetryAt) ? previousNextRunAt : nextTaskRun(task, startedAt);
+    const recordDetail = trigger === "manual" ? `手动触发\n${retryDetail}` : retryDetail;
     await persistBotScheduledTasks(bot);
     await appendScheduledTaskRun({
       taskId: task.id,
@@ -793,6 +795,32 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       detail: recordDetail
     });
     await this.logger.write(status === "success" ? "success" : status === "failed" ? "error" : "warn", "定时任务运行完成", `${task.name} / ${status}${trigger === "manual" ? " / 手动触发" : ""}`, bot.id);
+  }
+
+  private updateScheduledTaskRetryState(task: ScheduledTask, startedAt: Date, status: "success" | "failed" | "skipped", detail: string, trigger: "scheduled" | "manual"): string {
+    if (status === "success") {
+      task.failureCount = 0;
+      task.retryAt = undefined;
+      task.pausedReason = undefined;
+      return detail;
+    }
+    if (status !== "failed" || trigger === "manual") return detail;
+    const maxRetries = Math.max(0, Math.floor(task.retry?.maxRetries ?? 0));
+    const delayMinutes = Math.max(1, Math.floor(task.retry?.delayMinutes ?? 10));
+    if (maxRetries <= 0) {
+      task.failureCount = (task.failureCount ?? 0) + 1;
+      task.retryAt = undefined;
+      return detail;
+    }
+    task.failureCount = (task.failureCount ?? 0) + 1;
+    if (task.failureCount <= maxRetries) {
+      task.retryAt = new Date(startedAt.getTime() + delayMinutes * 60_000).toISOString();
+      return `${detail}\n重试：第 ${task.failureCount}/${maxRetries} 次将在 ${task.retryAt} 执行`;
+    }
+    task.enabled = false;
+    task.retryAt = undefined;
+    task.pausedReason = `连续失败 ${task.failureCount} 次，已超过最大重试次数 ${maxRetries}`;
+    return `${detail}\n暂停原因：${task.pausedReason}`;
   }
 
   private async executeCommand(bot: BotConfig, options: {

@@ -110,9 +110,16 @@ export interface ScheduledTask {
     chatId: string;
     replyIdentity?: "bot" | "user";
   };
+  retry?: {
+    maxRetries: number;
+    delayMinutes: number;
+  };
   lastRunAt?: string;
   nextRunAt?: string;
   lastStatus?: "success" | "failed" | "skipped";
+  failureCount?: number;
+  retryAt?: string;
+  pausedReason?: string;
 }
 
 export interface ScheduledTaskRunSummary {

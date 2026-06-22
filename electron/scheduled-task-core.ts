@@ -2,6 +2,7 @@ import type { BotConfig, ScheduledTask } from "./types.js";
 
 export function nextTaskRun(task: ScheduledTask, from = new Date()): string | undefined {
   if (!task.enabled) return undefined;
+  if (task.retryAt && Number.isFinite(Date.parse(task.retryAt))) return task.retryAt;
   if (task.schedule.type === "interval") {
     const minutes = task.schedule.everyMinutes ?? 60;
     return new Date(from.getTime() + minutes * 60_000).toISOString();
