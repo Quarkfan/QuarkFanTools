@@ -73,6 +73,7 @@ button, input, select, textarea, label, nav, .actions, .form-actions, .panel, .n
 button.primary, button.ghost, button.danger { border-radius: 4px; padding: 10px 16px; border: 1px solid var(--panel-border); color: var(--text); background: color-mix(in srgb, var(--panel) 78%, transparent); }
 button.primary { color: #f7fffb; border-color: var(--primary); background: var(--primary); font-weight: 700; }
 button.danger { border-color: var(--danger); color: var(--danger); }
+button.compact { padding: 6px 9px; font-size: 10px; white-space: nowrap; }
 button:disabled { opacity: .35; cursor: not-allowed; }
 .help-button { width: 17px; height: 17px; margin-left: 6px; padding: 0; border: 1px solid var(--panel-border); border-radius: 50%; color: var(--primary); background: color-mix(in srgb, var(--panel) 84%, transparent); font: 700 10px/15px "Menlo", monospace; }
 .help-button:hover { border-color: var(--primary); background: var(--primary-soft); }
@@ -246,6 +247,7 @@ label small { color: #536159; line-height: 1.5; }
 .run-status.failed { border-color: #6b3d3d; color: #ff928a; }
 .run-status.skipped { border-color: #6e5b2d; color: #e5cf8c; }
 .run-status.cache { border-color: #5b647a; color: #aebfff; }
+.cache-entry-row { grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; }
 .cache-entry-row small { display: block; margin-top: 5px; color: #617168; font-size: 10px; word-break: break-all; }
 .command-binding-list { display: grid; gap: 10px; }
 .command-binding-row { display: grid; grid-template-columns: 160px minmax(180px, 1fr) 112px; gap: 8px 10px; padding: 10px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 76%, transparent); }

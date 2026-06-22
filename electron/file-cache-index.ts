@@ -39,6 +39,17 @@ export function summarizeFileCacheIndex(index: Record<string, CacheIndexEntry>):
     .sort((a, b) => b.bytes - a.bytes);
 }
 
+export function removeFileCacheIndexEntry(index: Record<string, CacheIndexEntry>, cacheKey: string): { removed?: CacheIndexEntry; orphanedHash?: string } {
+  const removed = index[cacheKey];
+  if (!removed) return {};
+  delete index[cacheKey];
+  const hashStillReferenced = Object.values(index).some((entry) => entry.hash === removed.hash);
+  return {
+    removed,
+    orphanedHash: hashStillReferenced ? undefined : removed.hash
+  };
+}
+
 function cacheEntryLabel(entry: CacheIndexEntry): string {
   if (entry.source.type === "lark-message-resource") {
     return `${entry.source.messageResourceType} / ${entry.source.name || entry.source.key}`;

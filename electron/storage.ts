@@ -2,7 +2,7 @@ import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
 import { stateRoot, workspaceRoot } from "./paths.js";
-import { fileCacheEntries } from "./file-cache.js";
+import { fileCacheEntries, removeFileCacheEntry } from "./file-cache.js";
 import type { SessionTranscriptTurn, StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
 
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
@@ -137,6 +137,10 @@ export async function clearAllSessionStorage(): Promise<void> {
 
 export async function clearFileCacheStorage(): Promise<void> {
   await rm(path.join(stateRoot(), "file-cache"), { recursive: true, force: true });
+}
+
+export async function clearFileCacheEntryStorage(cacheKey: string): Promise<boolean> {
+  return removeFileCacheEntry(cacheKey);
 }
 
 async function botIds(): Promise<string[]> {

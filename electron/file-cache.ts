@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { copyFile, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { summarizeFileCacheIndex, type CacheIndexEntry } from "./file-cache-index.js";
+import { removeFileCacheIndexEntry, summarizeFileCacheIndex, type CacheIndexEntry } from "./file-cache-index.js";
 import { stateRoot } from "./paths.js";
 import type { BotConfig, FileCacheEntrySummary, LarkMessage, LarkMessageResource } from "./types.js";
 
@@ -96,6 +96,17 @@ export async function cacheDownloadedLarkFile(bot: BotConfig, request: LarkFileC
 export async function fileCacheEntries(): Promise<FileCacheEntrySummary[]> {
   const index = await readIndex();
   return summarizeFileCacheIndex(index);
+}
+
+export async function removeFileCacheEntry(cacheKey: string): Promise<boolean> {
+  const index = await readIndex();
+  const result = removeFileCacheIndexEntry(index, cacheKey);
+  if (!result.removed) return false;
+  await writeIndex(index);
+  if (result.orphanedHash) {
+    await rm(path.join(cacheRoot(), result.orphanedHash), { recursive: true, force: true });
+  }
+  return true;
 }
 
 async function cacheFile(

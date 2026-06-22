@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("quarkfanTools", {
   clearSelectedStorage: (ids) => ipcRenderer.invoke("storage:clear-selected", ids),
   clearAllSessionStorage: () => ipcRenderer.invoke("storage:clear-all"),
   clearFileCacheStorage: () => ipcRenderer.invoke("storage:clear-cache"),
+  clearFileCacheEntryStorage: (cacheKey) => ipcRenderer.invoke("storage:clear-cache-entry", cacheKey),
   startBot: (botId) => ipcRenderer.invoke("runtime:start-bot", botId),
   stopBot: (botId) => ipcRenderer.invoke("runtime:stop-bot", botId),
   saveConfig: (config) => ipcRenderer.invoke("config:save", config),

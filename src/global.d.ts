@@ -19,6 +19,7 @@ declare global {
       clearSelectedStorage(ids: string[]): Promise<StorageStats>;
       clearAllSessionStorage(): Promise<StorageStats>;
       clearFileCacheStorage(): Promise<StorageStats>;
+      clearFileCacheEntryStorage(cacheKey: string): Promise<StorageStats>;
       startBot(botId: string): Promise<RuntimeSnapshot>;
       stopBot(botId: string): Promise<RuntimeSnapshot>;
       saveConfig(config: AppConfig): Promise<RuntimeSnapshot>;

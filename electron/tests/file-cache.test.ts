@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { summarizeFileCacheIndex, type CacheIndexEntry } from "../file-cache-index.js";
+import { removeFileCacheIndexEntry, summarizeFileCacheIndex, type CacheIndexEntry } from "../file-cache-index.js";
 
 test("summarizes file cache index entries for storage display", () => {
   const index: Record<string, CacheIndexEntry> = {
@@ -57,4 +57,36 @@ test("summarizes file cache index entries for storage display", () => {
   assert.equal(entries[1]?.label, "drive file / file-2");
   assert.equal(entries[2]?.label, "file / attachment.xlsx");
   assert.equal(entries[2]?.freshnessKey, undefined);
+});
+
+test("removes file cache index entries without orphaning shared hashes", () => {
+  const index: Record<string, CacheIndexEntry> = {
+    "lark-drive-file:bot-1:file-1:::etag-1": {
+      cacheKey: "lark-drive-file:bot-1:file-1:::etag-1",
+      hash: "shared-hash",
+      fileName: "manual.pdf",
+      bytes: 120,
+      botIds: ["bot-1"],
+      source: { type: "lark-drive-file", botId: "bot-1", fileToken: "file-1", freshnessKey: "etag-1" }
+    },
+    "lark-drive-export:bot-2:file-2:docx:pptx:v1": {
+      cacheKey: "lark-drive-export:bot-2:file-2:docx:pptx:v1",
+      hash: "shared-hash",
+      fileName: "manual.pdf",
+      bytes: 120,
+      botIds: ["bot-2"],
+      source: { type: "lark-drive-export", botId: "bot-2", fileToken: "file-2", docType: "docx", fileExtension: "pptx", freshnessKey: "v1" }
+    }
+  };
+
+  const first = removeFileCacheIndexEntry(index, "lark-drive-file:bot-1:file-1:::etag-1");
+  assert.equal(first.removed?.cacheKey, "lark-drive-file:bot-1:file-1:::etag-1");
+  assert.equal(first.orphanedHash, undefined);
+  assert.deepEqual(Object.keys(index), ["lark-drive-export:bot-2:file-2:docx:pptx:v1"]);
+
+  const second = removeFileCacheIndexEntry(index, "lark-drive-export:bot-2:file-2:docx:pptx:v1");
+  assert.equal(second.orphanedHash, "shared-hash");
+  assert.deepEqual(index, {});
+
+  assert.deepEqual(removeFileCacheIndexEntry(index, "missing"), {});
 });

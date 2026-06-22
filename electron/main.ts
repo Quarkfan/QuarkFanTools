@@ -10,7 +10,7 @@ import { customAppPreview, importCustomAppFolder } from "./apps.js";
 import { importSuiteFolder, suitePreview } from "./suites.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { scheduledTaskRunHistory } from "./scheduled-tasks.js";
-import { clearAllSessionStorage, clearExpiredStorage, clearFileCacheStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
+import { clearAllSessionStorage, clearExpiredStorage, clearFileCacheEntryStorage, clearFileCacheStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
 import { resourceDirectory, type ResourceLocationKind } from "./resource-locations.js";
 import type { AppConfig } from "./types.js";
@@ -147,6 +147,11 @@ ipcMain.handle("storage:clear-cache", async () => {
   await clearFileCacheStorage();
   await runtime.initialize(false);
   await runtime.logger.write("success", "已清理文件缓存", "会话上下文、机器人配置、飞书授权和用户 Skills 已保留");
+  return storageStats();
+});
+ipcMain.handle("storage:clear-cache-entry", async (_event, cacheKey: string) => {
+  const removed = await clearFileCacheEntryStorage(String(cacheKey ?? ""));
+  await runtime.logger.write(removed ? "success" : "warn", removed ? "已删除文件缓存条目" : "文件缓存条目不存在", String(cacheKey ?? ""));
   return storageStats();
 });
 ipcMain.handle("runtime:start-bot", async (_event, botId: string) => {

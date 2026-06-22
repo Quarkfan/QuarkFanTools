@@ -710,6 +710,7 @@ function renderStorage(): string {
               <p>${escapeHtml(cacheSourceLabel(entry.sourceType))} / ${formatBytes(entry.bytes)} / ${escapeHtml(entry.botIds.map((botId) => snapshot.config.bots.find((bot) => bot.id === botId)?.name || botId).join("、") || "未关联 Bot")}</p>
               <small>${escapeHtml(entry.label)}${entry.freshnessKey ? ` / ${escapeHtml(entry.freshnessKey)}` : ""}</small>
             </div>
+            <button type="button" class="danger compact remove-cache-entry" data-cache-key="${escapeHtml(entry.cacheKey)}">删除缓存</button>
           </article>`).join("") || `<div class="empty">${storage.cacheEntries.length === 0 ? "当前没有可展示的文件缓存索引。消息附件或受控文件 helper 命中后会在这里出现。" : "当前筛选条件下没有缓存索引。"}</div>`}
       </div>
     </section>
@@ -1379,6 +1380,16 @@ function bindEvents(): void {
     storage = await window.quarkfanTools.clearFileCacheStorage();
     scheduledRuns = await window.quarkfanTools.scheduledRuns();
     render();
+  });
+  document.querySelectorAll<HTMLButtonElement>(".remove-cache-entry").forEach((button) => {
+    button.onclick = async () => {
+      const cacheKey = String(button.dataset.cacheKey ?? "");
+      if (!cacheKey) return;
+      if (!window.confirm("确认删除这条文件缓存？后续需要同一文件时可能重新下载或导出。")) return;
+      storage = await window.quarkfanTools.clearFileCacheEntryStorage(cacheKey);
+      scheduledRuns = await window.quarkfanTools.scheduledRuns();
+      render();
+    };
   });
   document.querySelector<HTMLButtonElement>("#sync-market")?.addEventListener("click", async () => {
     const form = new FormData(document.querySelector<HTMLFormElement>("#config-form")!);
