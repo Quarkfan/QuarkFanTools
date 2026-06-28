@@ -106,6 +106,17 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .metrics article { min-height: 90px; padding: 16px; border: 1px solid #27332d; background: rgba(19, 27, 23, .72); }
 .metrics span { color: #708078; font-size: 12px; }
 .metrics strong { display: flex; align-items: center; gap: 8px; margin-top: 19px; font: 700 20px/1 "Menlo", monospace; color: #e3ece7; }
+.page-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; padding: 6px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 72%, transparent); }
+.page-tabs button { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 8px 11px; border-color: transparent; color: var(--muted); background: transparent; }
+.page-tabs button:hover { border-color: #3f5c4d; background: rgba(119,242,161,.045); }
+.page-tabs button.active { border-color: var(--primary); color: var(--text); background: var(--primary-soft); }
+.page-tabs button span { font-size: 12px; font-weight: 700; }
+.page-tabs button small { color: var(--primary); font: 700 10px/1.4 "Menlo", monospace; }
+.page-tab-panel { display: none !important; }
+.page-tab-panel.active { display: block !important; }
+.storage-grid.page-tab-panel.active { display: grid !important; }
+.workspace > .page-tab-panel.active,
+.config-grid > .page-tab-panel.active { grid-column: 1 / -1; }
 .status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #6b7771; box-shadow: 0 0 0 3px rgba(107,119,113,.1); }
 .status-dot.ok { background: #77f2a1; box-shadow: 0 0 12px rgba(119,242,161,.7); }
 
@@ -229,7 +240,7 @@ label small { color: #536159; line-height: 1.5; }
 .market-panel { min-height: 420px; }
 .market-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) 180px auto; gap: 10px; padding: 14px; border-bottom: 1px solid #27332d; }
 .market-toolbar button { padding: 8px 12px; }
-.capability-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 18px; align-items: start; }
+.capability-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
 .capability-nav { position: sticky; top: 0; min-height: 0; }
 .capability-nav-list { display: grid; padding: 8px; gap: 6px; }
 .capability-nav-list button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; width: 100%; padding: 12px; border: 1px solid transparent; border-radius: 4px; color: var(--muted); background: transparent; text-align: left; }

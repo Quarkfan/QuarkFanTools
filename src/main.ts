@@ -22,11 +22,16 @@ let showReleaseNotes = false;
 let marketSource = "all";
 let marketSearch = "";
 let activeCapabilitySection: "overview" | "diagnostics" | "mcp" | "suites" | "apps" | "audit" = "overview";
+let activeConsoleSection: "bots" | "logs" = "bots";
+let activeConfigSection: "model" | "customApps" | "market" | "mcp" | "bots" = "model";
+let activeStorageSection: "cleanup" | "sessions" | "cache" | "artifacts" | "runs" = "cleanup";
+let activeScheduledSection: "tasks" | "runs" = "tasks";
 type BotEditorSection = "basic" | "platform" | "delivery" | "skills" | "capabilities" | "commands" | "scheduled";
 let activeBotEditorSection: BotEditorSection = "basic";
 let preview: { title: string; body?: string; html?: string } | null = null;
 let editingBotId = "";
 let editingScheduledTaskId = "";
+const draftScheduledTaskIds = new Set<string>();
 let botEditorScrollTop = 0;
 let helpTopicKey = "";
 let showManual = false;
@@ -149,6 +154,13 @@ function helpButton(topic: string): string {
   return `<button type="button" class="help-button" data-help="${escapeHtml(topic)}" aria-label="查看配置说明">?</button>`;
 }
 
+function pageTabs<T extends string>(items: Array<{ id: T; label: string; meta?: string }>, active: T, attr: string): string {
+  return `<nav class="page-tabs" aria-label="页面分组">${items.map((item) => `
+    <button type="button" class="${active === item.id ? "active" : ""}" ${attr}="${escapeHtml(item.id)}">
+      <span>${escapeHtml(item.label)}</span>${item.meta ? `<small>${escapeHtml(item.meta)}</small>` : ""}
+    </button>`).join("")}</nav>`;
+}
+
 function applyTheme(config: AppConfig): void {
   const preference = config.ui.theme;
   const effective = preference === "system"
@@ -209,6 +221,7 @@ function render(): void {
     ${showManual ? renderManual() : ""}
   `;
   bindEvents();
+  filterMarketSkills();
   if (editingBotId) {
     requestAnimationFrame(() => {
       const body = document.querySelector<HTMLElement>(".bot-editor-body");
@@ -769,8 +782,15 @@ function renderCapabilities(): string {
       <article><span>自定义应用 / 套件 / MCP</span><strong>${appCount} / ${suiteCount} / ${mcpCount}</strong></article>
       <article><span>Bot 挂载引用</span><strong>${mountedRefs}</strong></article>
     </section>
+    ${pageTabs([
+      { id: "overview", label: "治理总览", meta: `${mountedRefs} refs` },
+      { id: "diagnostics", label: "诊断排障", meta: `${diagnosticIssues} issues` },
+      { id: "mcp", label: "MCP", meta: `${mcpCount}` },
+      { id: "suites", label: "套件/Workflow", meta: `${suiteCount}` },
+      { id: "apps", label: "自定义应用", meta: `${appCount}` },
+      { id: "audit", label: "使用审计", meta: `${capabilityAudit.recent.length}` }
+    ], activeCapabilitySection, "data-capability-section")}
     <section class="capability-layout">
-      ${renderCapabilitySectionNav({ mountedRefs, diagnosticIssues, mcpCount, suiteCount, appCount, auditCount: capabilityAudit.recent.length })}
       <div class="capability-content">
         ${sections[activeCapabilitySection]}
       </div>
@@ -789,6 +809,13 @@ function renderSkills(): string {
       <article><span>Git 市场</span><strong>${marketCount}</strong></article>
       <article><span>应用内置</span><strong>${builtinCount}</strong></article>
     </section>
+    ${pageTabs([
+      { id: "all", label: "全部", meta: `${snapshot.skills.length}` },
+      { id: "local", label: "本地导入", meta: `${localCount}` },
+      { id: "market", label: "Git 市场", meta: `${marketCount}` },
+      { id: "builtin", label: "应用内置", meta: `${builtinCount}` },
+      { id: "unused", label: "未授权", meta: `${snapshot.skills.filter((skill) => !snapshot.config.bots.some((bot) => bot.skillNames.includes(skill.name))).length}` }
+    ], marketSource as "all" | "local" | "market" | "builtin" | "unused", "data-market-source-tab")}
     <section class="panel market-panel">
       <div class="panel-title"><span>LOCAL SKILL MARKET</span><small>${snapshot.skills.length} available</small></div>
       <div class="market-toolbar">
@@ -1261,19 +1288,14 @@ function renderStorage(): string {
       <article><span>文件缓存</span><strong>${formatBytes(storage.cacheBytes)}</strong></article>
       <article><span>自定义应用产物</span><strong>${formatBytes(storage.customAppArtifactBytes)}</strong></article>
     </section>
-    <section class="storage-grid">
-      <div class="panel storage-card session-selector">
-        <div class="panel-title"><span>SELECT SESSION CLEANUP</span><small>${storage.sessions.length} sessions</small></div>
-        <div class="session-list">
-          ${storage.sessions.map((session) => `
-            <div class="check session-row" data-view-session="${escapeHtml(session.id)}">
-              <input type="checkbox" data-session-id="${escapeHtml(session.id)}" />
-              <span><strong>${escapeHtml(snapshot.config.bots.find((bot) => bot.id === session.botId)?.name || session.botId)}</strong><small>${escapeHtml(session.conversationKey)} / ${new Date(session.updatedAt).toLocaleString()} / ${formatBytes(session.bytes)}${session.expired ? " / 已过期" : ""}</small></span>
-              <button class="ghost session-view" data-id="${escapeHtml(session.id)}">查看</button>
-            </div>`).join("") || `<div class="empty">当前没有连续会话存储。</div>`}
-        </div>
-        <button class="ghost" id="clear-selected" ${storage.sessions.length === 0 ? "disabled" : ""}>清理所选会话</button>
-      </div>
+    ${pageTabs([
+      { id: "cleanup", label: "清理动作", meta: "会话/缓存/产物" },
+      { id: "sessions", label: "会话", meta: `${storage.sessions.length} 个` },
+      { id: "cache", label: "文件缓存", meta: `${storage.cacheEntries.length} 条` },
+      { id: "artifacts", label: "应用产物", meta: `${storage.customAppArtifactCount} 个` },
+      { id: "runs", label: "定时历史", meta: `${scheduledRuns.length} 条` }
+    ], activeStorageSection, "data-storage-section")}
+    <section class="storage-grid page-tab-panel ${activeStorageSection === "cleanup" ? "active" : ""}">
       <div class="panel storage-card">
         <div class="panel-title"><span>EXPIRED SESSION CLEANUP</span><small>24 小时无活动</small></div>
         <p>清理已过期会话的独立 workspace、消息附件和 Claude 会话记录。不会删除机器人配置、飞书授权或用户导入的 Skills。</p>
@@ -1295,7 +1317,21 @@ function renderStorage(): string {
         <button class="danger" id="clear-all-storage">清理全部会话数据</button>
       </div>
     </section>
-    <section class="panel scheduled-runs-panel">
+    <section class="page-tab-panel ${activeStorageSection === "sessions" ? "active" : ""}">
+      <div class="panel storage-card session-selector">
+        <div class="panel-title"><span>SELECT SESSION CLEANUP</span><small>${storage.sessions.length} sessions</small></div>
+        <div class="session-list">
+          ${storage.sessions.map((session) => `
+            <div class="check session-row" data-view-session="${escapeHtml(session.id)}">
+              <input type="checkbox" data-session-id="${escapeHtml(session.id)}" />
+              <span><strong>${escapeHtml(snapshot.config.bots.find((bot) => bot.id === session.botId)?.name || session.botId)}</strong><small>${escapeHtml(session.conversationKey)} / ${new Date(session.updatedAt).toLocaleString()} / ${formatBytes(session.bytes)}${session.expired ? " / 已过期" : ""}</small></span>
+              <button class="ghost session-view" data-id="${escapeHtml(session.id)}">查看</button>
+            </div>`).join("") || `<div class="empty">当前没有连续会话存储。</div>`}
+        </div>
+        <button class="ghost" id="clear-selected" ${storage.sessions.length === 0 ? "disabled" : ""}>清理所选会话</button>
+      </div>
+    </section>
+    <section class="panel scheduled-runs-panel page-tab-panel ${activeStorageSection === "artifacts" ? "active" : ""}">
       <div class="panel-title"><span>CUSTOM APP ARTIFACT INDEX</span><small>${storage.customAppArtifactCount} app workspaces</small></div>
       <div class="run-history-list cache-entry-list">
         ${storage.customAppArtifacts.slice(0, 50).map((entry) => `
@@ -1309,7 +1345,7 @@ function renderStorage(): string {
           </article>`).join("") || `<div class="empty">当前没有自定义应用运行产物。微信截图和自定义应用临时文件会在执行后显示在这里。</div>`}
       </div>
     </section>
-    <section class="panel scheduled-runs-panel">
+    <section class="panel scheduled-runs-panel page-tab-panel ${activeStorageSection === "cache" ? "active" : ""}">
       <div class="panel-title"><span>FILE CACHE INDEX</span><small>${visibleCacheEntries.length} / ${storage.cacheEntries.length} entries</small></div>
       <div class="run-history-toolbar">
         <select id="cache-bot-filter">
@@ -1337,7 +1373,7 @@ function renderStorage(): string {
           </article>`).join("") || `<div class="empty">${storage.cacheEntries.length === 0 ? "当前没有可展示的文件缓存索引。消息附件或受控文件 helper 命中后会在这里出现。" : "当前筛选条件下没有缓存索引。"}</div>`}
       </div>
     </section>
-    ${renderScheduledRunHistory(visibleRuns)}
+    <div class="page-tab-panel ${activeStorageSection === "runs" ? "active" : ""}">${renderScheduledRunHistory(visibleRuns)}</div>
   `;
 }
 
@@ -1385,7 +1421,11 @@ function renderScheduledCenter(): string {
       <article><span>失败</span><strong>${failed}</strong></article>
       <article><span>暂停</span><strong>${paused}</strong></article>
     </section>
-    <section class="panel scheduled-runs-panel">
+    ${pageTabs([
+      { id: "tasks", label: "任务列表", meta: `${tasks.length} 个` },
+      { id: "runs", label: "运行历史", meta: `${scheduledRuns.length} 条` }
+    ], activeScheduledSection, "data-scheduled-section")}
+    <section class="panel scheduled-runs-panel page-tab-panel ${activeScheduledSection === "tasks" ? "active" : ""}">
       <div class="panel-title"><span>SCHEDULED TASKS</span><small>${enabled} enabled</small></div>
       <div class="scheduled-task-list">
         ${tasks.map(({ bot, task }, index) => `
@@ -1403,7 +1443,7 @@ function renderScheduledCenter(): string {
           </article>`).join("") || `<div class="empty">当前没有定时任务。进入配置页打开 Bot 后可以新增。</div>`}
       </div>
     </section>
-    ${renderScheduledRunHistory()}
+    <div class="page-tab-panel ${activeScheduledSection === "runs" ? "active" : ""}">${renderScheduledRunHistory()}</div>
   `;
 }
 
@@ -1437,8 +1477,12 @@ function renderConsole(): string {
       <article><span>运行中任务</span><strong>${snapshot.activeTasks}</strong></article>
       <article><span>排队任务 / 模型</span><strong>${snapshot.queuedTasks} / ${escapeHtml(snapshot.config.model.model || "未配置")}</strong></article>
     </section>
+    ${pageTabs([
+      { id: "bots", label: "机器人", meta: `${snapshot.config.bots.length} 个` },
+      { id: "logs", label: "执行日志", meta: `${botLogs.length} 条` }
+    ], activeConsoleSection, "data-console-section")}
     <section class="workspace">
-      <div class="panel skill-panel">
+      <div class="panel skill-panel page-tab-panel ${activeConsoleSection === "bots" ? "active" : ""}">
         <div class="panel-title"><span>BOT REGISTRY</span><small>${snapshot.config.bots.length} configured</small></div>
         <div class="skill-list bot-registry">
           ${snapshot.config.bots.map((bot) => `
@@ -1454,7 +1498,7 @@ function renderConsole(): string {
             </div>`).join("") || `<div class="empty">前往配置页添加机器人。</div>`}
         </div>
       </div>
-      <div class="panel log-panel">
+      <div class="panel log-panel page-tab-panel ${activeConsoleSection === "logs" ? "active" : ""}">
         <div class="panel-title log-title">
           <span>${selectedBot ? `${escapeHtml(selectedBot.name)} / EXECUTION LOG` : "EXECUTION LOG"}</span>
           <div class="log-controls">
@@ -1713,6 +1757,22 @@ function renderBotEditor(): string {
   `;
 }
 
+function discardScheduledTaskDraft(taskId: string): void {
+  if (!taskId || !draftScheduledTaskIds.has(taskId) || !snapshot) return;
+  for (const bot of snapshot.config.bots) {
+    bot.scheduledTasks = (bot.scheduledTasks ?? []).filter((task) => task.id !== taskId);
+  }
+  draftScheduledTaskIds.delete(taskId);
+}
+
+function discardAllScheduledTaskDrafts(): void {
+  if (draftScheduledTaskIds.size === 0 || !snapshot) return;
+  for (const bot of snapshot.config.bots) {
+    bot.scheduledTasks = (bot.scheduledTasks ?? []).filter((task) => !draftScheduledTaskIds.has(task.id));
+  }
+  draftScheduledTaskIds.clear();
+}
+
 function renderWeComChatListSelector(bot: BotConfig): string {
   const status = wecomChatListStatus[bot.id];
   if (!status) return "";
@@ -1902,8 +1962,15 @@ function renderConfig(): string {
   const c = snapshot.config;
   return `
     <form id="config-form">
+      ${pageTabs([
+        { id: "model", label: "模型与运行", meta: c.model.model || "未配置模型" },
+        { id: "customApps", label: "自定义应用", meta: `${c.runtime.customAppArtifacts?.retentionDays ?? 7} 天产物` },
+        { id: "market", label: "Skill 市场", meta: c.skillMarket.enabled ? "已启用" : "停用" },
+        { id: "mcp", label: "MCP", meta: `${c.mcpServers.length} 个` },
+        { id: "bots", label: "Bot", meta: `${c.bots.length} 个` }
+      ], activeConfigSection, "data-config-section")}
       <section class="config-grid">
-        <div class="panel config-panel">
+        <div class="panel config-panel page-tab-panel ${activeConfigSection === "model" ? "active" : ""}">
           <div class="panel-title"><span>MODEL PROVIDER</span><small>Claude Messages API compatible</small></div>
           ${field("Provider 名称", "providerName", c.model.providerName)}
           ${field("Claude Base URL", "baseUrl", c.model.baseUrl, "url", "服务商提供的 Claude / Anthropic 兼容地址")}
@@ -1914,13 +1981,13 @@ function renderConfig(): string {
           <label><span>多模态视觉能力${helpButton("multimodalEnabled")}</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
           <label><span>界面主题${helpButton("uiTheme")}</span><select name="uiTheme"><option value="system" ${c.ui.theme === "system" ? "selected" : ""}>跟随系统</option><option value="light" ${c.ui.theme === "light" ? "selected" : ""}>浅色</option><option value="dark" ${c.ui.theme === "dark" ? "selected" : ""}>深色</option></select><small>切换应用界面外观，不影响模型、Bot 或权限行为。</small></label>
         </div>
-        <div class="panel config-panel">
+        <div class="panel config-panel page-tab-panel ${activeConfigSection === "customApps" ? "active" : ""}">
           <div class="panel-title"><span>CUSTOM APPS</span><small>Artifacts</small></div>
           <label><span>自定义应用产物自动清理${helpButton("customAppArtifacts")}</span><select name="customAppArtifactsAutoCleanup"><option value="false" ${!c.runtime.customAppArtifacts?.autoCleanup ? "selected" : ""}>关闭，仅手动清理</option><option value="true" ${c.runtime.customAppArtifacts?.autoCleanup ? "selected" : ""}>开启，刷新存储统计时清理过期产物</option></select><small>只清理会话 workspace 下 apps/&lt;app-id&gt; 的运行产物，不删除自定义应用本体。</small></label>
           <label><span>自定义应用产物保留天数${helpButton("customAppArtifacts")}</span><input name="customAppArtifactsRetentionDays" type="number" min="1" max="90" value="${c.runtime.customAppArtifacts?.retentionDays ?? 7}" /><small>用于判断截图、临时文件和调试产物何时过期；范围 1-90 天。</small></label>
           <small>每个自定义应用的回复后处理在“能力 > 自定义应用”点击该应用后的弹窗中配置。</small>
         </div>
-        <div class="panel config-panel">
+        <div class="panel config-panel page-tab-panel ${activeConfigSection === "market" ? "active" : ""}">
           <div class="panel-title"><span>SKILL MARKET</span><small>Built-in Git client / HTTPS</small></div>
           <label><span>启用技能市场${helpButton("marketEnabled")}</span><select name="marketEnabled"><option value="true" ${c.skillMarket.enabled ? "selected" : ""}>启用</option><option value="false" ${!c.skillMarket.enabled ? "selected" : ""}>停用</option></select></label>
           ${field("HTTPS Git 仓库", "marketRepositoryUrl", c.skillMarket.repositoryUrl, "url", "应用内置 Git 客户端，不依赖本机 Git；仅支持 HTTPS URL")}
@@ -1928,7 +1995,7 @@ function renderConfig(): string {
           ${field("访问 Token（可选）", "marketToken", c.skillMarket.token, "password", "私有仓库使用；仅保存在本机配置")}
           <div class="form-actions"><button type="button" class="ghost" id="sync-market" ${c.skillMarket.enabled && c.skillMarket.repositoryUrl ? "" : "disabled"}>立即同步技能市场</button></div>
         </div>
-        <div class="panel config-panel">
+        <div class="panel config-panel page-tab-panel ${activeConfigSection === "mcp" ? "active" : ""}">
           <div class="panel-title"><span>MCP SERVERS ${helpButton("mcpServers")}</span><small>${c.mcpServers.length} configured</small></div>
           <div class="command-binding-list config-inline-list">
             ${c.mcpServers.map((server, index) => `
@@ -1949,7 +2016,7 @@ function renderConfig(): string {
           </div>
           <div class="form-actions inline-actions"><button type="button" class="ghost" id="add-mcp-server">新增 MCP</button></div>
         </div>
-        <div class="panel config-panel">
+        <div class="panel config-panel page-tab-panel ${activeConfigSection === "bots" ? "active" : ""}">
           <div class="panel-title"><span>BOT REGISTRY ${helpButton("botList")}</span><small>${c.bots.length} configured</small></div>
           <div class="config-bot-list">
             ${c.bots.map((bot) => `
@@ -2045,6 +2112,36 @@ function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-capability-section]").forEach((button) => {
     button.onclick = () => {
       activeCapabilitySection = button.dataset.capabilitySection as CapabilitySection;
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-console-section]").forEach((button) => {
+    button.onclick = () => {
+      activeConsoleSection = button.dataset.consoleSection as typeof activeConsoleSection;
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-config-section]").forEach((button) => {
+    button.onclick = () => {
+      activeConfigSection = button.dataset.configSection as typeof activeConfigSection;
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-storage-section]").forEach((button) => {
+    button.onclick = () => {
+      activeStorageSection = button.dataset.storageSection as typeof activeStorageSection;
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-scheduled-section]").forEach((button) => {
+    button.onclick = () => {
+      activeScheduledSection = button.dataset.scheduledSection as typeof activeScheduledSection;
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-market-source-tab]").forEach((button) => {
+    button.onclick = () => {
+      marketSource = button.dataset.marketSourceTab ?? "all";
       render();
     };
   });
@@ -2512,12 +2609,20 @@ function bindEvents(): void {
     render();
   });
   document.querySelector<HTMLButtonElement>("#close-bot-editor")?.addEventListener("click", () => {
+    discardAllScheduledTaskDrafts();
     editingBotId = "";
+    editingScheduledTaskId = "";
     botEditorScrollTop = 0;
     render();
   });
   document.querySelector<HTMLElement>("#bot-editor-backdrop")?.addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) { editingBotId = ""; botEditorScrollTop = 0; render(); }
+    if (event.target === event.currentTarget) {
+      discardAllScheduledTaskDrafts();
+      editingBotId = "";
+      editingScheduledTaskId = "";
+      botEditorScrollTop = 0;
+      render();
+    }
   });
   document.querySelector<HTMLElement>(".bot-editor-body")?.addEventListener("scroll", (event) => {
     botEditorScrollTop = (event.currentTarget as HTMLElement).scrollTop;
@@ -2650,15 +2755,15 @@ function bindEvents(): void {
     };
   });
   document.querySelectorAll<HTMLButtonElement>(".add-scheduled-task").forEach((button) => {
-    button.onclick = async () => {
-      const next = structuredClone(snapshot.config);
-      const bot = next.bots.find((item) => item.id === button.dataset.id);
+    button.onclick = () => {
+      const bot = snapshot.config.bots.find((item) => item.id === button.dataset.id);
       if (!bot) return;
       const commandName = scheduledCommandOptions(bot)[0] ?? "";
       const capabilityValue = scheduledCapabilityOptions(bot)[0]?.value ?? "skill:";
       const [kind, id] = capabilityValue.split(":");
+      const taskId = crypto.randomUUID();
       bot.scheduledTasks = [...(bot.scheduledTasks ?? []), {
-        id: crypto.randomUUID(),
+        id: taskId,
         botId: bot.id,
         enabled: true,
         name: `定时任务 ${(bot.scheduledTasks?.length ?? 0) + 1}`,
@@ -2666,10 +2771,10 @@ function bindEvents(): void {
         target: { type: "agent", commandName, capability: id ? { kind: kind as "skill" | "mcp" | "app" | "suite" | "workflow", id } : undefined, prompt: "请执行定时任务" },
         delivery: { type: "chat", chatId: "" }
       }];
-      snapshot = await window.quarkfanTools.saveConfig(next);
+      draftScheduledTaskIds.add(taskId);
       editingBotId = bot.id;
       activeBotEditorSection = "scheduled";
-      editingScheduledTaskId = bot.scheduledTasks.at(-1)?.id ?? "";
+      editingScheduledTaskId = taskId;
       render();
     };
   });
@@ -2680,15 +2785,18 @@ function bindEvents(): void {
     };
   });
   document.querySelector<HTMLButtonElement>("#close-scheduled-task-editor")?.addEventListener("click", () => {
+    discardScheduledTaskDraft(editingScheduledTaskId);
     editingScheduledTaskId = "";
     render();
   });
   document.querySelector<HTMLButtonElement>("#cancel-scheduled-task-editor")?.addEventListener("click", () => {
+    discardScheduledTaskDraft(editingScheduledTaskId);
     editingScheduledTaskId = "";
     render();
   });
   document.querySelector<HTMLElement>("#scheduled-task-backdrop")?.addEventListener("click", (event) => {
     if (event.target === event.currentTarget) {
+      discardScheduledTaskDraft(editingScheduledTaskId);
       editingScheduledTaskId = "";
       render();
     }
@@ -2700,10 +2808,14 @@ function bindEvents(): void {
     const taskIndex = bot?.scheduledTasks?.findIndex((task) => task.id === editingScheduledTaskId) ?? -1;
     if (!bot || taskIndex < 0) return;
     const saved = readScheduledTaskFromEditor(bot, taskIndex);
-    if (!saved) return;
+    if (!saved) {
+      window.alert("请填写任务名、Prompt 和投递 chat_id 后再保存定时任务。");
+      return;
+    }
     bot.scheduledTasks = (bot.scheduledTasks ?? []).map((task, index) => index === taskIndex ? saved : task);
     snapshot = await window.quarkfanTools.saveConfig(next);
     editingBotId = bot.id;
+    draftScheduledTaskIds.delete(saved.id);
     editingScheduledTaskId = "";
     render();
   });
@@ -2713,6 +2825,8 @@ function bindEvents(): void {
       const bot = next.bots.find((item) => item.id === editingBotId);
       if (!bot) return;
       bot.scheduledTasks = (bot.scheduledTasks ?? []).filter((_, index) => index !== Number(button.dataset.index));
+      const removedTaskId = (snapshot.config.bots.find((item) => item.id === editingBotId)?.scheduledTasks ?? [])[Number(button.dataset.index)]?.id;
+      if (removedTaskId) draftScheduledTaskIds.delete(removedTaskId);
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
       if (!(bot.scheduledTasks ?? []).some((task) => task.id === editingScheduledTaskId)) editingScheduledTaskId = "";
@@ -2884,9 +2998,13 @@ function bindEvents(): void {
     const editedTaskIndex = (bot.scheduledTasks ?? []).findIndex((task) => task.id === editingScheduledTaskId);
     if (editedTaskIndex >= 0 && document.querySelector<HTMLInputElement>(`[data-task-name="${editedTaskIndex}"]`)) {
       const saved = readScheduledTaskFromEditor(bot, editedTaskIndex);
-      if (saved) bot.scheduledTasks = (bot.scheduledTasks ?? []).map((task, index) => index === editedTaskIndex ? saved : task);
+      if (saved) {
+        bot.scheduledTasks = (bot.scheduledTasks ?? []).map((task, index) => index === editedTaskIndex ? saved : task);
+        draftScheduledTaskIds.delete(saved.id);
+      }
     }
     snapshot = await window.quarkfanTools.saveConfig(next);
+    draftScheduledTaskIds.clear();
     selectedBotId = bot.id;
     editingBotId = "";
     render();
