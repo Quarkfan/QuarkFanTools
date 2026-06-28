@@ -66,7 +66,7 @@ test("wechat assistant template continues from vision result to open unread conv
   assert.match(output.reply, /连续读取：已点击第 1\/1 个可见未读会话/);
   assert.match(output.reply, /识别到未读：Vei_G/);
   assert.match(output.reply, /你几点起床的？小肚肚/);
-  assert.match(output.reply, /截图像素 \(260, 180\) \/ 窗口点 \(130, 90\)/);
+  assert.match(output.reply, /截图像素 \(260, 180\) \/ 窗口点 \(260, 180\) \/ 坐标模式 raw-screenshot/);
   assert.match(output.reply, /注意：点击会话可能会让微信把该会话标记为已读/);
   assert.equal(output.visionContinuation?.stage, "read-opened-conversation");
   assert.equal(output.visionContinuation?.state?.items?.length, 1);
@@ -156,10 +156,10 @@ test("wechat assistant template opens the second unread candidate during queue c
   assert.equal(output.ok, true);
   assert.match(output.reply, /正在打开第 2 个/);
   assert.match(output.reply, /下一个未读：第二个/);
-  assert.match(output.reply, /截图像素 \(260, 360\) \/ 窗口点 \(130, 180\)/);
+  assert.match(output.reply, /截图像素 \(260, 360\) \/ 窗口点 \(260, 360\) \/ 坐标模式 raw-screenshot/);
   assert.equal(output.visionContinuation?.state?.index, 1);
   assert.equal(output.visionContinuation?.state?.clicks?.at(-1)?.screenshotY, 360);
-  assert.equal(output.visionContinuation?.state?.clicks?.at(-1)?.windowY, 180);
+  assert.equal(output.visionContinuation?.state?.clicks?.at(-1)?.windowY, 360);
 });
 
 test("wechat assistant template reports failed click strategies", () => {
@@ -189,7 +189,8 @@ test("wechat assistant template reports failed click strategies", () => {
     env: {
       ...process.env,
       QFT_WECHAT_DRAFT_DRY_RUN: "0",
-      QFT_WECHAT_CLICK_FORCE_FAIL: "1"
+      QFT_WECHAT_CLICK_FORCE_FAIL: "1",
+      QFT_WECHAT_BOUNDS_OVERRIDE: "0,0,800,600"
     }
   });
   assert.equal(result.status, 0, result.stderr);

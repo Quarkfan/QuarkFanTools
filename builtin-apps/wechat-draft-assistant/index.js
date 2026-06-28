@@ -262,7 +262,7 @@ function handleUnreadVisionResult(visionResult, parsed, workspace, dryRun) {
     `连续读取：已点击第 1/${items.length} 个可见未读会话`,
     "注意：点击会话可能会让微信把该会话标记为已读。",
     `识别到未读：${formatUnreadItem(item)}`,
-    `点击位置：截图像素 (${Math.round(item.clickTarget.x)}, ${Math.round(item.clickTarget.y)})${click.windowPoint ? ` / 窗口点 (${click.windowPoint.x}, ${click.windowPoint.y})` : ""}${click.strategy ? ` / 策略 ${click.strategy}` : ""}`,
+    formatClickDetail(item, click),
     `打开后辅助功能读取：${scan.status === 0 ? "成功" : `失败：${scan.stderr || scan.error || "未知错误"}`}`,
     `打开后截图 OCR：${ocr.ok ? "成功" : `失败：${ocr.error}`}`,
     "",
@@ -296,7 +296,9 @@ function handleUnreadVisionResult(visionResult, parsed, workspace, dryRun) {
             screenshotX: Math.round(item.clickTarget.x),
             screenshotY: Math.round(item.clickTarget.y),
             windowX: click.windowPoint.x,
-            windowY: click.windowPoint.y
+            windowY: click.windowPoint.y,
+            coordinateMode: click.coordinateMode,
+            verification: click.verification
           } : undefined].filter(Boolean)
         }
       }
@@ -350,7 +352,7 @@ function handleOpenedConversationVisionResult(visionResult, state, parsed, works
         "",
         `连续读取：已读取 ${results.length}/${currentState.items.length} 个会话，正在打开第 ${nextIndex + 1} 个。`,
         `下一个未读：${formatUnreadItem(nextItem)}`,
-        `点击位置：截图像素 (${Math.round(nextItem.clickTarget.x)}, ${Math.round(nextItem.clickTarget.y)})${click.windowPoint ? ` / 窗口点 (${click.windowPoint.x}, ${click.windowPoint.y})` : ""}${click.strategy ? ` / 策略 ${click.strategy}` : ""}`
+        formatClickDetail(nextItem, click)
       ].join("\n"),
       visionRequest: {
         imagePath: path.relative(workspace, ocr.imagePath),
@@ -370,7 +372,9 @@ function handleOpenedConversationVisionResult(visionResult, state, parsed, works
               screenshotX: Math.round(nextItem.clickTarget.x),
               screenshotY: Math.round(nextItem.clickTarget.y),
               windowX: click.windowPoint.x,
-              windowY: click.windowPoint.y
+              windowY: click.windowPoint.y,
+              coordinateMode: click.coordinateMode,
+              verification: click.verification
             } : undefined
           ].filter(Boolean)
         }
@@ -487,45 +491,74 @@ function clickUnreadConversation(boundsText, clickTarget, dryRun, workspace = ""
     return { ok: false, error: "无法获取微信窗口边界" };
   }
   const [left, top, width, height] = bounds;
-  const point = screenshotPixelToWindowPoint(clickTarget, workspace, width, height);
-  const x = Math.round(Math.max(0, Math.min(width - 1, point.x)));
-  const y = Math.round(Math.max(0, Math.min(height - 1, point.y)));
-  const absoluteX = left + x;
-  const absoluteY = top + y;
-  if (dryRun) return { ok: true, x: absoluteX, y: absoluteY, windowPoint: { x, y } };
+  const candidates = clickPointCandidates(clickTarget, workspace, width, height);
+  const first = candidates[0];
+  if (!first) return { ok: false, error: "无法计算点击坐标" };
+  const firstAbsoluteX = left + first.x;
+  const firstAbsoluteY = top + first.y;
+  if (dryRun) return { ok: true, x: firstAbsoluteX, y: firstAbsoluteY, windowPoint: { x: first.x, y: first.y }, coordinateMode: first.mode };
   if (process.env.QFT_WECHAT_CLICK_FORCE_FAIL === "1") {
     return {
       ok: false,
       error: "wechat-process: simulated failure；system-events: simulated failure；jxa-cgevent: simulated failure"
     };
   }
-  const attempts = [
-    runJxaClick(absoluteX, absoluteY),
-    runAppleScriptClick("wechat-process", [
-      `tell application "WeChat" to activate`,
-      "delay 0.2",
-      `tell application "System Events"`,
-      `  tell process "WeChat"`,
-      `    set frontmost to true`,
-      `    click at {${absoluteX}, ${absoluteY}}`,
-      `  end tell`,
-      `end tell`,
-      "delay 0.6"
-    ].join("\n")),
-    runAppleScriptClick("system-events", [
-      `tell application "WeChat" to activate`,
-      "delay 0.2",
-      `tell application "System Events"`,
-      `  click at {${absoluteX}, ${absoluteY}}`,
-      `end tell`,
-      "delay 0.6"
-    ].join("\n"))
-  ];
-  const success = attempts.find((attempt) => attempt.ok);
-  if (success) return { ok: true, x: absoluteX, y: absoluteY, windowPoint: { x, y }, strategy: success.strategy };
+  const before = captureWindowSnapshot(boundsText, workspace, "wechat-click-before");
+  const errors = [];
+  for (const candidate of candidates) {
+    const absoluteX = left + candidate.x;
+    const absoluteY = top + candidate.y;
+    const attempts = [
+      runJxaClick(absoluteX, absoluteY),
+      runAppleScriptClick("wechat-process", [
+        `tell application "WeChat" to activate`,
+        "delay 0.2",
+        `tell application "System Events"`,
+        `  tell process "WeChat"`,
+        `    set frontmost to true`,
+        `    click at {${absoluteX}, ${absoluteY}}`,
+        `  end tell`,
+        `end tell`,
+        "delay 0.6"
+      ].join("\n")),
+      runAppleScriptClick("system-events", [
+        `tell application "WeChat" to activate`,
+        "delay 0.2",
+        `tell application "System Events"`,
+        `  click at {${absoluteX}, ${absoluteY}}`,
+        `end tell`,
+        "delay 0.6"
+      ].join("\n"))
+    ];
+    const success = attempts.find((attempt) => attempt.ok);
+    if (!success) {
+      errors.push(...attempts.map((attempt) => `${candidate.mode}/${attempt.strategy}: ${attempt.error || "未知错误"}`));
+      continue;
+    }
+    const verification = verifyClickChanged(boundsText, workspace, before, clickTarget, candidate.mode);
+    if (verification.changed === false && candidate !== candidates[candidates.length - 1]) {
+      errors.push(`${candidate.mode}/${success.strategy}: 点击命令成功但微信窗口截图未变化，尝试备用坐标`);
+      continue;
+    }
+    if (verification.changed === false) {
+      return {
+        ok: false,
+        error: `${candidate.mode}/${success.strategy}: 点击命令成功但微信窗口截图未变化，疑似未点中目标`
+      };
+    }
+    return {
+      ok: true,
+      x: absoluteX,
+      y: absoluteY,
+      windowPoint: { x: candidate.x, y: candidate.y },
+      strategy: success.strategy,
+      coordinateMode: candidate.mode,
+      verification: verification.summary
+    };
+  }
   return {
     ok: false,
-    error: attempts.map((attempt) => `${attempt.strategy}: ${attempt.error || "未知错误"}`).join("；")
+    error: errors.join("；")
   };
 }
 
@@ -540,6 +573,147 @@ function screenshotPixelToWindowPoint(clickTarget, workspace, width, height) {
     x: clickTarget.x / scaleX,
     y: clickTarget.y / scaleY
   };
+}
+
+function clickPointCandidates(clickTarget, workspace, width, height) {
+  const scaled = clampWindowPoint(screenshotPixelToWindowPoint(clickTarget, workspace, width, height), width, height);
+  const raw = clampWindowPoint(clickTarget, width, height);
+  const rawDiffers = Math.abs(raw.x - scaled.x) > 2 || Math.abs(raw.y - scaled.y) > 2;
+  const rawWithinWindow = clickTarget.x >= 0 && clickTarget.x < width && clickTarget.y >= 0 && clickTarget.y < height;
+  const candidates = rawDiffers && rawWithinWindow
+    ? [{ ...raw, mode: "raw-screenshot" }, { ...scaled, mode: "scaled-pixel" }]
+    : [{ ...scaled, mode: "scaled-pixel" }];
+  if (rawDiffers && !rawWithinWindow) {
+    candidates.push({ ...raw, mode: "raw-clamped" });
+  }
+  return candidates;
+}
+
+function clampWindowPoint(point, width, height) {
+  return {
+    x: Math.round(Math.max(0, Math.min(width - 1, point.x))),
+    y: Math.round(Math.max(0, Math.min(height - 1, point.y)))
+  };
+}
+
+function captureWindowSnapshot(boundsText, workspace, label) {
+  const dir = workspace || mkdtempSync(path.join(tmpdir(), "qft-wechat-click-"));
+  const safeLabel = String(label || "snapshot").replace(/[^a-z0-9._-]/gi, "-");
+  const imagePath = path.join(dir, `${safeLabel}-${Date.now()}-${Math.random().toString(16).slice(2)}.png`);
+  const capture = spawnSync("/usr/sbin/screencapture", ["-x", "-R", boundsText, imagePath], { encoding: "utf8" });
+  if (capture.status !== 0) return { ok: false, error: capture.stderr || "截屏失败" };
+  return { ok: true, imagePath };
+}
+
+function verifyClickChanged(boundsText, workspace, before, clickTarget, coordinateMode) {
+  if (!before?.ok || !before.imagePath) {
+    return { changed: undefined, summary: "点击后验证跳过：点击前截图失败" };
+  }
+  const after = captureWindowSnapshot(boundsText, workspace, `wechat-click-after-${coordinateMode}`);
+  if (!after.ok || !after.imagePath) {
+    return { changed: undefined, summary: `点击后验证跳过：${after.error || "点击后截图失败"}` };
+  }
+  const diff = compareSnapshots(before.imagePath, after.imagePath);
+  if (!diff.ok) return { changed: undefined, summary: `点击后验证跳过：${diff.error}` };
+  const targetDiff = compareTargetRegion(before.imagePath, after.imagePath, clickTarget);
+  if (!targetDiff.ok) return { changed: undefined, summary: `点击后验证跳过：${targetDiff.error}` };
+  const changed = targetDiff.ratio >= 0.002 || (targetDiff.ratio >= 0.0005 && diff.ratio >= 0.002);
+  return {
+    changed,
+    summary: `点击后目标行差异 ${(targetDiff.ratio * 100).toFixed(2)}%，窗口差异 ${(diff.ratio * 100).toFixed(2)}%${changed ? "" : "，疑似未点中目标行"}`
+  };
+}
+
+function compareSnapshots(beforePath, afterPath) {
+  const before = normalizedBitmapData(beforePath);
+  const after = normalizedBitmapData(afterPath);
+  if (!before.ok || !after.ok) return { ok: false, error: before.error || after.error || "截图归一化失败" };
+  const length = Math.min(before.data.length, after.data.length);
+  if (length <= 0) return { ok: false, error: "截图数据为空" };
+  let changed = 0;
+  for (let index = 0; index < length; index += 4) {
+    if (before.data[index] !== after.data[index] || before.data[index + 1] !== after.data[index + 1] || before.data[index + 2] !== after.data[index + 2]) {
+      changed += 1;
+    }
+  }
+  return { ok: true, ratio: changed / Math.ceil(length / 4) };
+}
+
+function compareTargetRegion(beforePath, afterPath, clickTarget) {
+  const before = normalizedBitmapData(beforePath);
+  const after = normalizedBitmapData(afterPath);
+  if (!before.ok || !after.ok) return { ok: false, error: before.error || after.error || "截图归一化失败" };
+  const width = Math.min(before.width || 0, after.width || 0);
+  const height = Math.min(before.height || 0, after.height || 0);
+  if (width <= 0 || height <= 0) return { ok: false, error: "截图尺寸为空" };
+  const centerX = Math.round(Math.max(0, Math.min(width - 1, clickTarget.x)));
+  const centerY = Math.round(Math.max(0, Math.min(height - 1, clickTarget.y)));
+  const left = Math.max(0, centerX - 180);
+  const right = Math.min(width - 1, centerX + 260);
+  const top = Math.max(0, centerY - 45);
+  const bottom = Math.min(height - 1, centerY + 45);
+  let changed = 0;
+  let total = 0;
+  for (let y = top; y <= bottom; y += 1) {
+    for (let x = left; x <= right; x += 1) {
+      const index = (y * width + x) * 4;
+      if (index + 2 >= before.data.length || index + 2 >= after.data.length) continue;
+      total += 1;
+      if (before.data[index] !== after.data[index] || before.data[index + 1] !== after.data[index + 1] || before.data[index + 2] !== after.data[index + 2]) {
+        changed += 1;
+      }
+    }
+  }
+  if (total <= 0) return { ok: false, error: "目标行截图区域为空" };
+  return { ok: true, ratio: changed / total };
+}
+
+function normalizedBitmapData(imagePath) {
+  const dir = mkdtempSync(path.join(tmpdir(), "qft-wechat-bmp-"));
+  const bmpPath = path.join(dir, "snapshot.bmp");
+  const result = spawnSync("/usr/bin/sips", ["-s", "format", "bmp", imagePath, "--out", bmpPath], { encoding: "utf8" });
+  if (result.status !== 0) return { ok: false, error: result.stderr || "sips 转换 BMP 失败" };
+  try {
+    const buffer = readFileSync(bmpPath);
+    return bmpToRgba(buffer);
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function bmpToRgba(buffer) {
+  if (buffer.length < 54 || buffer.toString("ascii", 0, 2) !== "BM") {
+    return { ok: false, error: "BMP 格式无效" };
+  }
+  const offset = buffer.readUInt32LE(10);
+  const width = Math.abs(buffer.readInt32LE(18));
+  const signedHeight = buffer.readInt32LE(22);
+  const height = Math.abs(signedHeight);
+  const bitsPerPixel = buffer.readUInt16LE(28);
+  const compression = buffer.readUInt32LE(30);
+  if (compression !== 0) return { ok: false, error: "不支持压缩 BMP" };
+  if (![24, 32].includes(bitsPerPixel)) return { ok: false, error: `不支持 ${bitsPerPixel} 位 BMP` };
+  if (width <= 0 || height <= 0 || offset <= 0 || offset >= buffer.length) {
+    return { ok: false, error: "BMP 尺寸无效" };
+  }
+  const bytesPerPixel = bitsPerPixel / 8;
+  const stride = Math.ceil((width * bitsPerPixel) / 32) * 4;
+  const data = Buffer.alloc(width * height * 4);
+  const topDown = signedHeight < 0;
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = topDown ? y : height - 1 - y;
+    const rowStart = offset + sourceY * stride;
+    for (let x = 0; x < width; x += 1) {
+      const source = rowStart + x * bytesPerPixel;
+      const target = (y * width + x) * 4;
+      if (source + 2 >= buffer.length) continue;
+      data[target] = buffer[source + 2];
+      data[target + 1] = buffer[source + 1];
+      data[target + 2] = buffer[source];
+      data[target + 3] = bitsPerPixel === 32 && source + 3 < buffer.length ? buffer[source + 3] : 255;
+    }
+  }
+  return { ok: true, width, height, data };
 }
 
 function pngDimensions(imagePath) {
@@ -597,6 +771,16 @@ function formatUnreadItem(item) {
   ].filter(Boolean).join(" / ");
 }
 
+function formatClickDetail(item, click) {
+  return [
+    `点击位置：截图像素 (${Math.round(item.clickTarget.x)}, ${Math.round(item.clickTarget.y)})`,
+    click.windowPoint ? `窗口点 (${click.windowPoint.x}, ${click.windowPoint.y})` : "",
+    click.coordinateMode ? `坐标模式 ${click.coordinateMode}` : "",
+    click.strategy ? `策略 ${click.strategy}` : "",
+    click.verification || ""
+  ].filter(Boolean).join(" / ");
+}
+
 function extractUnreadCandidates(snapshotText) {
   const lines = snapshotText
     .split(/\r?\n/)
@@ -646,6 +830,9 @@ function runScreenOcr(workspace, fileName = "screen.png") {
 }
 
 function wechatWindowBounds() {
+  if (process.env.QFT_WECHAT_BOUNDS_OVERRIDE && /^\d+,\d+,\d+,\d+$/.test(process.env.QFT_WECHAT_BOUNDS_OVERRIDE)) {
+    return process.env.QFT_WECHAT_BOUNDS_OVERRIDE;
+  }
   const result = spawnSync("/usr/bin/osascript", ["-e", WECHAT_BOUNDS_SCRIPT], { encoding: "utf8" });
   if (result.status !== 0) return "";
   const bounds = result.stdout.trim();
