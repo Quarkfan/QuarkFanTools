@@ -143,6 +143,22 @@ function appGovernanceDiagnostic(app: CustomAppSummary): CapabilityGovernanceDia
     issues.push("请求网络访问权限");
     recommendations.push("确认网络目标和数据边界后再授权");
   }
+  const desktop = app.permissions.desktopAutomation;
+  if (desktop && (desktop.screenCapture || desktop.accessibility || desktop.clipboard || desktop.keyboardInput)) {
+    const scopes = [
+      desktop.screenCapture ? "屏幕录制" : "",
+      desktop.accessibility ? "辅助功能控制" : "",
+      desktop.clipboard ? "剪贴板" : "",
+      desktop.keyboardInput ? "键盘输入" : ""
+    ].filter(Boolean);
+    issues.push(`请求桌面自动化权限: ${scopes.join(", ")}`);
+    recommendations.push("只授权给本机可信 Bot，默认使用草稿模式，不自动发送消息");
+    recommendations.push("首次运行前需要用户在 macOS 系统设置中授予屏幕录制和辅助功能权限");
+  }
+  if (desktop?.autoSend) {
+    issues.push("请求自动发送桌面消息，当前 PoC 不开放");
+    recommendations.push("保持 autoSend=false，由用户在微信输入框中确认后手动发送");
+  }
   const broadFilesystem = app.permissions.filesystem.filter((item) => !["workspace", "session", "bot-state"].includes(item));
   if (broadFilesystem.length > 0) {
     issues.push(`请求额外文件系统权限: ${broadFilesystem.join(", ")}`);
@@ -155,7 +171,7 @@ function appGovernanceDiagnostic(app: CustomAppSummary): CapabilityGovernanceDia
     issues.push("未声明任何可调用能力");
     recommendations.push("补充 capabilities 声明，否则授权后也无法被有效调用");
   }
-  const risk = app.entry.type === "executable" || app.permissions.network || broadFilesystem.length > 0
+  const risk = app.entry.type === "executable" || app.permissions.network || broadFilesystem.length > 0 || Boolean(desktop?.screenCapture || desktop?.accessibility || desktop?.keyboardInput || desktop?.autoSend)
     ? "high"
     : app.permissions.requiresOwnerApproval || app.entry.type === "webview" || app.entry.type === "mcp-adapter"
       ? "medium"

@@ -134,6 +134,8 @@ Workflow 执行时会发出步骤事件。Runtime 会把每个步骤的开始、
 
 自定义应用位于 `workspace/apps/<app-id>/`，必须包含 `app.json`。当前已接入命令和定时任务调用链路：Bot 编辑器中的命令映射可将 `/xxx` 路由到已授权且声明 `commandCallable` 的可执行自定义应用；定时任务 capability 目标可调用已授权且声明 `scheduledCallable` 的可执行自定义应用。当前只有 `node` 和受控 `executable` 入口会进入运行时；`webview`、`mcp-adapter` 和 `workflow` 只作为建设中能力展示，不出现在命令或定时任务目标中，旧配置命中时也会返回明确不可执行错误。导入和升级会写入 `.qft-app-state.json` 记录本机生命周期，能力页展示 manifest 诊断、生命周期和权限提示；卸载前主进程会检查 Bot 授权引用和套件依赖，避免删掉仍在使用的应用。运行时会在当前 Bot 当前会话的 `workspace/bots/<bot-id>/sessions/<conversation-hash>/apps/<app-id>/` 下创建独立执行目录，并通过 JSON stdin/stdout 协议交换输入输出。Agent 主动直接调用自定义应用仍保留为后续 Runtime Binding 扩展点，不在消息主流程中继续增加平铺分支。
 
+微信桌面辅助 Agent PoC 不新增微信或个人微信 IM Provider，也不恢复企业微信 Provider。它通过自定义应用 manifest 的 `permissions.desktopAutomation` 声明屏幕录制、辅助功能、剪贴板、键盘输入和自动发送意图；能力治理会把这些权限作为高风险项展示。当前 `electron/desktop-agent.ts` 只生成和校验动作计划，例如激活微信、搜索联系人、截图校验、粘贴草稿和等待用户确认，不执行真实 Accessibility、ScreenCaptureKit、OCR 或 Quartz 事件。`autoSend=true` 当前作为阻断诊断处理，避免 PoC 绕过人工确认。
+
 MCP 服务定义保存在全局配置 `config.mcpServers`，当前可保存 `stdio`、HTTP 和 SSE。运行时只会把当前 Bot 已授权、启用且传输类型为 `stdio` 的 MCP 传给 Claude Agent SDK，并启用 `strictMcpConfig`，忽略项目目录、用户目录和其他磁盘来源的 MCP 配置。HTTP / SSE 只作为提前配置和治理诊断占位，不能作为命令、定时任务或 Agent 工具注入。
 
 MCP 诊断由主进程通过只读 IPC 暴露给渲染层。诊断不会启动长期 MCP 会话，只检查当前配置的启用状态、传输类型、stdio 命令是否能在 `cwd` 或 `PATH` 中解析、HTTP/SSE URL 是否存在、`cwd` 是否可读、环境变量是否缺值，以及该 MCP 已授权给哪些 Bot。能力页据此展示 `OK/WARN/ERROR`，用于在真正进入 Agent 前发现配置问题。

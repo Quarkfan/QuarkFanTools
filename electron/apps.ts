@@ -151,6 +151,7 @@ async function readCustomApp(appDir: string, source: CustomAppSummary["source"])
   }
   const capabilitiesRaw = objectValue(manifest.capabilities);
   const permissionsRaw = objectValue(manifest.permissions);
+  const desktopAutomationRaw = objectValue(permissionsRaw.desktopAutomation);
   const entry = {
     type: entryType as CustomAppSummary["entry"]["type"],
     command,
@@ -165,7 +166,14 @@ async function readCustomApp(appDir: string, source: CustomAppSummary["source"])
   const permissions = {
     network: booleanValue(permissionsRaw.network),
     filesystem: arrayStrings(permissionsRaw.filesystem),
-    requiresOwnerApproval: booleanValue(permissionsRaw.requiresOwnerApproval)
+    requiresOwnerApproval: booleanValue(permissionsRaw.requiresOwnerApproval),
+    desktopAutomation: {
+      screenCapture: booleanValue(desktopAutomationRaw.screenCapture),
+      accessibility: booleanValue(desktopAutomationRaw.accessibility),
+      clipboard: booleanValue(desktopAutomationRaw.clipboard),
+      keyboardInput: booleanValue(desktopAutomationRaw.keyboardInput),
+      autoSend: booleanValue(desktopAutomationRaw.autoSend)
+    }
   };
   const lifecycle = await readLifecycle(appDir);
   return {
@@ -202,6 +210,13 @@ function customAppDiagnostics(app: Pick<CustomAppSummary, "entry" | "capabilitie
   }
   if (app.permissions.network && !app.permissions.requiresOwnerApproval) {
     diagnostics.push({ status: "warn", message: "声明网络权限的应用建议开启 Owner 审批" });
+  }
+  const desktop = app.permissions.desktopAutomation;
+  if (desktop && (desktop.screenCapture || desktop.accessibility || desktop.clipboard || desktop.keyboardInput)) {
+    diagnostics.push({ status: "warn", message: "声明桌面自动化权限，需要 macOS 屏幕录制或辅助功能授权，默认应只生成草稿" });
+  }
+  if (desktop?.autoSend) {
+    diagnostics.push({ status: "error", message: "桌面自动化 autoSend 当前不开放；请先使用草稿模式并由用户手动发送" });
   }
   for (const scope of app.permissions.filesystem) {
     if (!["workspace", "state", "readonly"].includes(scope)) {

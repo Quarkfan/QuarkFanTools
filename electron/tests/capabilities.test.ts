@@ -105,6 +105,23 @@ test("diagnoses extensibility risks and missing suite dependencies", () => {
     entry: { type: "executable", command: "./runner", args: [] },
     permissions: { network: true, filesystem: ["workspace", "/tmp"], requiresOwnerApproval: true }
   };
+  const desktopApp: CustomAppSummary = {
+    ...customApp,
+    id: "wechat-draft",
+    name: "WeChat Draft",
+    permissions: {
+      network: false,
+      filesystem: ["workspace"],
+      requiresOwnerApproval: true,
+      desktopAutomation: {
+        screenCapture: true,
+        accessibility: true,
+        clipboard: true,
+        keyboardInput: true,
+        autoSend: false
+      }
+    }
+  };
   const brokenSuite: SuiteSummary = {
     ...suite,
     id: "broken-suite",
@@ -126,11 +143,16 @@ test("diagnoses extensibility risks and missing suite dependencies", () => {
     }]
   };
 
-  const diagnostics = capabilityGovernanceDiagnostics([skill], [customApp, riskyApp], [suite, brokenSuite], [mcpServer]);
+  const diagnostics = capabilityGovernanceDiagnostics([skill], [customApp, riskyApp, desktopApp], [suite, brokenSuite], [mcpServer]);
   const risky = diagnostics.find((item) => item.kind === "app" && item.id === "shell-runner");
   assert.equal(risky?.status, "warn");
   assert.equal(risky?.risk, "high");
   assert.match(risky?.issues.join("\n") ?? "", /executable[\s\S]*网络[\s\S]*文件系统/);
+
+  const desktop = diagnostics.find((item) => item.kind === "app" && item.id === "wechat-draft");
+  assert.equal(desktop?.status, "warn");
+  assert.equal(desktop?.risk, "high");
+  assert.match(desktop?.issues.join("\n") ?? "", /桌面自动化/);
 
   const suiteDiagnostic = diagnostics.find((item) => item.kind === "suite" && item.id === "broken-suite");
   assert.equal(suiteDiagnostic?.status, "error");

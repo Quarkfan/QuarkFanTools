@@ -11,6 +11,7 @@
 - 运行平台：后续发布和验证默认只面向 macOS Apple Silicon / arm64；Intel x64 只作为历史版本兼容样本
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
 - 当前阶段：2.2.0 已完成 arm64 发布包打包验证；本轮按企业微信官方能力限制暂时封闭企业微信 Provider 入口。每 Bot 隔离飞书事件订阅、Bot 专属 lark-cli HOME、启动可见日志、旧凭据 marker 迁移修复、定时任务版本合并治理、命令机制、定时任务、缓存、自定义应用、套件/Workflow、MCP 占位诊断、IM 连接器诊断、使用手册、建设中能力友好响应、浅色主题统一、MCP 新增草稿、应用图标恢复、内置模板、Bot Provider 动态配置、自定义应用/套件 Manifest 编辑器和能力页多层级导航已完成。接下来聚焦真实飞书端到端验证、签名公证和后续高级扩展，不再跟进 1.x 同步。
+- PoC 分支 `codex/wechat-desktop-agent-poc` 正在验证微信桌面辅助 Agent 方向：该方向不恢复企业微信 Provider，不新增微信协议机器人，只通过自定义应用模板和 `desktopAutomation` 权限元数据表达 macOS 桌面辅助能力；当前只生成微信草稿动作计划并阻断自动发送。
 
 ## 已实现
 
@@ -139,6 +140,7 @@
 
 ## 最近验证
 
+- 2026-06-28：在独立 worktree `/Users/edy/BlackLakeWork/QuarkfanTools-wechat-desktop-agent-poc` 验证微信桌面辅助 Agent PoC：新增 `electron/desktop-agent.ts` 动作计划与安全校验、`builtin-apps/wechat-draft-assistant/` 内置模板、自定义应用 `permissions.desktopAutomation` 权限诊断和 `docs/wechat-desktop-agent-poc.md`。`git diff --check` 通过；`npm test` 通过，121 项测试全部通过。该 PoC 未执行真实微信 UI 操作，未读取微信数据库、协议或进程内存，未开放自动发送。
 - 2026-06-28：在 `docs/PRODUCT_HANDOFF.md` 和 `docs/operations.md` 补齐协作与发版隐性规范：未打包变更保留 `Unreleased`，形成正式版本号后必须同轮测试和打包，发版包含归档与 DMG 挂载检查，2.x 本地归档和 `release/arm64/` 只保留最近两个版本相关产物。本轮仅文档整理，未重新打包。
 - 2026-06-28：新增 `docs/PRODUCT_HANDOFF.md`，整理产品接手阅读顺序、当前功能边界、1.8.3 客户 Skill 数据目录、企业微信封闭结论、下一阶段产品决策问题和新会话启动指令；README、`docs/AI.md`、`docs/PRD.md` 和 `CHANGELOG.md` 已同步入口。本轮仅文档整理，未重新打包。
 - 2026-06-27：新增面向产品经理接手的 `docs/PRD.md`，补齐产品定位、版本演进历史、功能全景、权限边界、验收标准、限制和后续路线；README 与 `docs/AI.md` 已加入 PRD 入口；`git diff --check` 通过。本轮仅文档整理，未重新打包。
