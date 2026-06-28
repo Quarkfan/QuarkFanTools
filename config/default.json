@@ -23,6 +23,15 @@
     "sandbox": "workspace-write",
     "approvalPolicy": "never",
     "maxConcurrentTasks": 2,
-    "maxAgentTurns": 60
+    "maxAgentTurns": 60,
+    "customAppArtifacts": {
+      "autoCleanup": false,
+      "retentionDays": 7
+    },
+    "customAppReplyProcessing": {
+      "mode": "raw",
+      "prompt": "请把下面自定义应用返回的运行结果总结成适合直接回复用户的中文内容。保留关键事实、联系人、消息正文、风险提示和下一步建议；不要编造未出现的信息。",
+      "maxInputChars": 12000
+    }
   }
 }

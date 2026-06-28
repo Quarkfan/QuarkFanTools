@@ -3,7 +3,7 @@ import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
 import { stateRoot, workspaceRoot } from "./paths.js";
 import { expireStaleFileCacheEntries, fileCacheEntries, removeFileCacheEntry, repairFileCacheIndex } from "./file-cache.js";
-import type { FileCacheRepairReport, SessionTranscriptTurn, StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
+import type { AppConfig, CustomAppArtifactSummary, FileCacheRepairReport, SessionTranscriptTurn, StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
 
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 
@@ -14,14 +14,19 @@ interface SessionRecord {
   transcript?: SessionTranscriptTurn[];
 }
 
-export async function storageStats(): Promise<StorageStats> {
+export async function storageStats(config?: AppConfig): Promise<StorageStats> {
   await expireStaleFileCacheEntries();
+  if (config?.runtime.customAppArtifacts?.autoCleanup) {
+    await clearExpiredCustomAppArtifactStorage(config);
+  }
   const bots = await botIds();
   let sessionCount = 0;
   let expiredSessionCount = 0;
   let conversationBytes = 0;
   const sessionEntries: StorageSession[] = [];
+  const customAppArtifacts: CustomAppArtifactSummary[] = [];
   const cutoff = Date.now() - SESSION_IDLE_MS;
+  const customAppCutoff = customAppArtifactCutoff(config);
   for (const botId of bots) {
     conversationBytes += await directorySize(path.join(stateRoot(), "bots", botId, "messages"));
     conversationBytes += await directorySize(path.join(stateRoot(), "bots", botId, "claude-home"));
@@ -39,18 +44,24 @@ export async function storageStats(): Promise<StorageStats> {
         bytes: await sessionSize(botId, key, record),
         expired
       });
+      customAppArtifacts.push(...await listSessionCustomAppArtifacts(botId, key, customAppCutoff));
     }
   }
   const cacheBytes = await directorySize(path.join(stateRoot(), "file-cache"));
+  const customAppArtifactBytes = customAppArtifacts.reduce((sum, item) => sum + item.bytes, 0);
   return {
     totalBytes: conversationBytes + cacheBytes,
     conversationBytes,
     cacheBytes,
+    customAppArtifactBytes,
+    customAppArtifactCount: customAppArtifacts.length,
+    expiredCustomAppArtifactCount: customAppArtifacts.filter((item) => item.expired).length,
     sessionCount,
     expiredSessionCount,
     botCount: bots.length,
     sessions: sessionEntries.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)),
-    cacheEntries: await fileCacheEntries()
+    cacheEntries: await fileCacheEntries(),
+    customAppArtifacts: customAppArtifacts.sort((a, b) => Date.parse(b.updatedAt ?? "") - Date.parse(a.updatedAt ?? ""))
   };
 }
 
@@ -146,6 +157,80 @@ export async function clearFileCacheEntryStorage(cacheKey: string): Promise<bool
 
 export async function repairFileCacheStorage(): Promise<FileCacheRepairReport> {
   return repairFileCacheIndex();
+}
+
+export async function clearExpiredCustomAppArtifactStorage(config?: AppConfig): Promise<number> {
+  const stats = await storageStatsWithoutAutoCleanup(config);
+  const expired = stats.customAppArtifacts.filter((item) => item.expired);
+  await Promise.all(expired.map((item) => removeCustomAppArtifact(item)));
+  return expired.length;
+}
+
+export async function clearAllCustomAppArtifactStorage(): Promise<number> {
+  const stats = await storageStatsWithoutAutoCleanup();
+  await Promise.all(stats.customAppArtifacts.map((item) => removeCustomAppArtifact(item)));
+  return stats.customAppArtifacts.length;
+}
+
+async function storageStatsWithoutAutoCleanup(config?: AppConfig): Promise<StorageStats> {
+  const nextConfig = config
+    ? { ...config, runtime: { ...config.runtime, customAppArtifacts: { ...(config.runtime.customAppArtifacts ?? { retentionDays: 7 }), autoCleanup: false } } }
+    : undefined;
+  return storageStats(nextConfig);
+}
+
+async function removeCustomAppArtifact(item: CustomAppArtifactSummary): Promise<void> {
+  await rm(path.join(workspaceRoot(), "bots", item.botId, "sessions", workspaceSessionId(item.conversationKey), "apps", item.appId), { recursive: true, force: true });
+}
+
+function customAppArtifactCutoff(config?: AppConfig): number {
+  const days = config?.runtime.customAppArtifacts?.retentionDays ?? 7;
+  return Date.now() - Math.max(1, Math.min(90, days)) * 24 * 60 * 60 * 1000;
+}
+
+async function listSessionCustomAppArtifacts(botId: string, key: string, cutoff: number): Promise<CustomAppArtifactSummary[]> {
+  const root = path.join(workspaceRoot(), "bots", botId, "sessions", workspaceSessionId(key), "apps");
+  const result: CustomAppArtifactSummary[] = [];
+  for (const entry of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isDirectory()) continue;
+    const target = path.join(root, entry.name);
+    const measured = await directoryMeasure(target);
+    result.push({
+      id: `${botId}:${workspaceSessionId(key)}:${entry.name}`,
+      botId,
+      conversationKey: key,
+      appId: entry.name,
+      updatedAt: measured.updatedAt,
+      bytes: measured.bytes,
+      fileCount: measured.files,
+      expired: measured.updatedAt ? Date.parse(measured.updatedAt) < cutoff : false
+    });
+  }
+  return result;
+}
+
+async function directoryMeasure(root: string): Promise<{ bytes: number; files: number; updatedAt?: string }> {
+  let bytes = 0;
+  let files = 0;
+  let updatedMs = 0;
+  for (const entry of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+    const target = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await directoryMeasure(target);
+      bytes += nested.bytes;
+      files += nested.files;
+      updatedMs = Math.max(updatedMs, nested.updatedAt ? Date.parse(nested.updatedAt) : 0);
+    } else {
+      const info = await stat(target).catch(() => null);
+      if (!info) continue;
+      bytes += info.size;
+      files += 1;
+      updatedMs = Math.max(updatedMs, info.mtimeMs);
+    }
+  }
+  const dirInfo = await stat(root).catch(() => null);
+  if (dirInfo) updatedMs = Math.max(updatedMs, dirInfo.mtimeMs);
+  return { bytes, files, updatedAt: updatedMs ? new Date(updatedMs).toISOString() : undefined };
 }
 
 async function botIds(): Promise<string[]> {

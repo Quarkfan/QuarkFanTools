@@ -251,6 +251,43 @@ export async function runVisionModel(config: AppConfig, promptText: string, imag
   return result.trim() || "多模态模型没有返回可识别内容。";
 }
 
+export async function runTextModel(config: AppConfig, promptText: string): Promise<string> {
+  if (!config.model.baseUrl || !config.model.model || !config.model.apiKey) throw new Error("模型 Base URL、模型名称或 API Key 未配置完整");
+  const env = {
+    ...process.env,
+    CLAUDE_AGENT_SDK_CLIENT_APP: `quarkfantools/${app.getVersion()}`,
+    ANTHROPIC_BASE_URL: config.model.baseUrl,
+    ANTHROPIC_MODEL: config.model.model,
+    ANTHROPIC_AUTH_TOKEN: config.model.apiKey,
+    ANTHROPIC_API_KEY: config.model.apiKey
+  };
+  let result = "";
+  for await (const item of query({
+    prompt: promptText,
+    options: {
+      cwd: app.getPath("userData"),
+      env,
+      model: config.model.model,
+      pathToClaudeCodeExecutable: claudeExecutable(),
+      settingSources: [],
+      tools: [],
+      allowedTools: [],
+      maxTurns: 1,
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "你只做文本改写、总结和结构化整理，不执行任何工具或外部操作。"
+      }
+    }
+  })) {
+    if (item.type === "result") {
+      if (item.subtype !== "success") throw new Error(item.errors.join("\n") || item.subtype);
+      result = item.result;
+    }
+  }
+  return result.trim() || "模型没有返回可回复内容。";
+}
+
 function providerLabel(provider: string): string {
   if (provider === "wecom") return "企业微信";
   if (provider === "dingtalk") return "钉钉";

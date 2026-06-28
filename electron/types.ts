@@ -299,6 +299,15 @@ export interface AppConfig {
     approvalPolicy: "untrusted" | "on-request" | "never";
     maxConcurrentTasks: number;
     maxAgentTurns?: number;
+    customAppArtifacts?: {
+      autoCleanup: boolean;
+      retentionDays: number;
+    };
+    customAppReplyProcessing?: {
+      mode: "raw" | "summarize";
+      prompt: string;
+      maxInputChars: number;
+    };
   };
 }
 
@@ -481,11 +490,15 @@ export interface StorageStats {
   totalBytes: number;
   conversationBytes: number;
   cacheBytes: number;
+  customAppArtifactBytes: number;
+  customAppArtifactCount: number;
+  expiredCustomAppArtifactCount: number;
   sessionCount: number;
   expiredSessionCount: number;
   botCount: number;
   sessions: StorageSession[];
   cacheEntries: FileCacheEntrySummary[];
+  customAppArtifacts: CustomAppArtifactSummary[];
 }
 
 export interface FileCacheEntrySummary {
@@ -509,6 +522,17 @@ export interface FileCacheRepairReport {
   removedEntries: number;
   removedHashes: number;
   repairedEntries: number;
+}
+
+export interface CustomAppArtifactSummary {
+  id: string;
+  botId: string;
+  conversationKey: string;
+  appId: string;
+  updatedAt?: string;
+  bytes: number;
+  expired: boolean;
+  fileCount: number;
 }
 
 export interface StorageSession {

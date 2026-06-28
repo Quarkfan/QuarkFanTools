@@ -4,14 +4,14 @@
 
 ## 当前基线
 
-- 产品版本：`2.2.3`
+- 产品版本：`2.2.4`
 - Git 分支：当前工作分支 `codex/2.0.0-stabilize`，远端 `main` 已同步到同一提交
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 远端分支：`main` 与 `codex/2.0.0-stabilize` 指向 2.0 最新接续提交；1.x 系列已封版，后续只作为历史兼容样本，不再作为同步目标
 - 运行平台：后续发布和验证默认只面向 macOS Apple Silicon / arm64；Intel x64 只作为历史版本兼容样本
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：2.2.3 arm64 测试安装包已形成并校验；本轮调整微信桌面辅助 Agent PoC 为未读读取优先，为 `/wechat-read` 加入内置兜底命令，并修复飞书群聊 `@机器人 /wechat-read` 提及前缀导致命令未识别的问题，按自定义应用模板接入，不恢复企业微信 Provider，不新增微信协议机器人。每 Bot 隔离飞书事件订阅、Bot 专属 lark-cli HOME、启动可见日志、旧凭据 marker 迁移修复、定时任务版本合并治理、命令机制、定时任务、缓存、自定义应用、套件/Workflow、MCP 占位诊断、IM 连接器诊断、使用手册、建设中能力友好响应、浅色主题统一、MCP 新增草稿、应用图标恢复、内置模板、Bot Provider 动态配置、自定义应用/套件 Manifest 编辑器和能力页多层级导航已完成。接下来聚焦真实飞书端到端验证、签名公证和后续高级扩展，不再跟进 1.x 同步。
-- 微信桌面辅助 Agent PoC 当前可尝试截取微信当前窗口，并通过本地初筛和已配置多模态模型识别可见未读，再可选把草稿写入系统剪贴板，同时阻断自动发送；不读取微信数据库、不调用协议、不 Hook 进程，也不自动搜索、粘贴或发送。
+- 当前阶段：2.2.4 arm64 测试安装包已形成并校验；本轮将微信未读读取模板改为连续队列流程：先截取微信列表并用多模态模型识别红点/红色数字徽标，再按可见未读候选队列读取最多 5 个会话，重新读取每个打开后当前窗口的可见消息；同时新增自定义应用运行产物统计/清理策略和自定义应用回复后处理配置。每 Bot 隔离飞书事件订阅、Bot 专属 lark-cli HOME、启动可见日志、旧凭据 marker 迁移修复、定时任务版本合并治理、命令机制、定时任务、缓存、自定义应用、套件/Workflow、MCP 占位诊断、IM 连接器诊断、使用手册、建设中能力友好响应、浅色主题统一、MCP 新增草稿、应用图标恢复、内置模板、Bot Provider 动态配置、自定义应用/套件 Manifest 编辑器和能力页多层级导航已完成。接下来聚焦真实飞书端到端验证、签名公证和后续高级扩展，不再跟进 1.x 同步。
+- 微信桌面辅助 Agent PoC 当前可尝试截取微信当前窗口，并通过本地初筛和已配置多模态模型识别可见未读；识别到多个可见未读后会按队列点击并读取有限数量会话，该点击可能让微信把会话标记为已读。同一会话多条消息只读取当前窗口可见内容。可选草稿仍只写入系统剪贴板，同时阻断自动发送；不读取微信数据库、不调用协议、不 Hook 进程，也不自动搜索、粘贴或发送。
 
 ## 已实现
 
@@ -140,6 +140,7 @@
 
 ## 最近验证
 
+- 2026-06-28：`v2.2.4` 已完成 arm64 打包验证：微信未读读取模板改为连续队列流程，先通过当前微信窗口截图和多模态模型识别红点/红色数字徽标，再按可见未读候选读取最多 5 个会话并重新读取打开后的当前会话可见消息；点击会话可能让微信将该会话标记为已读，但模板仍不读取微信数据库、不调用协议、不 Hook 进程、不自动搜索、不自动粘贴、不自动发送。点击动作会先把视觉模型给出的截图像素坐标按当前窗口尺寸换算为 macOS 窗口点坐标，再依次尝试 WeChat 进程内点击、System Events 全局点击和 JXA/Quartz CGEvent 三种策略，失败时会列出各策略错误。本轮还新增自定义应用运行产物统计/清理入口、产物保留天数和自动清理配置，以及自定义应用回复原样返回/大模型总结的后处理配置。`git diff --check` 通过；`npm test` 通过，130 项测试全部通过；`npm run pack:mac` 通过，最终归档到 `release/v2.2.4/`，包含 `QuarkfanTools-2.2.4-arm64.dmg`、`QuarkfanTools-2.2.4-arm64.zip`、`QuarkfanTools-2.2.4-arm64.zip.blockmap` 和 `latest-mac.yml`；核对 app 版本 `2.2.4`、内置 Vision OCR helper 为 arm64；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；当前 2.x 本地归档只保留 `release/v2.2.3/` 和 `release/v2.2.4/`，已清理 `release/v2.2.2/` 以及 `release/arm64/` 下 2.2.2 旧分发文件。安装包仍未签名和公证。
 - 2026-06-28：`v2.2.2` 已完成 arm64 打包验证：微信桌面辅助模板改为截取当前微信窗口，并通过本地初筛和主进程受控多模态模型识别可见未读；API Key 只留在主进程配置，不传给自定义应用脚本。当前本机已验证 WeChat 可以置前并截取窗口区域，macOS Accessibility 只暴露窗口外壳，窗口截图路径能看到“微信游戏”等可见列表项，因此后续真实未读抽取应依赖多模态模型。`git diff --check` 通过；`npm test` 通过，124 项测试全部通过；`npm run pack:mac` 通过，最终归档到 `release/v2.2.2/`，包含 `QuarkfanTools-2.2.2-arm64.dmg`、`QuarkfanTools-2.2.2-arm64.zip`、`QuarkfanTools-2.2.2-arm64.zip.blockmap` 和 `latest-mac.yml`，构建中间 app 收入 `release/v2.2.2/build-arm64/`；核对 app 版本 `2.2.2`、主程序 arm64、内置 `lark-cli` / `wecom-cli` / Claude runtime / Vision OCR helper 均为 arm64；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；当前 2.x 本地归档只保留 `release/v2.2.1/` 和 `release/v2.2.2/`，已清理 `release/v2.2.0/` 以及 `release/arm64/` 下 2.2.0 旧分发文件。安装包仍未签名和公证。
 - 2026-06-28：`v2.2.1` 已完成 arm64 打包验证：版本号、根 `CHANGELOG.md`、应用内更新记录、`README.md`、`docs/AI.md`、`docs/PRD.md`、`docs/PRODUCT_HANDOFF.md`、`STATUS.md` 和产物名称已同步 2.2.1；微信草稿助手内置模板已可通过命令调用尝试激活 WeChat 并把草稿写入系统剪贴板，仍不搜索联系人、不自动粘贴、不自动发送、不读取微信数据库/协议/进程内存；`git diff --check` 通过；`npm test` 通过，122 项测试全部通过；`npm run pack:mac` 通过，最终归档到 `release/v2.2.1/`，包含 `QuarkfanTools-2.2.1-arm64.dmg`、`QuarkfanTools-2.2.1-arm64.zip`、`QuarkfanTools-2.2.1-arm64.zip.blockmap` 和 `latest-mac.yml`，构建中间 app 收入 `release/v2.2.1/build-arm64/`；核对 app 版本 `2.2.1`、主程序 arm64、内置 `lark-cli` / `wecom-cli` / Claude runtime 均为 arm64；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；当前 2.x 本地归档只保留 `release/v2.2.0/` 和 `release/v2.2.1/`，已清理 `release/v2.1.7/` 以及 `release/arm64/` 下 2.1.7 旧分发文件。安装包仍未签名和公证。
 - 2026-06-28：在独立 worktree `/Users/edy/BlackLakeWork/QuarkfanTools-wechat-desktop-agent-poc` 验证微信桌面辅助 Agent PoC：新增 `electron/desktop-agent.ts` 动作计划与安全校验、`builtin-apps/wechat-draft-assistant/` 内置模板、自定义应用 `permissions.desktopAutomation` 权限诊断和 `docs/wechat-desktop-agent-poc.md`。`git diff --check` 通过；`npm test` 通过，121 项测试全部通过。该 PoC 未执行真实微信 UI 操作，未读取微信数据库、协议或进程内存，未开放自动发送。

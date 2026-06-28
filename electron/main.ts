@@ -13,7 +13,7 @@ import { copyCustomAppTemplate, customAppPreview, importCustomAppFolder, removeC
 import { copySuiteTemplate, importSuiteFolder, removeSuiteFolder, saveSuiteManifest, suitePreview, upgradeSuiteFolder } from "./suites.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { scheduledTaskRunHistory } from "./scheduled-tasks.js";
-import { clearAllSessionStorage, clearExpiredStorage, clearFileCacheEntryStorage, clearFileCacheStorage, clearSelectedSessionStorage, repairFileCacheStorage, storageSessionDetail, storageStats } from "./storage.js";
+import { clearAllCustomAppArtifactStorage, clearAllSessionStorage, clearExpiredCustomAppArtifactStorage, clearExpiredStorage, clearFileCacheEntryStorage, clearFileCacheStorage, clearSelectedSessionStorage, repairFileCacheStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
 import { resourceDirectory, type ResourceLocationKind } from "./resource-locations.js";
 import type { AppConfig } from "./types.js";
@@ -116,7 +116,7 @@ ipcMain.handle("mcp:diagnostics", (_event, probeProtocol?: boolean) => mcpServer
 ipcMain.handle("platform:diagnostics", () => platformConnectorDiagnostics(runtime.snapshot().config));
 ipcMain.handle("capability:audit", () => capabilityAuditReport(runtime.snapshot().config));
 ipcMain.handle("app:info", () => appInfo(app.getVersion()));
-ipcMain.handle("storage:stats", () => storageStats());
+ipcMain.handle("storage:stats", () => storageStats(runtime.snapshot().config));
 ipcMain.handle("storage:session-detail", (_event, id: string) => storageSessionDetail(id));
 ipcMain.handle("skills:preview", (_event, name: string) => skillPreview(name));
 ipcMain.handle("apps:preview", (_event, id: string) => customAppPreview(id));
@@ -131,38 +131,52 @@ ipcMain.handle("storage:clear-expired", async () => {
   const removed = await clearExpiredStorage();
   await runtime.initialize(false);
   await runtime.logger.write("success", "已清理过期会话存储", `${removed} 个会话`);
-  return storageStats();
+  return storageStats(runtime.snapshot().config);
 });
 ipcMain.handle("storage:clear-selected", async (_event, ids: string[]) => {
   await runtime.stop();
   const removed = await clearSelectedSessionStorage(ids);
   await runtime.initialize(false);
   await runtime.logger.write("success", "已清理所选会话存储", `${removed} 个会话`);
-  return storageStats();
+  return storageStats(runtime.snapshot().config);
 });
 ipcMain.handle("storage:clear-all", async () => {
   await runtime.stop();
   await clearAllSessionStorage();
   await runtime.initialize(false);
   await runtime.logger.write("success", "已清理全部会话存储", "机器人配置、飞书授权和用户 Skills 已保留");
-  return storageStats();
+  return storageStats(runtime.snapshot().config);
 });
 ipcMain.handle("storage:clear-cache", async () => {
   await runtime.stop();
   await clearFileCacheStorage();
   await runtime.initialize(false);
   await runtime.logger.write("success", "已清理文件缓存", "会话上下文、机器人配置、飞书授权和用户 Skills 已保留");
-  return storageStats();
+  return storageStats(runtime.snapshot().config);
 });
 ipcMain.handle("storage:clear-cache-entry", async (_event, cacheKey: string) => {
   const removed = await clearFileCacheEntryStorage(String(cacheKey ?? ""));
   await runtime.logger.write(removed ? "success" : "warn", removed ? "已删除文件缓存条目" : "文件缓存条目不存在", String(cacheKey ?? ""));
-  return storageStats();
+  return storageStats(runtime.snapshot().config);
 });
 ipcMain.handle("storage:repair-cache", async () => {
   const report = await repairFileCacheStorage();
   await runtime.logger.write("success", "文件缓存索引校验完成", `移除索引 ${report.removedEntries} 条 / 移除孤立内容 ${report.removedHashes} 个 / 修复字段 ${report.repairedEntries} 处`);
-  return storageStats();
+  return storageStats(runtime.snapshot().config);
+});
+ipcMain.handle("storage:clear-custom-app-artifacts", async () => {
+  await runtime.stop();
+  const removed = await clearAllCustomAppArtifactStorage();
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "已清理自定义应用运行产物", `${removed} 个应用 workspace；配置、授权和应用本体已保留`);
+  return storageStats(runtime.snapshot().config);
+});
+ipcMain.handle("storage:clear-expired-custom-app-artifacts", async () => {
+  await runtime.stop();
+  const removed = await clearExpiredCustomAppArtifactStorage(runtime.snapshot().config);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "已清理过期自定义应用运行产物", `${removed} 个应用 workspace；配置、授权和应用本体已保留`);
+  return storageStats(runtime.snapshot().config);
 });
 ipcMain.handle("runtime:start-bot", async (_event, botId: string) => {
   await runtime.startBot(botId);

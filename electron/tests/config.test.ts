@@ -98,6 +98,31 @@ test("adds an empty owner to older bot configs", () => {
   assert.equal(config.bots[0]?.ownerOpenId, "");
 });
 
+test("normalizes custom app artifact and reply processing config", () => {
+  const config = mergeConfig(base, {
+    runtime: {
+      sandbox: "workspace-write",
+      approvalPolicy: "never",
+      maxConcurrentTasks: 2,
+      maxAgentTurns: 60,
+      customAppArtifacts: {
+        autoCleanup: true,
+        retentionDays: 999
+      },
+      customAppReplyProcessing: {
+        mode: "summarize",
+        prompt: "总结自定义应用返回",
+        maxInputChars: 10
+      }
+    }
+  });
+  assert.equal(config.runtime.customAppArtifacts?.autoCleanup, true);
+  assert.equal(config.runtime.customAppArtifacts?.retentionDays, 90);
+  assert.equal(config.runtime.customAppReplyProcessing?.mode, "summarize");
+  assert.equal(config.runtime.customAppReplyProcessing?.prompt, "总结自定义应用返回");
+  assert.equal(config.runtime.customAppReplyProcessing?.maxInputChars, 1000);
+});
+
 test("disables user-visible work progress for older bot configs", () => {
   const config = mergeConfig(base, {
     bots: [{

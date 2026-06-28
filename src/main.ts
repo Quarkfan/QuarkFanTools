@@ -52,6 +52,8 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   apiKey: { title: "API Key", body: "模型服务认证密钥，仅保存在本机配置文件，不提交到 Git。" },
   maxConcurrentTasks: { title: "最大并发任务数", body: "限制不同会话同时运行的 Agent 数量。同一会话始终串行处理，避免上下文交叉。" },
   maxAgentTurns: { title: "单次 Agent 最大步数", body: "限制一次消息处理中 Agent 可执行的工具调用轮数。复杂检索可适当调高，范围 10-100。" },
+  customAppArtifacts: { title: "自定义应用运行产物", body: "自定义应用执行时写入当前会话 workspace 的截图、临时 JSON 和调试文件。清理只删除运行产物，不删除自定义应用本体、Bot 配置或授权。" },
+  customAppReplyProcessing: { title: "自定义应用回复后处理", body: "默认原样返回自定义应用输出。启用总结后，主进程会用当前模型配置对最终输出做一次无工具文本总结，API Key 不会下放给自定义应用。" },
   multimodalEnabled: { title: "多模态视觉能力", body: "开启后图片消息和 PowerPoint 预览可作为视觉输入交给模型；关闭后只处理文本内容。" },
   uiTheme: { title: "界面主题", body: "支持跟随系统、浅色和深色。跟随系统时会根据 macOS 当前外观自动切换。" },
   marketEnabled: { title: "启用技能市场", body: "启用后可从 HTTPS Git 仓库同步 Skill。同步后的 Skill 默认不授权给任何 Bot。" },
@@ -1240,7 +1242,7 @@ function renderStorage(): string {
       <article><span>总存储占用</span><strong>${formatBytes(storage.totalBytes)}</strong></article>
       <article><span>会话数据</span><strong>${formatBytes(storage.conversationBytes)}</strong></article>
       <article><span>文件缓存</span><strong>${formatBytes(storage.cacheBytes)}</strong></article>
-      <article><span>连续会话</span><strong>${storage.sessionCount}</strong></article>
+      <article><span>自定义应用产物</span><strong>${formatBytes(storage.customAppArtifactBytes)}</strong></article>
     </section>
     <section class="storage-grid">
       <div class="panel storage-card session-selector">
@@ -1265,10 +1267,29 @@ function renderStorage(): string {
         <p>清理应用级内容哈希缓存。缓存用于复用飞书下载的大文件和 Agent 生成文件；清理后不会删除会话记录，但后续需要时会重新下载或生成。</p>
         <div class="form-actions inline-actions"><button class="ghost" id="repair-file-cache" ${storage.cacheBytes === 0 ? "disabled" : ""}>校验缓存索引</button><button class="ghost" id="clear-file-cache" ${storage.cacheBytes === 0 ? "disabled" : ""}>清理文件缓存</button></div>
       </div>
+      <div class="panel storage-card">
+        <div class="panel-title"><span>CUSTOM APP ARTIFACTS</span><small>${storage.customAppArtifactCount} workspaces</small></div>
+        <p>清理自定义应用运行产物，例如微信读取流程生成的窗口截图和临时识别文件。清理不会删除本地自定义应用、内置模板、Bot 配置或能力授权。</p>
+        <div class="form-actions inline-actions"><button class="ghost" id="clear-expired-custom-app-artifacts" ${storage.expiredCustomAppArtifactCount === 0 ? "disabled" : ""}>清理 ${storage.expiredCustomAppArtifactCount} 个过期产物</button><button class="ghost" id="clear-custom-app-artifacts" ${storage.customAppArtifactCount === 0 ? "disabled" : ""}>清理全部应用产物</button></div>
+      </div>
       <div class="panel storage-card danger-zone">
         <div class="panel-title"><span>ALL SESSION DATA</span><small>不可恢复</small></div>
         <p>清理全部会话上下文、workspace 和已下载消息附件。文件缓存需单独清理；机器人配置、飞书授权与用户 Skills 会保留。</p>
         <button class="danger" id="clear-all-storage">清理全部会话数据</button>
+      </div>
+    </section>
+    <section class="panel scheduled-runs-panel">
+      <div class="panel-title"><span>CUSTOM APP ARTIFACT INDEX</span><small>${storage.customAppArtifactCount} app workspaces</small></div>
+      <div class="run-history-list cache-entry-list">
+        ${storage.customAppArtifacts.slice(0, 50).map((entry) => `
+          <article class="run-history-row cache-entry-row">
+            <div class="run-status cache">${entry.expired ? "EXPIRED" : "APP"}</div>
+            <div>
+              <strong>${escapeHtml(entry.appId)}</strong>
+              <p>${escapeHtml(snapshot.config.bots.find((bot) => bot.id === entry.botId)?.name || entry.botId)} / ${escapeHtml(entry.conversationKey)} / ${formatBytes(entry.bytes)} / ${entry.fileCount} files</p>
+              <small>${entry.updatedAt ? `updated ${escapeHtml(new Date(entry.updatedAt).toLocaleString())}` : "unknown update time"}${entry.expired ? " / 已过期" : ""}</small>
+            </div>
+          </article>`).join("") || `<div class="empty">当前没有自定义应用运行产物。微信截图和自定义应用临时文件会在执行后显示在这里。</div>`}
       </div>
     </section>
     <section class="panel scheduled-runs-panel">
@@ -1840,6 +1861,11 @@ function renderConfig(): string {
           <label><span>单次 Agent 最大步数${helpButton("maxAgentTurns")}</span><input name="maxAgentTurns" type="number" min="10" max="100" value="${c.runtime.maxAgentTurns ?? 60}" /><small>复杂 Skill 或飞书资料检索会消耗更多工具调用步数；默认 60。</small></label>
           <label><span>多模态视觉能力${helpButton("multimodalEnabled")}</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
           <label><span>界面主题${helpButton("uiTheme")}</span><select name="uiTheme"><option value="system" ${c.ui.theme === "system" ? "selected" : ""}>跟随系统</option><option value="light" ${c.ui.theme === "light" ? "selected" : ""}>浅色</option><option value="dark" ${c.ui.theme === "dark" ? "selected" : ""}>深色</option></select><small>切换应用界面外观，不影响模型、Bot 或权限行为。</small></label>
+          <label><span>自定义应用产物自动清理${helpButton("customAppArtifacts")}</span><select name="customAppArtifactsAutoCleanup"><option value="false" ${!c.runtime.customAppArtifacts?.autoCleanup ? "selected" : ""}>关闭，仅手动清理</option><option value="true" ${c.runtime.customAppArtifacts?.autoCleanup ? "selected" : ""}>开启，刷新存储统计时清理过期产物</option></select><small>只清理会话 workspace 下 apps/&lt;app-id&gt; 的运行产物，不删除自定义应用本体。</small></label>
+          <label><span>自定义应用产物保留天数${helpButton("customAppArtifacts")}</span><input name="customAppArtifactsRetentionDays" type="number" min="1" max="90" value="${c.runtime.customAppArtifacts?.retentionDays ?? 7}" /><small>用于判断截图、临时文件和调试产物何时过期；范围 1-90 天。</small></label>
+          <label><span>自定义应用回复后处理${helpButton("customAppReplyProcessing")}</span><select name="customAppReplyProcessingMode"><option value="raw" ${c.runtime.customAppReplyProcessing?.mode !== "summarize" ? "selected" : ""}>原样返回</option><option value="summarize" ${c.runtime.customAppReplyProcessing?.mode === "summarize" ? "selected" : ""}>交给大模型总结后返回</option></select><small>总结在主进程内执行，无工具调用；适合把微信读取结果整理成更短回复。</small></label>
+          <label><span>总结输入上限</span><input name="customAppReplyProcessingMaxInputChars" type="number" min="1000" max="60000" value="${c.runtime.customAppReplyProcessing?.maxInputChars ?? 12000}" /><small>原始返回过长时先按字符数截断，再交给模型总结。</small></label>
+          <label class="command-wide"><span>总结提示词</span><textarea name="customAppReplyProcessingPrompt" rows="4">${escapeHtml(c.runtime.customAppReplyProcessing?.prompt ?? "")}</textarea></label>
         </div>
         <div class="panel config-panel">
           <div class="panel-title"><span>SKILL MARKET</span><small>Built-in Git client / HTTPS</small></div>
@@ -2338,6 +2364,18 @@ function bindEvents(): void {
     scheduledRuns = await window.quarkfanTools.scheduledRuns();
     render();
   });
+  document.querySelector<HTMLButtonElement>("#clear-expired-custom-app-artifacts")?.addEventListener("click", async () => {
+    if (!window.confirm("确认清理过期自定义应用运行产物？自定义应用本体、Bot 配置和授权会保留。")) return;
+    storage = await window.quarkfanTools.clearExpiredCustomAppArtifactsStorage();
+    scheduledRuns = await window.quarkfanTools.scheduledRuns();
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#clear-custom-app-artifacts")?.addEventListener("click", async () => {
+    if (!window.confirm("确认清理全部自定义应用运行产物？这会删除微信读取截图等调试文件，但不会删除自定义应用本体。")) return;
+    storage = await window.quarkfanTools.clearCustomAppArtifactsStorage();
+    scheduledRuns = await window.quarkfanTools.scheduledRuns();
+    render();
+  });
   document.querySelectorAll<HTMLButtonElement>(".remove-cache-entry").forEach((button) => {
     button.onclick = async () => {
       const cacheKey = String(button.dataset.cacheKey ?? "");
@@ -2762,6 +2800,15 @@ function bindEvents(): void {
     next.ui.theme = String(form.get("uiTheme") ?? "system") as AppConfig["ui"]["theme"];
     next.runtime.maxConcurrentTasks = Math.max(1, Math.min(20, Number(form.get("maxConcurrentTasks") ?? 2) || 2));
     next.runtime.maxAgentTurns = Math.max(10, Math.min(100, Number(form.get("maxAgentTurns") ?? 60) || 60));
+    next.runtime.customAppArtifacts = {
+      autoCleanup: String(form.get("customAppArtifactsAutoCleanup") ?? "false") === "true",
+      retentionDays: Math.max(1, Math.min(90, Number(form.get("customAppArtifactsRetentionDays") ?? 7) || 7))
+    };
+    next.runtime.customAppReplyProcessing = {
+      mode: String(form.get("customAppReplyProcessingMode") ?? "raw") === "summarize" ? "summarize" : "raw",
+      prompt: String(form.get("customAppReplyProcessingPrompt") ?? "").trim(),
+      maxInputChars: Math.max(1000, Math.min(60000, Number(form.get("customAppReplyProcessingMaxInputChars") ?? 12000) || 12000))
+    };
     next.mcpServers = [...document.querySelectorAll<HTMLInputElement>("[data-mcp-name]")]
       .map((input, index) => {
         const id = document.querySelector<HTMLInputElement>(`[data-mcp-id="${index}"]`)?.value.trim() || "";

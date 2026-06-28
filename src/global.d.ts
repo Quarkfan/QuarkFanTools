@@ -23,6 +23,8 @@ declare global {
       clearFileCacheStorage(): Promise<StorageStats>;
       clearFileCacheEntryStorage(cacheKey: string): Promise<StorageStats>;
       repairFileCacheStorage(): Promise<StorageStats>;
+      clearCustomAppArtifactsStorage(): Promise<StorageStats>;
+      clearExpiredCustomAppArtifactsStorage(): Promise<StorageStats>;
       startBot(botId: string): Promise<RuntimeSnapshot>;
       stopBot(botId: string): Promise<RuntimeSnapshot>;
       saveConfig(config: AppConfig): Promise<RuntimeSnapshot>;
