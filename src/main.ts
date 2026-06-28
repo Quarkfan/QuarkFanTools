@@ -19,7 +19,8 @@ let runHistoryStatusFilter: "all" | ScheduledTaskRunSummary["status"] = "all";
 let cacheBotFilter = "all";
 let cacheSourceFilter = "all";
 let showReleaseNotes = false;
-let marketSource = "all";
+type MarketSource = "all" | "local" | "market" | "builtin" | "unused";
+let marketSource: MarketSource = "all";
 let marketSearch = "";
 let activeCapabilitySection: "overview" | "diagnostics" | "mcp" | "suites" | "apps" | "audit" = "overview";
 let activeConsoleSection: "bots" | "logs" = "bots";
@@ -802,6 +803,7 @@ function renderSkills(): string {
   const localCount = snapshot.skills.filter((skill) => skill.source === "local").length;
   const marketCount = snapshot.skills.filter((skill) => skill.source === "market").length;
   const builtinCount = snapshot.skills.filter((skill) => skill.source === "builtin").length;
+  const visibleSkills = snapshot.skills.filter((skill) => marketSkillMatches(skill));
   return `
     <section class="metrics">
       <article><span>全部 Skills</span><strong>${snapshot.skills.length}</strong></article>
@@ -815,7 +817,7 @@ function renderSkills(): string {
       { id: "market", label: "Git 市场", meta: `${marketCount}` },
       { id: "builtin", label: "应用内置", meta: `${builtinCount}` },
       { id: "unused", label: "未授权", meta: `${snapshot.skills.filter((skill) => !snapshot.config.bots.some((bot) => bot.skillNames.includes(skill.name))).length}` }
-    ], marketSource as "all" | "local" | "market" | "builtin" | "unused", "data-market-source-tab")}
+    ], marketSource, "data-market-source-tab")}
     <section class="panel market-panel">
       <div class="panel-title"><span>LOCAL SKILL MARKET</span><small>${snapshot.skills.length} available</small></div>
       <div class="market-toolbar">
@@ -830,7 +832,7 @@ function renderSkills(): string {
         <button class="ghost" id="market-sync" ${snapshot.config.skillMarket.enabled && snapshot.config.skillMarket.repositoryUrl ? "" : "disabled"}>同步 Git 市场</button>
       </div>
       <div class="market-skill-list">
-        ${snapshot.skills.map((skill) => {
+        ${visibleSkills.map((skill) => {
           const inUseBy = snapshot.config.bots.filter((bot) => bot.skillNames.includes(skill.name)).map((bot) => bot.name).join("、");
           return `
           <article class="market-skill-row" data-preview-skill="${escapeHtml(skill.name)}" data-market-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}" data-market-source="${skill.source}" data-market-unused="${snapshot.config.bots.some((bot) => bot.skillNames.includes(skill.name)) ? "false" : "true"}">
@@ -846,7 +848,7 @@ function renderSkills(): string {
               ${skill.source === "local" ? `<button class="danger remove-local-skill" data-name="${escapeHtml(skill.name)}" ${inUseBy ? "disabled" : ""} title="${inUseBy ? `正在被 ${escapeHtml(inUseBy)} 使用，先取消 Bot 授权后才能删除` : "删除本地 Skill"}">删除</button>` : ""}
             </div>
           </article>`;
-        }).join("") || `<div class="empty">当前没有可用 Skill。</div>`}
+        }).join("") || `<div class="empty">${snapshot.skills.length === 0 ? "当前没有可用 Skill。" : "当前筛选条件下没有 Skill。"}</div>`}
       </div>
     </section>
   `;
@@ -2141,7 +2143,7 @@ function bindEvents(): void {
   });
   document.querySelectorAll<HTMLButtonElement>("[data-market-source-tab]").forEach((button) => {
     button.onclick = () => {
-      marketSource = button.dataset.marketSourceTab ?? "all";
+      marketSource = normalizeMarketSource(button.dataset.marketSourceTab);
       render();
     };
   });
@@ -2303,7 +2305,7 @@ function bindEvents(): void {
     };
   });
   document.querySelector<HTMLSelectElement>("#market-source")?.addEventListener("change", (event) => {
-    marketSource = (event.currentTarget as HTMLSelectElement).value;
+    marketSource = normalizeMarketSource((event.currentTarget as HTMLSelectElement).value);
     filterMarketSkills();
   });
   document.querySelector<HTMLButtonElement>("#market-sync")?.addEventListener("click", async () => {
@@ -3079,6 +3081,18 @@ function filterBotSkills(botId: string): void {
     const authMatches = auth === "all" || (auth === "authorized") === (row.dataset.authorized === "true");
     row.hidden = !authMatches || !String(row.dataset.skillSearch).includes(query);
   });
+}
+
+function normalizeMarketSource(value: string | undefined): MarketSource {
+  return value === "local" || value === "market" || value === "builtin" || value === "unused" ? value : "all";
+}
+
+function marketSkillMatches(skill: RuntimeSnapshot["skills"][number]): boolean {
+  const query = marketSearch.trim().toLowerCase();
+  const sourceMatches = marketSource === "all"
+    || skill.source === marketSource
+    || (marketSource === "unused" && !snapshot.config.bots.some((bot) => bot.skillNames.includes(skill.name)));
+  return sourceMatches && `${skill.name} ${skill.description}`.toLowerCase().includes(query);
 }
 
 function filterMarketSkills(): void {

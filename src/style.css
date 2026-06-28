@@ -61,6 +61,7 @@
 }
 
 * { box-sizing: border-box; }
+*[hidden] { display: none !important; }
 body { margin: 0; min-width: 980px; min-height: 100vh; overflow: hidden; background: radial-gradient(circle at 82% -18%, var(--bg-accent) 0, transparent 36%), var(--bg); }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
