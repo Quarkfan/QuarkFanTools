@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appleScriptActivateWeChat, buildWeChatDraftPlan, isHighRiskDraft, validateDesktopAgentActions } from "../desktop-agent.js";
+import {
+  appleScriptActivateWeChat,
+  buildWeChatDraftPlan,
+  buildWeChatUnreadScanPlan,
+  extractWeChatUnreadCandidates,
+  isHighRiskDraft,
+  validateDesktopAgentActions
+} from "../desktop-agent.js";
 
 test("builds a safe WeChat draft-only desktop action plan", () => {
   const plan = buildWeChatDraftPlan({ contactName: "张三", draftText: "我晚点看一下" });
@@ -14,6 +21,27 @@ test("builds a safe WeChat draft-only desktop action plan", () => {
     "stop-for-user-confirmation"
   ]);
   assert.equal(plan.some((action) => action.type === "send-message"), false);
+});
+
+test("builds a visible unread-first WeChat scan plan", () => {
+  const plan = buildWeChatUnreadScanPlan({ contactHint: "张三", includeDraft: true });
+  assert.deepEqual(plan.map((action) => action.type), [
+    "activate-app",
+    "scan-unread",
+    "capture-window",
+    "stop-for-user-confirmation"
+  ]);
+  assert.equal(plan.some((action) => action.type === "send-message"), false);
+});
+
+test("extracts unread candidates from accessibility text", () => {
+  const candidates = extractWeChatUnreadCandidates([
+    "role: static text name: 张三 value: 2条未读消息",
+    "role: static text name: 李四 value: 明天上午可以吗？"
+  ].join("\n"));
+  assert.equal(candidates[0].reason, "包含未读或新消息标记");
+  assert.match(candidates[0].text, /2条未读消息/);
+  assert.ok(candidates.length >= 2);
 });
 
 test("validates conversation identity before allowing desktop actions", () => {

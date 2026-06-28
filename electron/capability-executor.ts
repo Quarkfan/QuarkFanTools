@@ -111,6 +111,7 @@ export async function executeCapabilityTarget(request: CapabilityExecutionReques
     return previous || `${workflowBinding.capability.name} 执行完成，但没有生成可回复内容。`;
   }
   return (await runCustomApp(
+    request.config,
     request.bot,
     request.binding.customApp,
     request.baseMessage,

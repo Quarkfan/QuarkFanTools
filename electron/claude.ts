@@ -211,6 +211,46 @@ export async function runClaude(
   }
 }
 
+export async function runVisionModel(config: AppConfig, promptText: string, imagePath: string): Promise<string> {
+  if (!config.model.multimodalEnabled) throw new Error("模型多模态视觉能力未启用");
+  if (!config.model.baseUrl || !config.model.model || !config.model.apiKey) throw new Error("模型 Base URL、模型名称或 API Key 未配置完整");
+  const mediaType = imageMediaType(imagePath);
+  if (!mediaType) throw new Error(`不支持的图片格式：${path.extname(imagePath)}`);
+  const env = {
+    ...process.env,
+    CLAUDE_AGENT_SDK_CLIENT_APP: `quarkfantools/${app.getVersion()}`,
+    ANTHROPIC_BASE_URL: config.model.baseUrl,
+    ANTHROPIC_MODEL: config.model.model,
+    ANTHROPIC_AUTH_TOKEN: config.model.apiKey,
+    ANTHROPIC_API_KEY: config.model.apiKey
+  };
+  let result = "";
+  for await (const item of query({
+    prompt: visionPrompt(promptText, imagePath, mediaType),
+    options: {
+      cwd: path.dirname(imagePath),
+      env,
+      model: config.model.model,
+      pathToClaudeCodeExecutable: claudeExecutable(),
+      settingSources: [],
+      tools: [],
+      allowedTools: [],
+      maxTurns: 1,
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "你只做截图内容识别和结构化抽取，不执行任何工具或外部操作。"
+      }
+    }
+  })) {
+    if (item.type === "result") {
+      if (item.subtype !== "success") throw new Error(item.errors.join("\n") || item.subtype);
+      result = item.result;
+    }
+  }
+  return result.trim() || "多模态模型没有返回可识别内容。";
+}
+
 function providerLabel(provider: string): string {
   if (provider === "wecom") return "企业微信";
   if (provider === "dingtalk") return "钉钉";
@@ -279,6 +319,27 @@ async function* buildPrompt(text: string, message: ChatMessage, multimodalEnable
   yield {
     type: "user",
     message: { role: "user", content },
+    parent_tool_use_id: null
+  };
+}
+
+async function* visionPrompt(promptText: string, imagePath: string, mediaType: NonNullable<ReturnType<typeof imageMediaType>>): AsyncIterable<SDKUserMessage> {
+  yield {
+    type: "user",
+    message: {
+      role: "user",
+      content: [
+        { type: "text", text: promptText },
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType,
+            data: (await readFile(imagePath)).toString("base64")
+          }
+        }
+      ]
+    },
     parent_tool_use_id: null
   };
 }

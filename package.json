@@ -1,6 +1,6 @@
 {
   "name": "quarkfantools",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "private": true,
   "description": "Local macOS Feishu skill agent powered by Claude Agent SDK",
   "main": "dist-electron/main.js",
@@ -28,7 +28,7 @@
     "build": "rm -rf dist dist-electron && tsc -p tsconfig.electron.json && cp electron/preload.cjs dist-electron/preload.cjs && vite build",
     "start": "npm run build && electron .",
     "test": "npm run build && node --test dist-electron/tests/*.test.js",
-    "pack:prepare": "bash scripts/prepare-app-icon.sh && bash scripts/prepare-arm64-lark-cli.sh && bash scripts/prepare-arm64-wecom-cli.sh && bash scripts/prepare-arm64-claude.sh",
+    "pack:prepare": "bash scripts/prepare-app-icon.sh && bash scripts/prepare-arm64-lark-cli.sh && bash scripts/prepare-arm64-wecom-cli.sh && bash scripts/prepare-arm64-claude.sh && bash scripts/prepare-arm64-vision-ocr.sh",
     "pack:mac": "npm run pack:mac:arm64",
     "pack:mac:arm64": "npm run build && npm run pack:prepare && electron-builder --mac zip --arm64 --config.directories.output=release/arm64 --config.electronDist=node_modules/electron/dist && bash scripts/create-arm64-dmg.sh"
   },
@@ -61,6 +61,10 @@
       {
         "from": "runtime/claude/${arch}",
         "to": "runtime/claude/${arch}"
+      },
+      {
+        "from": "runtime/vision-ocr/${arch}",
+        "to": "runtime/vision-ocr/${arch}"
       },
       {
         "from": "builtin-skills",

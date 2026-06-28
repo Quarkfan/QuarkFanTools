@@ -2,6 +2,15 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "2.2.2",
+    date: "2026-06-28",
+    highlights: [
+      "微信桌面辅助模板改为未读读取优先，会截取微信当前窗口并通过已配置的多模态模型识别可见未读。",
+      "提供草稿时仍只写入系统剪贴板，用户需要手动打开会话、粘贴和发送。",
+      "该能力仍不读取微信数据库、不调用协议、不 Hook 进程，也不会自动搜索联系人、自动粘贴或自动发送。"
+    ]
+  },
+  {
     version: "2.2.1",
     date: "2026-06-28",
     highlights: [

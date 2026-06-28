@@ -2,6 +2,7 @@ export type DesktopTargetApp = "wechat";
 
 export type DesktopAgentAction =
   | { type: "activate-app"; app: DesktopTargetApp }
+  | { type: "scan-unread"; app: DesktopTargetApp; source: "accessibility"; visibleOnly: boolean }
   | { type: "search-contact"; app: DesktopTargetApp; contactName: string }
   | { type: "capture-window"; app: DesktopTargetApp; reason: string }
   | { type: "verify-conversation"; app: DesktopTargetApp; expectedTitle: string; minConfidence: number }
@@ -13,6 +14,17 @@ export interface WeChatDraftPlanRequest {
   contactName: string;
   draftText: string;
   recentMessageLimit?: number;
+}
+
+export interface WeChatUnreadScanPlanRequest {
+  contactHint?: string;
+  includeDraft?: boolean;
+}
+
+export interface WeChatUnreadCandidate {
+  text: string;
+  score: number;
+  reason: string;
 }
 
 export interface DesktopAgentObservation {
@@ -54,6 +66,40 @@ export function buildWeChatDraftPlan(request: WeChatDraftPlanRequest): DesktopAg
     { type: "capture-window", app: "wechat", reason: "确认输入框中已写入草稿且未发送" },
     { type: "stop-for-user-confirmation", app: "wechat", reason: "PoC 默认只生成草稿，不点击发送或按 Enter" }
   ];
+}
+
+export function buildWeChatUnreadScanPlan(request: WeChatUnreadScanPlanRequest = {}): DesktopAgentAction[] {
+  return [
+    { type: "activate-app", app: "wechat" },
+    { type: "scan-unread", app: "wechat", source: "accessibility", visibleOnly: true },
+    { type: "capture-window", app: "wechat", reason: request.contactHint ? `确认可见未读和联系人 ${request.contactHint}` : "确认微信可见未读列表" },
+    { type: "stop-for-user-confirmation", app: "wechat", reason: request.includeDraft ? "读取未读后只生成草稿，发送前必须由用户确认" : "只读取可见未读，不执行回复动作" }
+  ];
+}
+
+export function extractWeChatUnreadCandidates(snapshotText: string): WeChatUnreadCandidate[] {
+  const lines = snapshotText
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const candidates: WeChatUnreadCandidate[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    const unreadHit = /未读|新消息|条消息|条未读|红点|unread|new message/.test(line) || /\b\d+\b/.test(line) && /badge|AXDescription|AXValue/i.test(line);
+    const messageLike = /text|static text|AXStaticText|AXValue|AXTitle/i.test(line) && line.length >= 4;
+    const score = unreadHit ? 0.95 : messageLike ? 0.45 : 0;
+    if (score <= 0) continue;
+    const normalized = line.slice(0, 300);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    candidates.push({
+      text: normalized,
+      score,
+      reason: unreadHit ? "包含未读或新消息标记" : "微信可见文本候选"
+    });
+  }
+  return candidates.sort((left, right) => right.score - left.score).slice(0, 20);
 }
 
 export function validateDesktopAgentActions(

@@ -2,7 +2,7 @@
 
 QuarkfanTools 是运行在 macOS 上的本地多 IM Skill Agent。安装包内置 Electron、Claude Agent SDK、飞书 CLI、企业微信 CLI，以及 Word、PowerPoint、Excel 基础 Skills；支持多个相互隔离、可独立启停的机器人。当前正式开放的消息平台是飞书，企业微信因官方能力限制暂时封闭入口。
 
-当前版本为 `2.2.1`。应用左下角显示当前版本，点击版本号可查看面向用户的更新记录。产品经理接手请先看 [`docs/PRODUCT_HANDOFF.md`](docs/PRODUCT_HANDOFF.md) 和 [`docs/PRD.md`](docs/PRD.md)；项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，开发变更历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+当前版本为 `2.2.2`。应用左下角显示当前版本，点击版本号可查看面向用户的更新记录。产品经理接手请先看 [`docs/PRODUCT_HANDOFF.md`](docs/PRODUCT_HANDOFF.md) 和 [`docs/PRD.md`](docs/PRD.md)；项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，开发变更历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 核心能力
 

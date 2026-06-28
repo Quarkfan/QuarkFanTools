@@ -6,7 +6,7 @@
 
 QuarkfanTools 是一个自包含的 macOS 多 IM Skill Agent。用户配置兼容 Claude Messages API 的模型和一个或多个机器人；当前正式开放飞书 Provider，应用通过飞书 IM Provider 监听消息，使用 Claude Agent SDK 在机器人隔离的会话 workspace 中匹配和执行获授权 Skills，再通过原消息平台回复。企业微信 Provider 的代码、配置兼容层和 CLI 参考缓存保留，但因官方能力限制，当前 UI 与运行时入口暂时封闭。
 
-当前版本 `2.2.1`。2.0 当前已进入远端 `main` 主线，工作分支为 `codex/2.0.0-stabilize`。当前状态、风险和下一步见 [`../STATUS.md`](../STATUS.md)。
+当前版本 `2.2.2`。2.0 当前已进入远端 `main` 主线，工作分支为 `codex/2.0.0-stabilize`。当前状态、风险和下一步见 [`../STATUS.md`](../STATUS.md)。
 
 1.x 系列分支已封版，后续只作为历史兼容样本，不再作为同步目标。后续发布和验证默认只考虑 arm64 / Apple Silicon；Intel x64 不再作为当前交付目标。接下来优先完成 2.0 需求：真实 IM 端到端、MCP 真实服务验证和发布签名/公证收口。命令机制、定时任务、缓存治理、自定义应用本地生命周期、升级兼容备份、套件/Workflow 首版、MCP HTTP/SSE 占位配置、IM 连接器诊断和场景化使用手册已进入完成态，后续主要按端到端清单验证。
 
