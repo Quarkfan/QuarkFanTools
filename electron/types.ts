@@ -332,6 +332,13 @@ export interface CustomAppSummary {
     network: boolean;
     filesystem: string[];
     requiresOwnerApproval: boolean;
+    desktopAutomation?: {
+      screenCapture: boolean;
+      accessibility: boolean;
+      clipboard: boolean;
+      keyboardInput: boolean;
+      autoSend: boolean;
+    };
   };
   lifecycle?: {
     installedAt?: string;

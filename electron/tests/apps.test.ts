@@ -49,6 +49,50 @@ test("rejects custom apps with unsupported filesystem permissions", async () => 
   }
 });
 
+test("diagnoses desktop automation custom apps and blocks auto-send", async () => {
+  const previousCwd = process.cwd();
+  const root = await mkdtemp(path.join(os.tmpdir(), "qft-app-desktop-test-"));
+  process.chdir(root);
+  try {
+    const source = path.join(root, "source", "wechat-draft");
+    await writeCustomApp(source, "0.1.0", ["workspace"], "wechat-draft");
+    const manifestPath = path.join(source, "app.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    manifest.permissions = {
+      network: false,
+      filesystem: ["workspace"],
+      requiresOwnerApproval: true,
+      desktopAutomation: {
+        screenCapture: true,
+        accessibility: true,
+        clipboard: true,
+        keyboardInput: true,
+        autoSend: false
+      }
+    };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await importCustomAppFolder(source);
+    const app = (await discoverCustomApps()).find((item) => item.id === "wechat-draft");
+    assert.equal(app?.permissions.desktopAutomation?.screenCapture, true);
+    assert.match(app?.diagnostics?.map((item) => item.message).join("\n") ?? "", /桌面自动化/);
+
+    manifest.permissions = {
+      ...(manifest.permissions as Record<string, unknown>),
+      desktopAutomation: {
+        screenCapture: true,
+        accessibility: true,
+        clipboard: true,
+        keyboardInput: true,
+        autoSend: true
+      }
+    };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await assert.rejects(() => upgradeCustomAppFolder(source), /autoSend/);
+  } finally {
+    process.chdir(previousCwd);
+  }
+});
+
 test("discovers built-in custom app templates before local apps", async () => {
   const previousCwd = process.cwd();
   const root = await mkdtemp(path.join(os.tmpdir(), "qft-app-builtin-test-"));
