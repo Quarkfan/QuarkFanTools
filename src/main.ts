@@ -836,6 +836,9 @@ function renderCustomAppManifestEditor(value: CustomAppPreview): string {
   const app = value.app;
   const canEdit = app.source === "local";
   const suggestedId = `${app.id.replace(/^template[._-]/, "")}-local`;
+  const processing = snapshot.config.runtime.customAppReplyProcessingByApp?.[app.id]
+    ?? snapshot.config.runtime.customAppReplyProcessing
+    ?? { mode: "raw", prompt: "", maxInputChars: 12000 };
   return `<div class="manifest-editor-content" data-editor-kind="app" data-editor-id="${escapeHtml(app.id)}">
     <section class="manifest-guide">
       <div>
@@ -852,6 +855,18 @@ function renderCustomAppManifestEditor(value: CustomAppPreview): string {
           <li><code>capabilities</code> 决定是否进入 Agent、命令、定时或 UI 入口；建设中的入口不会进入命令/定时目标。</li>
           <li><code>permissions.requiresOwnerApproval</code> 建议用于 executable、网络访问或高风险应用。</li>
         </ol>
+      </div>
+    </section>
+    <section class="manifest-editor-panel">
+      <div class="skill-access-heading"><span>回复后处理${helpButton("customAppReplyProcessing")}</span><small>${processing.mode === "summarize" ? "summarize" : "raw"}</small></div>
+      <small>这里的配置只作用于当前自定义应用。启用总结时，主进程使用当前模型配置做一次无工具文本总结，不把 API Key 下放给应用脚本。</small>
+      <div class="command-binding-row">
+        <label><span>处理方式</span><select id="custom-app-processing-mode"><option value="raw" ${processing.mode !== "summarize" ? "selected" : ""}>原样返回</option><option value="summarize" ${processing.mode === "summarize" ? "selected" : ""}>交给大模型总结后返回</option></select></label>
+        <label><span>总结输入上限</span><input id="custom-app-processing-max-input" type="number" min="1000" max="60000" value="${processing.maxInputChars ?? 12000}" /></label>
+        <label class="command-wide"><span>总结提示词</span><textarea id="custom-app-processing-prompt" rows="3">${escapeHtml(processing.prompt ?? "")}</textarea></label>
+      </div>
+      <div class="form-actions inline-actions">
+        <button type="button" class="primary" id="save-custom-app-processing">保存回复处理配置</button>
       </div>
     </section>
     <section class="manifest-editor-panel">
@@ -1900,23 +1915,10 @@ function renderConfig(): string {
           <label><span>界面主题${helpButton("uiTheme")}</span><select name="uiTheme"><option value="system" ${c.ui.theme === "system" ? "selected" : ""}>跟随系统</option><option value="light" ${c.ui.theme === "light" ? "selected" : ""}>浅色</option><option value="dark" ${c.ui.theme === "dark" ? "selected" : ""}>深色</option></select><small>切换应用界面外观，不影响模型、Bot 或权限行为。</small></label>
         </div>
         <div class="panel config-panel">
-          <div class="panel-title"><span>CUSTOM APPS</span><small>Artifacts / reply processing</small></div>
+          <div class="panel-title"><span>CUSTOM APPS</span><small>Artifacts</small></div>
           <label><span>自定义应用产物自动清理${helpButton("customAppArtifacts")}</span><select name="customAppArtifactsAutoCleanup"><option value="false" ${!c.runtime.customAppArtifacts?.autoCleanup ? "selected" : ""}>关闭，仅手动清理</option><option value="true" ${c.runtime.customAppArtifacts?.autoCleanup ? "selected" : ""}>开启，刷新存储统计时清理过期产物</option></select><small>只清理会话 workspace 下 apps/&lt;app-id&gt; 的运行产物，不删除自定义应用本体。</small></label>
           <label><span>自定义应用产物保留天数${helpButton("customAppArtifacts")}</span><input name="customAppArtifactsRetentionDays" type="number" min="1" max="90" value="${c.runtime.customAppArtifacts?.retentionDays ?? 7}" /><small>用于判断截图、临时文件和调试产物何时过期；范围 1-90 天。</small></label>
-          <div class="command-binding-list config-inline-list">
-            ${snapshot.customApps.map((customApp, index) => {
-              const processing = c.runtime.customAppReplyProcessingByApp?.[customApp.id] ?? c.runtime.customAppReplyProcessing ?? { mode: "raw", prompt: "", maxInputChars: 12000 };
-              return `
-                <div class="command-binding-row">
-                  <input type="hidden" data-custom-app-processing-id="${index}" value="${escapeHtml(customApp.id)}" />
-                  <label><span>自定义应用</span><input value="${escapeHtml(customApp.name)}" disabled /></label>
-                  <label><span>App ID</span><input value="${escapeHtml(customApp.id)}" disabled /></label>
-                  <label><span>回复后处理${helpButton("customAppReplyProcessing")}</span><select data-custom-app-processing-mode="${index}"><option value="raw" ${processing.mode !== "summarize" ? "selected" : ""}>原样返回</option><option value="summarize" ${processing.mode === "summarize" ? "selected" : ""}>交给大模型总结后返回</option></select></label>
-                  <label><span>总结输入上限</span><input data-custom-app-processing-max-input="${index}" type="number" min="1000" max="60000" value="${processing.maxInputChars ?? 12000}" /></label>
-                  <label class="command-wide"><span>总结提示词</span><textarea data-custom-app-processing-prompt="${index}" rows="3">${escapeHtml(processing.prompt ?? "")}</textarea></label>
-                </div>`;
-            }).join("") || `<div class="empty">当前没有自定义应用。导入或复制模板后可在这里分别配置每个应用的回复处理策略。</div>`}
-          </div>
+          <small>每个自定义应用的回复后处理在“能力 > 自定义应用”点击该应用后的弹窗中配置。</small>
         </div>
         <div class="panel config-panel">
           <div class="panel-title"><span>SKILL MARKET</span><small>Built-in Git client / HTTPS</small></div>
@@ -2077,6 +2079,32 @@ function bindEvents(): void {
     const manifestText = document.querySelector<HTMLTextAreaElement>("#manifest-editor-text")?.value ?? "";
     try {
       snapshot = await window.quarkfanTools.saveCustomAppManifest(id, manifestText);
+      const value = await window.quarkfanTools.customAppPreview(id);
+      preview = { title: `${value.app.name} / ${value.app.id}`, html: renderCustomAppManifestEditor(value) };
+    } catch (error) {
+      window.alert(String(error instanceof Error ? error.message : error));
+    }
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#save-custom-app-processing")?.addEventListener("click", async () => {
+    const id = document.querySelector<HTMLElement>("[data-editor-kind='app']")?.dataset.editorId ?? "";
+    if (!/^[a-z0-9._-]+$/.test(id)) return;
+    const next = structuredClone(snapshot.config);
+    next.runtime.customAppReplyProcessing = {
+      mode: "raw",
+      prompt: "",
+      maxInputChars: 12000
+    };
+    next.runtime.customAppReplyProcessingByApp = {
+      ...(next.runtime.customAppReplyProcessingByApp ?? {}),
+      [id]: {
+        mode: document.querySelector<HTMLSelectElement>("#custom-app-processing-mode")?.value === "summarize" ? "summarize" : "raw",
+        prompt: document.querySelector<HTMLTextAreaElement>("#custom-app-processing-prompt")?.value.trim() || "",
+        maxInputChars: Math.max(1000, Math.min(60000, Number(document.querySelector<HTMLInputElement>("#custom-app-processing-max-input")?.value ?? 12000) || 12000))
+      }
+    };
+    try {
+      snapshot = await window.quarkfanTools.saveConfig(next);
       const value = await window.quarkfanTools.customAppPreview(id);
       preview = { title: `${value.app.name} / ${value.app.id}`, html: renderCustomAppManifestEditor(value) };
     } catch (error) {
@@ -2884,15 +2912,6 @@ function bindEvents(): void {
       prompt: "",
       maxInputChars: 12000
     };
-    next.runtime.customAppReplyProcessingByApp = Object.fromEntries([...document.querySelectorAll<HTMLInputElement>("[data-custom-app-processing-id]")]
-      .map((input, index) => {
-        const id = input.value.trim();
-        const mode = document.querySelector<HTMLSelectElement>(`[data-custom-app-processing-mode="${index}"]`)?.value === "summarize" ? "summarize" : "raw";
-        const prompt = document.querySelector<HTMLTextAreaElement>(`[data-custom-app-processing-prompt="${index}"]`)?.value.trim() || "";
-        const maxInputChars = Math.max(1000, Math.min(60000, Number(document.querySelector<HTMLInputElement>(`[data-custom-app-processing-max-input="${index}"]`)?.value ?? 12000) || 12000));
-        return [id, { mode, prompt, maxInputChars }];
-      })
-      .filter(([id]) => /^[a-z0-9._-]+$/.test(String(id))));
     next.mcpServers = [...document.querySelectorAll<HTMLInputElement>("[data-mcp-name]")]
       .map((input, index) => {
         const id = document.querySelector<HTMLInputElement>(`[data-mcp-id="${index}"]`)?.value.trim() || "";
