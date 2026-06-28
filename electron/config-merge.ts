@@ -169,7 +169,7 @@ function normalizeDeliveryRoutes(routes: unknown): BotConfig["deliveryRoutes"] {
     const id = String(value.id ?? "").trim();
     const provider = normalizeProvider(value.provider);
     const chatId = String(value.chatId ?? "").trim();
-    if (!id || !chatId || seen.has(id)) continue;
+    if (!id || seen.has(id)) continue;
     seen.add(id);
     result.push({
       id,

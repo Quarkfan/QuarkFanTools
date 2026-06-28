@@ -2711,7 +2711,6 @@ function bindEvents(): void {
     bot.deliveryRoutes = [...document.querySelectorAll<HTMLInputElement>("[data-route-chat-id]")]
       .map((input, index) => {
         const chatId = input.value.trim();
-        if (!chatId) return null;
         const route = (bot.deliveryRoutes ?? [])[index];
         return {
           id: route?.id ?? crypto.randomUUID(),
@@ -2721,8 +2720,7 @@ function bindEvents(): void {
           mode: "copy-final-reply" as const,
           name: document.querySelector<HTMLInputElement>(`[data-route-name="${index}"]`)?.value.trim() || undefined
         };
-      })
-      .filter((route): route is NonNullable<BotConfig["deliveryRoutes"]>[number] => Boolean(route));
+      });
     const selectedMcps = new Set([...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-mcp="${editingBotId}"]:checked`)].map((input) => input.value));
     const selectedApps = new Set([...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-app="${editingBotId}"]:checked`)].map((input) => input.value));
     const selectedSuites = new Set([...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-suite="${editingBotId}"]:checked`)].map((input) => input.value));

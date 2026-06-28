@@ -624,9 +624,14 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         await this.logger.write("warn", "结果转发跳过", `缺少 ${route.provider} connector: ${route.name || route.id}`, bot.id);
         continue;
       }
+      const chatId = route.chatId.trim();
+      if (!chatId) {
+        await this.logger.write("warn", "结果转发跳过", `${route.name || route.id} 未配置 chat_id`, bot.id);
+        continue;
+      }
       try {
-        await imProvider(route.provider).sendTextToChat(routeBot, route.chatId, text);
-        await this.logger.write("info", "结果已转发", `${route.provider} / ${route.chatId}`, bot.id);
+        await imProvider(route.provider).sendTextToChat(routeBot, chatId, text);
+        await this.logger.write("info", "结果已转发", `${route.provider} / ${chatId}`, bot.id);
       } catch (error) {
         await this.logger.write("warn", "结果转发失败", `${route.provider} / ${String(error)}`, bot.id);
       }
@@ -645,14 +650,19 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         await this.logger.write("warn", "自定义应用投递跳过", `${source} / ${route.provider} connector 不可用: ${route.name || route.id}`, bot.id);
         continue;
       }
+      const chatId = route.chatId.trim();
+      if (!chatId) {
+        await this.logger.write("warn", "自定义应用投递跳过", `${source} / ${route.name || route.id} 未配置 chat_id`, bot.id);
+        continue;
+      }
       const text = String(delivery.text ?? "").trim();
       if (!text) {
         await this.logger.write("warn", "自定义应用投递跳过", `${source} / ${route.name || route.id} 内容为空`, bot.id);
         continue;
       }
       try {
-        await imProvider(route.provider).sendTextToChat(routeBot, route.chatId, text);
-        await this.logger.write("info", "自定义应用投递完成", `${source} / ${route.name || route.id} / ${route.provider} / ${route.chatId}`, bot.id);
+        await imProvider(route.provider).sendTextToChat(routeBot, chatId, text);
+        await this.logger.write("info", "自定义应用投递完成", `${source} / ${route.name || route.id} / ${route.provider} / ${chatId}`, bot.id);
       } catch (error) {
         await this.logger.write("warn", "自定义应用投递失败", `${source} / ${route.name || route.id} / ${String(error)}`, bot.id);
       }

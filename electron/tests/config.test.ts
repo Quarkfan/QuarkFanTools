@@ -299,6 +299,37 @@ test("normalizes im provider, connectors, and delivery routes", () => {
   assert.equal(bot.deliveryRoutes?.[0]?.chatId, "oc_1");
 });
 
+test("keeps draft delivery routes without chat id", () => {
+  const config = mergeConfig(base, {
+    bots: [{
+      id: "bot-1",
+      name: "Bot 1",
+      enabled: true,
+      cliPath: "",
+      profile: "default",
+      appId: "cli_1",
+      appSecret: "secret",
+      receiveIdentity: "bot",
+      replyIdentity: "bot",
+      eventTypes: [],
+      deliveryRoutes: [{
+        id: "draft-route",
+        enabled: true,
+        provider: "lark",
+        chatId: "",
+        mode: "copy-final-reply",
+        name: "待填写"
+      }],
+      skillNames: [],
+      pendingReaction: "OnIt",
+      ownerOpenId: ""
+    }]
+  });
+
+  assert.equal(config.bots[0]?.deliveryRoutes?.[0]?.id, "draft-route");
+  assert.equal(config.bots[0]?.deliveryRoutes?.[0]?.chatId, "");
+});
+
 test("adds a bounded max agent turns runtime config", () => {
   assert.equal(mergeConfig(base, {}).runtime.maxAgentTurns, 60);
   assert.equal(mergeConfig(base, { runtime: { ...base.runtime, maxAgentTurns: 500 } }).runtime.maxAgentTurns, 100);
