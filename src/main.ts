@@ -22,6 +22,8 @@ let showReleaseNotes = false;
 let marketSource = "all";
 let marketSearch = "";
 let activeCapabilitySection: "overview" | "diagnostics" | "mcp" | "suites" | "apps" | "audit" = "overview";
+type BotEditorSection = "basic" | "platform" | "delivery" | "skills" | "capabilities" | "commands" | "scheduled";
+let activeBotEditorSection: BotEditorSection = "basic";
 let preview: { title: string; body?: string; html?: string } | null = null;
 let editingBotId = "";
 let editingScheduledTaskId = "";
@@ -209,7 +211,7 @@ function render(): void {
   bindEvents();
   if (editingBotId) {
     requestAnimationFrame(() => {
-      const body = document.querySelector<HTMLElement>("#bot-editor-form");
+      const body = document.querySelector<HTMLElement>(".bot-editor-body");
       if (body) body.scrollTop = botEditorScrollTop;
     });
   }
@@ -1482,6 +1484,16 @@ function renderBotEditor(): string {
   const editingTask = bot.scheduledTasks?.find((task) => task.id === editingScheduledTaskId);
   const commandConflicts = commandBindingConflicts(bot);
   const provider = bot.provider ?? "lark";
+  const botEditorSections: Array<{ id: BotEditorSection; label: string; detail: string; count?: string }> = [
+    { id: "basic", label: "基础", detail: "名称、启用、提示" },
+    { id: "platform", label: "平台", detail: "飞书身份、OAuth、连接器" },
+    { id: "delivery", label: "投递", detail: "结果路由", count: String(bot.deliveryRoutes?.length ?? 0) },
+    { id: "skills", label: "Skills", detail: "Skill 授权", count: String(bot.skillNames.length) },
+    { id: "capabilities", label: "能力", detail: "MCP、应用、套件", count: String(bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0) },
+    { id: "commands", label: "命令", detail: "/xxx 映射", count: String(bot.commandBindings?.length ?? 0) },
+    { id: "scheduled", label: "定时", detail: "任务与投递", count: String(bot.scheduledTasks?.length ?? 0) }
+  ];
+  const sectionClass = (section: BotEditorSection) => `bot-editor-section ${activeBotEditorSection === section ? "active" : ""}`;
   return `
     <div class="modal-backdrop" id="bot-editor-backdrop">
       <section class="release-modal bot-editor-modal" role="dialog" aria-modal="true" data-provider="${escapeHtml(provider)}">
@@ -1492,11 +1504,29 @@ function renderBotEditor(): string {
           </div>
           <button type="button" class="ghost" id="close-bot-editor">关闭</button>
         </div>
-        <form id="bot-editor-form" class="bot-editor-body">
+        <form id="bot-editor-form" class="bot-editor-shell" data-active-section="${activeBotEditorSection}">
+          <aside class="bot-editor-nav" aria-label="Bot 配置分组">
+            ${botEditorSections.map((section) => `
+              <button type="button" class="${activeBotEditorSection === section.id ? "active" : ""}" data-bot-editor-section="${section.id}">
+                <span>${escapeHtml(section.label)}</span>
+                ${section.count ? `<strong>${escapeHtml(section.count)}</strong>` : ""}
+                <small>${escapeHtml(section.detail)}</small>
+              </button>`).join("")}
+          </aside>
+          <div class="bot-editor-body">
+      <section class="${sectionClass("basic")}" data-bot-editor-panel="basic">
       <div class="field-row">
         ${botField(bot, "机器人名称", "name", "text", "botName")}
         <label><span>启用${helpButton("botEnabled")}</span><select data-edit-bot-field="enabled"><option value="true" ${bot.enabled ? "selected" : ""}>启用</option><option value="false" ${!bot.enabled ? "selected" : ""}>停用</option></select></label>
       </div>
+      <div class="field-row">
+        ${botField(bot, "长任务提示秒数", "longTaskNoticeSeconds", "number")}
+        ${botField(bot, "长任务提示文案", "longTaskNoticeText", "text")}
+      </div>
+      <label><span>向用户展示工作过程${helpButton("showProgress")}</span><select data-edit-bot-field="showProgress"><option value="false" ${!bot.showProgress ? "selected" : ""}>关闭</option><option value="true" ${bot.showProgress ? "selected" : ""}>开启</option></select><small>展示工具调用和检索进度，不泄露模型私有推理。</small></label>
+      <small class="bot-note">Agent 无法解决或需要人工授权时，会私聊此用户发送卡片。Owner 必须在飞书中有该应用的使用权限。</small>
+      </section>
+      <section class="${sectionClass("platform")}" data-bot-editor-panel="platform">
       <label><span>消息平台${helpButton("imProvider")}</span><select data-edit-bot-field="provider" id="bot-provider-select">
         <option value="lark" ${provider === "lark" ? "selected" : ""}>飞书</option>
         <option value="wecom" ${bot.provider === "wecom" ? "selected" : ""} disabled>企业微信（暂时封闭）</option>
@@ -1549,10 +1579,6 @@ function renderBotEditor(): string {
         ${botField(bot, "Owner 飞书 open_id", "ownerOpenId")}
         ${botTextarea(bot, "用户态 OAuth 额外权限", "oauthScopes", "默认会申请 search:docs:read；这里可填写额外 scope，支持空格、逗号或换行分隔，例如 drive:export:readonly、docs:document:export。修改后需重新点击用户态 OAuth。")}
       </div>
-      <div class="field-row">
-        ${botField(bot, "长任务提示秒数", "longTaskNoticeSeconds", "number")}
-        ${botField(bot, "长任务提示文案", "longTaskNoticeText", "text")}
-      </div>
       <div class="skill-access provider-section provider-not-lark">
         <div class="skill-access-heading"><span>飞书知识连接器${helpButton("larkConnector")}</span><small>${bot.connectors?.lark?.enabled ? "enabled" : "disabled"}</small></div>
         <small>当消息入口是企业微信时，仍可通过这里配置飞书知识库、云盘文件和云文档导出能力。留空则只使用主消息平台。</small>
@@ -1567,12 +1593,15 @@ function renderBotEditor(): string {
         </div>
         <label><span>飞书 OAuth 额外权限</span><textarea id="lark-connector-oauth-scopes" rows="2">${escapeHtml((bot.connectors?.lark?.oauthScopes ?? []).join("\n"))}</textarea></label>
       </div>
+      </section>
+      <section class="${sectionClass("delivery")}" data-bot-editor-panel="delivery">
       <div class="skill-access">
         <div class="skill-access-heading"><span>结果投递路由${helpButton("deliveryRoutes")}</span><small>${bot.deliveryRoutes?.filter((route) => route.enabled).length ?? 0} enabled</small></div>
         <small>主回复仍回到原消息；这里可把最终结果复制投递到另一个平台 chat，例如企业微信收到问题后同步发送到飞书群。</small>
         <div class="command-binding-list">
           ${(bot.deliveryRoutes ?? []).map((route, index) => `
             <div class="command-binding-row">
+              <label><span>路由 ID</span><input data-route-id="${index}" value="${escapeHtml(route.id)}" placeholder="例如 wechat-unread-summary" /></label>
               <label><span>名称</span><input data-route-name="${index}" value="${escapeHtml(route.name ?? "")}" placeholder="例如 同步到飞书群" /></label>
               <label><span>平台</span><select data-route-provider="${index}">
                 <option value="lark" ${route.provider === "lark" ? "selected" : ""}>飞书</option>
@@ -1585,8 +1614,8 @@ function renderBotEditor(): string {
         </div>
         <div class="form-actions inline-actions"><button type="button" class="ghost add-delivery-route" data-id="${bot.id}">新增投递路由</button></div>
       </div>
-      <label><span>向用户展示工作过程${helpButton("showProgress")}</span><select data-edit-bot-field="showProgress"><option value="false" ${!bot.showProgress ? "selected" : ""}>关闭</option><option value="true" ${bot.showProgress ? "selected" : ""}>开启</option></select><small>展示工具调用和检索进度，不泄露模型私有推理。</small></label>
-      <small class="bot-note">Agent 无法解决或需要人工授权时，会私聊此用户发送卡片。Owner 必须在飞书中有该应用的使用权限。</small>
+      </section>
+      <section class="${sectionClass("skills")}" data-bot-editor-panel="skills">
       <div class="skill-access">
         <div class="skill-access-heading"><span>允许访问的 Skills${helpButton("skillAccess")}</span><small>${bot.skillNames.length} / ${snapshot.skills.length} 已授权</small></div>
         <small>新增 Skill 默认不授权。可搜索后批量授权或取消当前筛选结果。</small>
@@ -1600,6 +1629,8 @@ function renderBotEditor(): string {
           ${snapshot.skills.map((skill) => `<label class="check" data-bot-skill-row="${bot.id}" data-authorized="${bot.skillNames.includes(skill.name)}" data-skill-search="${escapeHtml(`${skill.name} ${skill.description}`.toLowerCase())}"><input type="checkbox" data-edit-bot-skill="${bot.id}" value="${escapeHtml(skill.name)}" ${bot.skillNames.includes(skill.name) ? "checked" : ""}/><span><strong>${escapeHtml(skill.name)}</strong><small>${escapeHtml(skill.description || skillSourceLabel(skill.source))} / ${skillSourceLabel(skill.source)}</small></span></label>`).join("") || `<small>请先导入 Skill 文件夹</small>`}
         </div>
       </div>
+      </section>
+      <section class="${sectionClass("capabilities")}" data-bot-editor-panel="capabilities">
       <div class="skill-access">
         <div class="skill-access-heading"><span>允许访问的 MCP${helpButton("mcpAccess")}</span><small>${bot.capabilityRefs?.filter((ref) => ref.kind === "mcp" && ref.enabled).length ?? 0} / ${snapshot.config.mcpServers.length} 已授权</small></div>
         <small>MCP 服务是全局配置、本机运行的工具能力。勾选后可通过策略决定是否开放给 Agent、命令和定时任务。</small>
@@ -1621,6 +1652,8 @@ function renderBotEditor(): string {
           ${snapshot.suites.map((suite) => `<label class="check capability-policy-row"><input type="checkbox" data-edit-bot-suite="${bot.id}" value="${escapeHtml(suite.id)}" ${botHasCapability(bot, "suite", suite.id) ? "checked" : ""}/><span><strong>${escapeHtml(suite.name)}</strong><small>${escapeHtml(suite.id)} / ${escapeHtml(suite.description || "套件")}</small></span>${capabilityPolicySelect(bot, "suite", suite.id)}</label>`).join("") || `<small>请先在“能力”页导入套件。</small>`}
         </div>
       </div>
+      </section>
+      <section class="${sectionClass("commands")}" data-bot-editor-panel="commands">
       <div class="skill-access">
         <div class="skill-access-heading"><span>命令映射${helpButton("commandBindings")}</span><small>${bot.commandBindings?.filter((binding) => binding.enabled).length ?? 0} enabled</small></div>
         <small>命令会在收到 <code>/xxx 参数</code> 时优先执行，<code>/help</code> 会列出当前 Bot 可用命令。Skill 命令会只把请求交给目标 Skill；MCP 命令会聚焦调用目标 MCP；Suite 命令会在目标套件上下文中执行；Workflow 命令会按工作流 prompt 或 steps 执行；App 命令会直接执行目标自定义应用。</small>
@@ -1641,6 +1674,8 @@ function renderBotEditor(): string {
         </div>
         <div class="form-actions inline-actions"><button type="button" class="ghost add-command-binding" data-id="${bot.id}" ${commandTargetOptions(bot).length === 0 ? "disabled" : ""}>新增命令</button></div>
       </div>
+      </section>
+      <section class="${sectionClass("scheduled")}" data-bot-editor-panel="scheduled">
       <div class="skill-access">
         <div class="skill-access-heading"><span>定时任务${helpButton("scheduledTasks")}</span><small>${bot.scheduledTasks?.filter((task) => task.enabled).length ?? 0} enabled</small></div>
         <small>定时任务会在应用运行期间由本机调度执行，并把结果投递到指定 chat_id。支持 interval、daily、weekly 和 cron；命令目标要求先配置并启用对应命令；能力目标支持 Skill、MCP、套件、Workflow 和声明 scheduledCallable 的自定义应用。</small>
@@ -1649,11 +1684,13 @@ function renderBotEditor(): string {
         </div>
         <div class="form-actions inline-actions"><button type="button" class="ghost add-scheduled-task" data-id="${bot.id}">新增定时任务</button></div>
       </div>
+      </section>
       <div class="form-actions bot-editor-actions">
-        <button type="button" class="ghost oauth-bot provider-section provider-lark" data-id="${bot.id}">用户态 OAuth</button>
+        <button type="button" class="ghost oauth-bot provider-action provider-lark" data-id="${bot.id}">用户态 OAuth</button>
         <button type="button" class="danger remove-bot" data-id="${bot.id}">删除</button>
         <button type="submit" class="primary">保存 Bot 配置</button>
       </div>
+          </div>
         </form>
       </section>
       ${editingTask ? renderScheduledTaskEditor(bot, editingTask, (bot.scheduledTasks ?? []).findIndex((task) => task.id === editingTask.id)) : ""}
@@ -2157,7 +2194,10 @@ function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-edit-bot]").forEach((button) => {
     button.onclick = () => {
       const nextEditingBotId = String(button.dataset.editBot);
-      if (nextEditingBotId !== editingBotId) botEditorScrollTop = 0;
+      if (nextEditingBotId !== editingBotId) {
+        botEditorScrollTop = 0;
+        activeBotEditorSection = "basic";
+      }
       editingBotId = nextEditingBotId;
       render();
     };
@@ -2426,6 +2466,7 @@ function bindEvents(): void {
     snapshot = await window.quarkfanTools.saveConfig(next);
     editingBotId = bot.id;
     botEditorScrollTop = 0;
+    activeBotEditorSection = "basic";
     render();
   });
   document.querySelector<HTMLButtonElement>("#close-bot-editor")?.addEventListener("click", () => {
@@ -2436,8 +2477,23 @@ function bindEvents(): void {
   document.querySelector<HTMLElement>("#bot-editor-backdrop")?.addEventListener("click", (event) => {
     if (event.target === event.currentTarget) { editingBotId = ""; botEditorScrollTop = 0; render(); }
   });
-  document.querySelector<HTMLElement>("#bot-editor-form")?.addEventListener("scroll", (event) => {
+  document.querySelector<HTMLElement>(".bot-editor-body")?.addEventListener("scroll", (event) => {
     botEditorScrollTop = (event.currentTarget as HTMLElement).scrollTop;
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-bot-editor-section]").forEach((button) => {
+    button.onclick = () => {
+      activeBotEditorSection = button.dataset.botEditorSection as BotEditorSection;
+      botEditorScrollTop = 0;
+      const shell = document.querySelector<HTMLElement>("#bot-editor-form");
+      shell?.setAttribute("data-active-section", activeBotEditorSection);
+      document.querySelectorAll<HTMLButtonElement>("[data-bot-editor-section]").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      document.querySelectorAll<HTMLElement>("[data-bot-editor-panel]").forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.botEditorPanel === activeBotEditorSection);
+      });
+      document.querySelector<HTMLElement>(".bot-editor-body")?.scrollTo({ top: 0 });
+    };
   });
   document.querySelector<HTMLSelectElement>("#bot-provider-select")?.addEventListener("change", (event) => {
     const modal = document.querySelector<HTMLElement>(".bot-editor-modal");
@@ -2503,6 +2559,7 @@ function bindEvents(): void {
       }];
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
+      activeBotEditorSection = "commands";
       render();
     };
   });
@@ -2514,6 +2571,7 @@ function bindEvents(): void {
       bot.commandBindings = (bot.commandBindings ?? []).filter((_, index) => index !== Number(button.dataset.index));
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
+      activeBotEditorSection = "commands";
       render();
     };
   });
@@ -2522,16 +2580,18 @@ function bindEvents(): void {
       const next = structuredClone(snapshot.config);
       const bot = next.bots.find((item) => item.id === button.dataset.id);
       if (!bot) return;
+      const nextIndex = (bot.deliveryRoutes?.length ?? 0) + 1;
       bot.deliveryRoutes = [...(bot.deliveryRoutes ?? []), {
-        id: crypto.randomUUID(),
+        id: `delivery-route-${nextIndex}`,
         enabled: true,
         provider: "lark",
         chatId: "",
         mode: "copy-final-reply",
-        name: `投递路由 ${(bot.deliveryRoutes?.length ?? 0) + 1}`
+        name: `投递路由 ${nextIndex}`
       }];
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
+      activeBotEditorSection = "delivery";
       render();
     };
   });
@@ -2543,6 +2603,7 @@ function bindEvents(): void {
       bot.deliveryRoutes = (bot.deliveryRoutes ?? []).filter((_, index) => index !== Number(button.dataset.index));
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
+      activeBotEditorSection = "delivery";
       render();
     };
   });
@@ -2565,6 +2626,7 @@ function bindEvents(): void {
       }];
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = bot.id;
+      activeBotEditorSection = "scheduled";
       editingScheduledTaskId = bot.scheduledTasks.at(-1)?.id ?? "";
       render();
     };
@@ -2712,8 +2774,9 @@ function bindEvents(): void {
       .map((input, index) => {
         const chatId = input.value.trim();
         const route = (bot.deliveryRoutes ?? [])[index];
+        const routeId = document.querySelector<HTMLInputElement>(`[data-route-id="${index}"]`)?.value.trim() || route?.id || crypto.randomUUID();
         return {
-          id: route?.id ?? crypto.randomUUID(),
+          id: routeId,
           enabled: (document.querySelector<HTMLSelectElement>(`[data-route-enabled="${index}"]`)?.value ?? "true") === "true",
           provider: (document.querySelector<HTMLSelectElement>(`[data-route-provider="${index}"]`)?.value ?? "lark") as NonNullable<BotConfig["deliveryRoutes"]>[number]["provider"],
           chatId,
