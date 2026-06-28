@@ -1,0 +1,26 @@
+{
+  "id": "template.approval-summary",
+  "name": "审批摘要模板",
+  "description": "演示高风险 executable 应用应开启 Owner 审批，并只在受控输入下执行。",
+  "version": "1.0.0",
+  "entry": {
+    "type": "executable",
+    "command": "/bin/echo",
+    "args": [
+      "审批摘要模板：请把这里替换为你自己的受控可执行程序。"
+    ]
+  },
+  "capabilities": {
+    "agentCallable": false,
+    "commandCallable": true,
+    "scheduledCallable": false,
+    "hasUi": false
+  },
+  "permissions": {
+    "network": false,
+    "filesystem": [
+      "readonly"
+    ],
+    "requiresOwnerApproval": true
+  }
+}

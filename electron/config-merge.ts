@@ -201,24 +201,33 @@ function normalizeCommandBindings(bindings: unknown): BotConfig["commandBindings
     const capability = target?.capability && typeof target.capability === "object" ? target.capability as Record<string, unknown> : null;
     const kind = String(capability?.kind ?? "");
     const id = String(capability?.id ?? "").trim();
-    if (!/^[a-z0-9_-]+$/.test(name) || !["skill", "app", "suite", "workflow"].includes(kind) || !id) continue;
+    if (!/^[a-z0-9_-]+$/.test(name) || ["new", "continue", "owner", "help"].includes(name) || !["skill", "mcp", "app", "suite", "workflow"].includes(kind) || !id) continue;
     if (seen.has(name)) continue;
     seen.add(name);
     result.push({
       name,
+      aliases: normalizeCommandAliases(value.aliases, name),
       enabled: value.enabled !== false,
       description: typeof value.description === "string" && value.description.trim() ? value.description.trim() : undefined,
       promptTemplate: typeof value.promptTemplate === "string" && value.promptTemplate.trim() ? value.promptTemplate.trim() : undefined,
       target: {
         type: "capability",
         capability: {
-          kind: kind as "skill" | "app" | "suite" | "workflow",
+          kind: kind as "skill" | "mcp" | "app" | "suite" | "workflow",
           id
         }
       }
     });
   }
   return result;
+}
+
+function normalizeCommandAliases(aliases: unknown, commandName: string): string[] {
+  if (!Array.isArray(aliases)) return [];
+  return [...new Set(aliases
+    .flatMap((alias) => String(alias).split(/[\s,]+/))
+    .map((alias) => alias.trim().toLowerCase().replace(/^\//, ""))
+    .filter((alias) => /^[a-z0-9_-]+$/.test(alias) && alias !== commandName && !["new", "continue", "owner", "help"].includes(alias)))];
 }
 
 function normalizeScheduledTasks(tasks: unknown, botId: string): BotConfig["scheduledTasks"] {
@@ -259,13 +268,7 @@ function normalizeScheduledTasks(tasks: unknown, botId: string): BotConfig["sche
         type: "chat",
         chatId,
         replyIdentity: delivery?.replyIdentity === "user" ? "user" : delivery?.replyIdentity === "bot" ? "bot" : undefined
-      },
-      lastRunAt: typeof value.lastRunAt === "string" && value.lastRunAt.trim() ? value.lastRunAt.trim() : undefined,
-      nextRunAt: typeof value.nextRunAt === "string" && value.nextRunAt.trim() ? value.nextRunAt.trim() : undefined,
-      lastStatus: ["success", "failed", "skipped"].includes(String(value.lastStatus ?? "")) ? String(value.lastStatus) as NonNullable<BotConfig["scheduledTasks"]>[number]["lastStatus"] : undefined,
-      failureCount: Math.max(0, Math.floor(Number(value.failureCount ?? 0) || 0)) || undefined,
-      retryAt: typeof value.retryAt === "string" && value.retryAt.trim() ? value.retryAt.trim() : undefined,
-      pausedReason: typeof value.pausedReason === "string" && value.pausedReason.trim() ? value.pausedReason.trim() : undefined
+      }
     };
     const retry = value.retry && typeof value.retry === "object" ? value.retry as Record<string, unknown> : null;
     if (retry) {
@@ -303,9 +306,9 @@ function normalizeScheduledTasks(tasks: unknown, botId: string): BotConfig["sche
       const capability = target?.capability && typeof target.capability === "object" ? target.capability as Record<string, unknown> : null;
       const kind = String(capability?.kind ?? "");
       const capabilityId = String(capability?.id ?? "").trim();
-      if (!["skill", "app", "suite", "workflow"].includes(kind) || !capabilityId) continue;
+      if (!["skill", "mcp", "app", "suite", "workflow"].includes(kind) || !capabilityId) continue;
       normalized.target.capability = {
-        kind: kind as "skill" | "app" | "suite" | "workflow",
+        kind: kind as "skill" | "mcp" | "app" | "suite" | "workflow",
         id: capabilityId
       };
     }
@@ -353,13 +356,15 @@ function normalizeMcpServers(servers: unknown): AppConfig["mcpServers"] {
     const id = String(value.id ?? "").trim();
     const name = String(value.name ?? "").trim();
     const command = String(value.command ?? "").trim();
-    if (!id || !name || !command || seen.has(id)) continue;
+    const transport = ["stdio", "http", "sse"].includes(String(value.transport ?? "")) ? String(value.transport) as "stdio" | "http" | "sse" : "stdio";
+    const url = typeof value.url === "string" && value.url.trim() ? value.url.trim() : undefined;
+    if (!id || !name || seen.has(id)) continue;
     seen.add(id);
-    result.push({
+    const normalized: AppConfig["mcpServers"][number] = {
       id,
       name,
       enabled: value.enabled !== false,
-      transport: "stdio",
+      transport,
       command,
       args: Array.isArray(value.args) ? value.args.map((item) => String(item).trim()).filter(Boolean) : [],
       env: Array.isArray(value.env)
@@ -377,7 +382,9 @@ function normalizeMcpServers(servers: unknown): AppConfig["mcpServers"] {
       description: typeof value.description === "string" && value.description.trim() ? value.description.trim() : undefined,
       timeoutMs: Number(value.timeoutMs) >= 1000 ? Number(value.timeoutMs) : undefined,
       alwaysLoad: value.alwaysLoad === true
-    });
+    };
+    if (transport !== "stdio") normalized.url = url;
+    result.push(normalized);
   }
   return result;
 }

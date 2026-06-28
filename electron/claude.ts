@@ -77,7 +77,7 @@ export async function runClaude(
   const larkBot = larkConnectorBot(bot);
   const skillList = skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
   const allowedMcpRefs = (bot.capabilityRefs ?? []).filter((ref) => ref.enabled && ref.kind === "mcp" && ref.policy?.allowAgentUse !== false);
-  const allowedMcpServers = config.mcpServers.filter((server) => server.enabled && allowedMcpRefs.some((ref) => ref.id === server.id));
+  const allowedMcpServers = config.mcpServers.filter((server) => server.enabled && server.transport === "stdio" && server.command.trim() && allowedMcpRefs.some((ref) => ref.id === server.id));
   const mcpList = allowedMcpServers.map((server) => `- ${server.name}: ${server.description || server.command}`).join("\n");
   const suiteList = suiteContexts.map(({ suite, authorizedSkills, authorizedApps, authorizedMcpServers }) => [
     `- ${suite.name}: ${suite.description || "未提供描述"}`,

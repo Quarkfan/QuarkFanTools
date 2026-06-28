@@ -337,10 +337,12 @@ test("normalizes bot command bindings and drops invalid entries", () => {
       eventTypes: ["im.message.receive_v1"],
       skillNames: [],
       commandBindings: [
-        { name: "ppt", enabled: true, target: { type: "capability", capability: { kind: "skill", id: "pptx" } } },
+        { name: "ppt", aliases: ["deck", "/slides", "new", "deck"], enabled: true, target: { type: "capability", capability: { kind: "skill", id: "pptx" } } },
         { name: "ppt", enabled: true, target: { type: "capability", capability: { kind: "app", id: "daily-report" } } },
+        { name: "quality", enabled: true, target: { type: "capability", capability: { kind: "mcp", id: "quality-db" } } },
         { name: "qa", enabled: true, target: { type: "capability", capability: { kind: "suite", id: "manufacturing-qa" } } },
         { name: "rca", enabled: true, target: { type: "capability", capability: { kind: "workflow", id: "manufacturing-qa/root-cause-analysis" } } },
+        { name: "help", enabled: true, target: { type: "capability", capability: { kind: "skill", id: "pptx" } } },
         { name: "bad name", enabled: true, target: { type: "capability", capability: { kind: "skill", id: "pptx" } } }
       ],
       pendingReaction: "OnIt",
@@ -350,13 +352,23 @@ test("normalizes bot command bindings and drops invalid entries", () => {
   assert.deepEqual(config.bots[0]?.commandBindings, [
     {
       name: "ppt",
+      aliases: ["deck", "slides"],
       enabled: true,
       description: undefined,
       promptTemplate: undefined,
       target: { type: "capability", capability: { kind: "skill", id: "pptx" } }
     },
     {
+      name: "quality",
+      aliases: [],
+      enabled: true,
+      description: undefined,
+      promptTemplate: undefined,
+      target: { type: "capability", capability: { kind: "mcp", id: "quality-db" } }
+    },
+    {
       name: "qa",
+      aliases: [],
       enabled: true,
       description: undefined,
       promptTemplate: undefined,
@@ -364,6 +376,7 @@ test("normalizes bot command bindings and drops invalid entries", () => {
     },
     {
       name: "rca",
+      aliases: [],
       enabled: true,
       description: undefined,
       promptTemplate: undefined,
@@ -424,6 +437,15 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
           delivery: { type: "chat", chatId: "oc_789" }
         },
         {
+          id: "task-mcp",
+          botId: "bot-1",
+          enabled: true,
+          name: "MCP 巡检",
+          schedule: { type: "daily", timezone: "Asia/Shanghai", timeOfDay: "10:00" },
+          target: { type: "capability", capability: { kind: "mcp", id: "quality-db" }, prompt: "检查质量数据" },
+          delivery: { type: "chat", chatId: "oc_mcp" }
+        },
+        {
           id: "task-5",
           botId: "bot-1",
           enabled: true,
@@ -458,13 +480,7 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       name: "日报",
       schedule: { type: "daily", timezone: "Asia/Shanghai", timeOfDay: "09:30" },
       target: { type: "command", commandName: "report", prompt: "生成日报" },
-      delivery: { type: "chat", chatId: "oc_123", replyIdentity: undefined },
-      lastRunAt: undefined,
-      nextRunAt: undefined,
-      lastStatus: undefined,
-      failureCount: undefined,
-      retryAt: undefined,
-      pausedReason: undefined
+      delivery: { type: "chat", chatId: "oc_123", replyIdentity: undefined }
     },
     {
       id: "task-3",
@@ -473,13 +489,7 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       name: "套件任务",
       schedule: { type: "interval", timezone: "Asia/Shanghai", everyMinutes: 30 },
       target: { type: "capability", capability: { kind: "suite", id: "manufacturing-qa" }, prompt: "按套件流程执行" },
-      delivery: { type: "chat", chatId: "oc_456", replyIdentity: undefined },
-      lastRunAt: undefined,
-      nextRunAt: undefined,
-      lastStatus: undefined,
-      failureCount: undefined,
-      retryAt: undefined,
-      pausedReason: undefined
+      delivery: { type: "chat", chatId: "oc_456", replyIdentity: undefined }
     },
     {
       id: "task-4",
@@ -488,13 +498,16 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       name: "工作流任务",
       schedule: { type: "daily", timezone: "Asia/Shanghai", timeOfDay: "11:00" },
       target: { type: "capability", capability: { kind: "workflow", id: "manufacturing-qa/root-cause-analysis" }, prompt: "分析当日异常" },
-      delivery: { type: "chat", chatId: "oc_789", replyIdentity: undefined },
-      lastRunAt: undefined,
-      nextRunAt: undefined,
-      lastStatus: undefined,
-      failureCount: undefined,
-      retryAt: undefined,
-      pausedReason: undefined
+      delivery: { type: "chat", chatId: "oc_789", replyIdentity: undefined }
+    },
+    {
+      id: "task-mcp",
+      botId: "bot-1",
+      enabled: true,
+      name: "MCP 巡检",
+      schedule: { type: "daily", timezone: "Asia/Shanghai", timeOfDay: "10:00" },
+      target: { type: "capability", capability: { kind: "mcp", id: "quality-db" }, prompt: "检查质量数据" },
+      delivery: { type: "chat", chatId: "oc_mcp", replyIdentity: undefined }
     },
     {
       id: "task-5",
@@ -504,13 +517,7 @@ test("normalizes scheduled tasks and drops invalid entries", () => {
       schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "15 9 * * 1-5" },
       target: { type: "agent", prompt: "执行工作日巡检" },
       delivery: { type: "chat", chatId: "oc_999", replyIdentity: undefined },
-      retry: { maxRetries: 3, delayMinutes: 15 },
-      lastRunAt: undefined,
-      nextRunAt: undefined,
-      lastStatus: undefined,
-      failureCount: 2,
-      retryAt: "2026-06-16T02:15:00.000Z",
-      pausedReason: "等待人工处理"
+      retry: { maxRetries: 3, delayMinutes: 15 }
     }
   ]);
 });
@@ -553,4 +560,51 @@ test("normalizes MCP server config entries", () => {
     timeoutMs: 5000,
     alwaysLoad: true
   }]);
+});
+
+test("normalizes HTTP MCP server config entries as placeholders", () => {
+  const config = mergeConfig(base, {
+    mcpServers: [{
+      id: "remote-mcp",
+      name: "Remote MCP",
+      enabled: true,
+      transport: "http",
+      url: " https://example.com/mcp ",
+      command: "",
+      args: ["ignored"],
+      env: []
+    }]
+  });
+
+  assert.equal(config.mcpServers[0]?.transport, "http");
+  assert.equal(config.mcpServers[0]?.url, "https://example.com/mcp");
+  assert.equal(config.mcpServers[0]?.command, "");
+});
+
+test("keeps incomplete MCP server drafts for UI diagnostics", () => {
+  const config = mergeConfig(base, {
+    mcpServers: [{
+      id: "draft-mcp",
+      name: "Draft MCP",
+      enabled: true,
+      transport: "stdio",
+      command: "",
+      args: [],
+      env: []
+    }, {
+      id: "draft-http",
+      name: "Draft HTTP",
+      enabled: true,
+      transport: "http",
+      command: "",
+      args: [],
+      env: []
+    }]
+  });
+
+  assert.equal(config.mcpServers.length, 2);
+  assert.equal(config.mcpServers[0]?.id, "draft-mcp");
+  assert.equal(config.mcpServers[0]?.command, "");
+  assert.equal(config.mcpServers[1]?.id, "draft-http");
+  assert.equal(config.mcpServers[1]?.url, undefined);
 });

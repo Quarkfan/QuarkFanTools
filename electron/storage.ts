@@ -2,8 +2,8 @@ import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { workspaceSessionId } from "./conversation.js";
 import { stateRoot, workspaceRoot } from "./paths.js";
-import { fileCacheEntries, removeFileCacheEntry } from "./file-cache.js";
-import type { SessionTranscriptTurn, StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
+import { expireStaleFileCacheEntries, fileCacheEntries, removeFileCacheEntry, repairFileCacheIndex } from "./file-cache.js";
+import type { FileCacheRepairReport, SessionTranscriptTurn, StorageSession, StorageSessionDetail, StorageStats } from "./types.js";
 
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 
@@ -15,6 +15,7 @@ interface SessionRecord {
 }
 
 export async function storageStats(): Promise<StorageStats> {
+  await expireStaleFileCacheEntries();
   const bots = await botIds();
   let sessionCount = 0;
   let expiredSessionCount = 0;
@@ -141,6 +142,10 @@ export async function clearFileCacheStorage(): Promise<void> {
 
 export async function clearFileCacheEntryStorage(cacheKey: string): Promise<boolean> {
   return removeFileCacheEntry(cacheKey);
+}
+
+export async function repairFileCacheStorage(): Promise<FileCacheRepairReport> {
+  return repairFileCacheIndex();
 }
 
 async function botIds(): Promise<string[]> {

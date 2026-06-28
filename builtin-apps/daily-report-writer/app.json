@@ -1,0 +1,26 @@
+{
+  "id": "template.daily-report-writer",
+  "name": "日报生成器模板",
+  "description": "演示 node 自定义应用如何接收命令或定时任务输入并返回结构化日报。",
+  "version": "1.0.0",
+  "entry": {
+    "type": "node",
+    "command": "node",
+    "args": [
+      "index.js"
+    ]
+  },
+  "capabilities": {
+    "agentCallable": false,
+    "commandCallable": true,
+    "scheduledCallable": true,
+    "hasUi": false
+  },
+  "permissions": {
+    "network": false,
+    "filesystem": [
+      "workspace"
+    ],
+    "requiresOwnerApproval": false
+  }
+}

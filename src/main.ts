@@ -1,6 +1,6 @@
 import "./style.css";
 import logoUrl from "../logo.png";
-import type { AppConfig, AppInfo, BotConfig, CustomAppPreview, LogEntry, McpServerDiagnostic, RuntimeSnapshot, ScheduledTask, ScheduledTaskRunSummary, SkillPreview, StorageSessionDetail, StorageStats, SuitePreview } from "../electron/types";
+import type { AppConfig, AppInfo, BotConfig, CapabilityAuditReport, CapabilityAuditSummary, CustomAppPreview, LogEntry, McpServerDiagnostic, PlatformConnectorDiagnostic, RuntimeSnapshot, ScheduledTask, ScheduledTaskRunSummary, SkillPreview, StorageSessionDetail, StorageStats, SuitePreview, WeComChatListResult } from "../electron/types";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let snapshot: RuntimeSnapshot;
@@ -8,8 +8,10 @@ let logs: LogEntry[] = [];
 let storage: StorageStats;
 let scheduledRuns: ScheduledTaskRunSummary[] = [];
 let mcpDiagnostics: McpServerDiagnostic[] = [];
+let platformDiagnostics: PlatformConnectorDiagnostic[] = [];
+let capabilityAudit: CapabilityAuditReport = { summaries: [], recent: [] };
 let applicationInfo: AppInfo;
-let activeView: "console" | "skills" | "capabilities" | "config" | "storage" = "console";
+let activeView: "console" | "skills" | "capabilities" | "scheduled" | "config" | "storage" = "console";
 let selectedBotId = "";
 let logLevel: "all" | LogEntry["level"] = "all";
 let runHistoryBotFilter = "all";
@@ -19,12 +21,18 @@ let cacheSourceFilter = "all";
 let showReleaseNotes = false;
 let marketSource = "all";
 let marketSearch = "";
+let activeCapabilitySection: "overview" | "diagnostics" | "mcp" | "suites" | "apps" | "audit" = "overview";
 let preview: { title: string; body?: string; html?: string } | null = null;
 let editingBotId = "";
 let editingScheduledTaskId = "";
+let botEditorScrollTop = 0;
 let helpTopicKey = "";
 let showManual = false;
+let sessionDetailForPreview: StorageSessionDetail | null = null;
+let wecomInitStatus: Record<string, { level: LogEntry["level"]; text: string }> = {};
+let wecomChatListStatus: Record<string, { level: LogEntry["level"]; text: string; result?: WeComChatListResult }> = {};
 const systemThemeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+const WECOM_PROVIDER_CLOSED_MESSAGE = "企业微信 Provider 因官方能力限制暂时封闭。当前版本不会启动企业微信监听、轮询、聊天列表获取或结果投递；已填写配置会保留，后续方案明确后再开放。";
 
 function appendLocalLog(level: LogEntry["level"], message: string, detail?: string, botId?: string): void {
   logs = [...logs.slice(-499), {
@@ -50,14 +58,20 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   marketRepositoryUrl: { title: "HTTPS Git 仓库", body: "Skill 市场仓库地址。当前只支持 HTTPS，不依赖系统 Git 或 SSH Key。" },
   marketBranch: { title: "分支", body: "同步 Skill 市场时使用的 Git 分支。" },
   marketToken: { title: "访问 Token", body: "私有 Skill 市场仓库的访问 Token。仅保存在本机配置中。" },
-  mcpServers: { title: "MCP 服务", body: "MCP 服务是全局配置的本机工具能力，当前支持 stdio 方式。只有被 Bot 显式授权后，Claude Agent 才能在该 Bot 上下文中使用它。" },
+  mcpServers: { title: "MCP 服务", body: "MCP 服务是全局配置的工具能力。当前 stdio 可进入 Agent、命令和定时任务；HTTP/SSE 只保存 URL 并显示占位诊断，真实运行时接入后再开放。" },
+  mcpTransport: { title: "MCP 传输方式", body: "stdio 会启动本机命令并可做协议探测；HTTP/SSE 当前先作为配置占位保存和诊断，运行时注入与真实探测待端到端验证后接入。" },
+  mcpCommand: { title: "MCP 启动命令", body: "stdio MCP 的本机启动命令，例如 node、python 或绝对路径。应用会在 cwd 和 PATH 中解析命令，找不到时在能力页显示 ERROR。" },
+  mcpUrl: { title: "HTTP/SSE URL", body: "HTTP 或 SSE MCP 的服务地址。当前版本只保存配置并提示占位诊断，不会注入 Claude Agent SDK。" },
+  mcpEnv: { title: "MCP 环境变量", body: "每行一个 NAME=value。空值会被诊断为风险；不要把无关 Token 放进不需要它的 MCP。" },
   botList: { title: "Bot 列表", body: "每个 Bot 拥有独立 IM CLI 状态、Claude home、会话 workspace 和 Skill 授权。点击行可编辑详细配置。" },
   botName: { title: "机器人名称", body: "界面和日志中展示的名称，不影响飞书开放平台配置。" },
   botEnabled: { title: "启用", body: "停用后该 Bot 不会启动监听，也不会作为可运行机器人计入配置检查。" },
-  imProvider: { title: "消息平台", body: "控制该 Bot 从哪个 IM 平台接收消息并默认回复。飞书知识库、文件和跨平台投递通过连接器与投递路由单独配置，不必和消息入口相同。" },
-  wecomEventCommand: { title: "企业微信事件桥命令", body: "官方 wecom-cli 是调用型工具，不提供飞书式事件长连接。企业微信 Bot 启动监听时会运行这里配置的本地命令，并从 stdout 逐行读取规范化 NDJSON 消息事件。建议填写本地脚本路径，不要把 Token 写入命令文本。" },
-  appId: { title: "App / Corp ID", body: "当前消息平台的应用 ID。飞书填写 App ID，企业微信填写 Corp ID。" },
-  appSecret: { title: "App / Corp Secret", body: "当前消息平台的应用密钥，仅保存在本机配置中。" },
+  imProvider: { title: "消息平台", body: "控制该 Bot 从哪个 IM 平台接收消息并默认回复。当前可用飞书；企业微信因官方能力限制暂时封闭，钉钉是建设中预留项，二者都不能启动监听。飞书知识库、文件和跨平台投递通过连接器与投递路由单独配置。" },
+  wecomEventCommand: { title: "企业微信事件桥命令", body: "企业微信 Provider 当前暂时封闭，此配置只保留历史值，不会启动监听。后续如重新开放，会优先采用稳定的官方回调或明确可维护的事件桥方案。" },
+  wecomPollChat: { title: "企业微信轮询会话", body: "企业微信轮询能力当前暂时封闭。已填写的 Chat ID 会保留，但当前版本不会调用 get_message 拉取消息。" },
+  wecomPollWindow: { title: "企业微信轮询窗口", body: "企业微信轮询能力当前暂时封闭。该窗口配置只保留历史值，当前版本不会触发轮询。" },
+  appId: { title: "App / Bot ID", body: "当前消息平台的应用或机器人 ID。飞书填写 App ID；企业微信填写智能机器人 Bot ID，不是企业 Corp ID。" },
+  appSecret: { title: "App / Bot Secret", body: "当前消息平台的应用或机器人密钥。企业微信填写智能机器人 Bot Secret，仅保存在本机配置中。" },
   receiveIdentity: { title: "接收身份", body: "飞书事件监听使用的身份。一般使用 Bot；只有明确需要用户态事件时再切换。" },
   replyIdentity: { title: "回复身份", body: "机器人回复消息、表情和文件时使用的身份。Bot 态通常更稳定。" },
   pendingReaction: { title: "处理中表情", body: "收到消息后添加到原消息上的反应名称，任务结束后会移除，用于替代“正在查询”文本。" },
@@ -67,13 +81,14 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   oauthScopes: { title: "用户态 OAuth 额外权限", body: "默认会申请 search:docs:read。这里填写额外 scope 后，保存并重新点击用户态 OAuth 才会生效；飞书开放平台也必须先开通对应权限。" },
   larkConnector: { title: "飞书知识连接器", body: "当消息入口不是飞书时，仍可配置飞书连接器用于查找飞书文档、云盘文件、云 PPT 和向飞书群投递结果。未配置时微信 Bot 不会获得飞书资料能力。" },
   deliveryRoutes: { title: "结果投递路由", body: "最终回复先回到原消息平台；投递路由会把同一份最终结果复制发送到配置的目标平台 chat。跨平台投递需要对应 connector 可用。" },
+  capabilityPolicy: { title: "能力运行策略", body: "控制已授权能力能否被 Agent 自主使用、命令调用、定时任务调用，或是否需要 Owner 审批。授权和运行策略是两层边界：勾选只表示可见，策略决定怎么用。" },
   showProgress: { title: "向用户展示工作过程", body: "开启后向用户展示工具调用、检索和重试等可观察进度，不展示模型隐藏推理或敏感参数。" },
   skillAccess: { title: "允许访问的 Skills", body: "Bot 只能看到明确勾选的 Skills。新增或导入的 Skill 默认不授权，避免能力范围意外扩大。" },
   mcpAccess: { title: "允许访问的 MCP", body: "MCP 服务是全局定义、Bot 局部授权的工具能力。未授权的 MCP 不会进入当前 Bot 的 Claude Agent 上下文。" },
-  customAppAccess: { title: "允许访问的自定义应用", body: "自定义应用通过 app.json 导入，并作为 Bot 可治理能力授权。导入不等于授权；只有勾选后，后续命令或定时任务才能调用。" },
+  customAppAccess: { title: "允许访问的自定义应用", body: "自定义应用通过 app.json 导入，并作为 Bot 可治理能力授权。导入不等于授权；只有勾选后，后续命令或定时任务才能调用。当前 node 和受控 executable 可执行；webview、mcp-adapter、workflow 入口会显示建设中，不进入命令或定时目标。" },
   suiteAccess: { title: "允许访问的套件", body: "套件用于面向角色或行业组合 Skills、自定义应用、MCP 和工作流说明。当前支持导入、预览、Bot 挂载授权，并可作为命令目标向 Agent 注入套件上下文。" },
-  commandBindings: { title: "命令映射", body: "将 /xxx 映射到某个 Skill、套件、Workflow 或自定义应用。保留命令 /new、/continue、/owner 不能占用；命令名建议使用小写字母、数字、短横线或下划线。" },
-  scheduledTasks: { title: "定时任务", body: "定时任务属于单个 Bot，当前支持 interval、daily、weekly 和 cron 四种计划类型，目标可选 agent、command 或 capability，并把结果投递到指定 chat_id。cron 使用 5 段表达式：分钟 小时 日 月 周，例如 15 9 * * 1-5 表示工作日 09:15。可配置失败重试；超过上限后任务会自动停用并显示暂停原因。" }
+  commandBindings: { title: "命令映射", body: "将 /xxx 映射到某个 Skill、套件、Workflow 或自定义应用。保留命令 /new、/continue、/owner、/help 不能占用；命令名和别名建议使用小写字母、数字、短横线或下划线。" },
+  scheduledTasks: { title: "定时任务", body: "定时任务属于单个 Bot，当前支持 interval、daily、weekly 和 cron 四种计划类型，目标可选 agent、command 或 capability，并把结果投递到指定 chat_id。cron 使用 5 段表达式：分钟 小时 日 月 周，例如 15 9 * * 1-5 表示工作日 09:15。可配置失败重试；超过上限后任务会暂停自动排期并显示暂停原因。" }
 };
 
 function closeReleaseNotes(): void {
@@ -108,15 +123,18 @@ function configured(config: AppConfig): boolean {
 }
 
 function botCanStart(bot: BotConfig): boolean {
-  return Boolean(
-    bot.enabled &&
-    (bot.provider ?? "lark") !== "dingtalk" &&
-    bot.appId &&
-    bot.appSecret &&
-    snapshot.config.model.baseUrl &&
-    snapshot.config.model.model &&
-    snapshot.config.model.apiKey
-  );
+  return botStartBlockReason(bot) === "";
+}
+
+function botStartBlockReason(bot: BotConfig): string {
+  if (!bot.enabled) return "Bot 已停用";
+  if ((bot.provider ?? "lark") === "dingtalk") return "钉钉 Provider 建设中，当前不能启动监听";
+  if (!bot.appId.trim()) return (bot.provider ?? "lark") === "wecom" ? "未配置企业微信 Bot ID" : "未配置 App ID";
+  if (!bot.appSecret.trim()) return (bot.provider ?? "lark") === "wecom" ? "未配置企业微信 Bot Secret" : "未配置 App Secret";
+  if (!snapshot.config.model.baseUrl) return "未配置 Claude Base URL";
+  if (!snapshot.config.model.model) return "未配置模型名称";
+  if (!snapshot.config.model.apiKey) return "未配置 API Key";
+  return "";
 }
 
 function statusDot(ok: boolean): string {
@@ -148,7 +166,7 @@ function render(): void {
       <button type="button" class="brand brand-button" id="show-manual" title="打开使用手册">
         <span class="brand-lockup">
           <img class="brand-logo" src="${logoUrl}" alt="QuarkfanTools logo" />
-          <span class="brand-wordmark">QUARK<span>FAN</span>TOOLS</span>
+          <span class="brand-wordmark"><span class="brand-line">QUARK<span class="brand-accent">FAN</span></span><span class="brand-line">TOOLS</span></span>
         </span>
       </button>
       <div class="rail-label">LOCAL SKILL AGENT</div>
@@ -156,6 +174,7 @@ function render(): void {
         <button class="${activeView === "console" ? "active" : ""}" data-view="console">运行台</button>
         <button class="${activeView === "skills" ? "active" : ""}" data-view="skills">技能市场</button>
         <button class="${activeView === "capabilities" ? "active" : ""}" data-view="capabilities">能力</button>
+        <button class="${activeView === "scheduled" ? "active" : ""}" data-view="scheduled">定时任务</button>
         <button class="${activeView === "config" ? "active" : ""}" data-view="config">配置</button>
         <button class="${activeView === "storage" ? "active" : ""}" data-view="storage">存储管理</button>
       </nav>
@@ -169,7 +188,7 @@ function render(): void {
       <header>
         <div>
           <p class="eyebrow">MACOS / FEISHU / CLAUDE</p>
-          <h1>${activeView === "console" ? "运行控制台" : activeView === "skills" ? "本地技能市场" : activeView === "capabilities" ? "Bot 能力治理" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
+          <h1>${activeView === "console" ? "运行控制台" : activeView === "skills" ? "本地技能市场" : activeView === "capabilities" ? "Bot 能力治理" : activeView === "scheduled" ? "定时任务中心" : activeView === "config" ? "机器人与模型配置" : "会话存储管理"}</h1>
         </div>
         <div class="actions">
           ${activeView === "skills" ? `<button class="ghost" id="import-skill">导入 Skill</button>` : ""}
@@ -177,7 +196,7 @@ function render(): void {
         </div>
       </header>
       ${!isConfigured ? `<div class="notice">至少配置一个启用的 IM 机器人，并填写 Claude 兼容模型连接信息。</div>` : ""}
-      ${activeView === "console" ? renderConsole() : activeView === "skills" ? renderSkills() : activeView === "capabilities" ? renderCapabilities() : activeView === "config" ? renderConfig() : renderStorage()}
+      ${activeView === "console" ? renderConsole() : activeView === "skills" ? renderSkills() : activeView === "capabilities" ? renderCapabilities() : activeView === "scheduled" ? renderScheduledCenter() : activeView === "config" ? renderConfig() : renderStorage()}
     </main>
     ${showReleaseNotes ? renderReleaseNotes() : ""}
     ${preview ? renderPreview() : ""}
@@ -186,14 +205,47 @@ function render(): void {
     ${showManual ? renderManual() : ""}
   `;
   bindEvents();
+  if (editingBotId) {
+    requestAnimationFrame(() => {
+      const body = document.querySelector<HTMLElement>("#bot-editor-form");
+      if (body) body.scrollTop = botEditorScrollTop;
+    });
+  }
 }
 
 function skillSourceLabel(source: RuntimeSnapshot["skills"][number]["source"]): string {
   return source === "local" ? "本地导入" : source === "market" ? "Git 市场" : "应用内置";
 }
 
+function capabilitySourceLabel(source: "local" | "builtin"): string {
+  return source === "builtin" ? "内置模板" : "本地导入";
+}
+
+function imProviderLabel(provider: BotConfig["provider"]): string {
+  if (provider === "wecom") return "企业微信";
+  if (provider === "dingtalk") return "钉钉（建设中）";
+  return "飞书";
+}
+
 function botHasCapability(bot: BotConfig, kind: string, id: string): boolean {
   return Boolean(bot.capabilityRefs?.some((ref) => ref.kind === kind && ref.id === id && ref.enabled));
+}
+
+function botCapabilityPolicy(bot: BotConfig, kind: string, id: string): NonNullable<BotConfig["capabilityRefs"]>[number]["policy"] | undefined {
+  return bot.capabilityRefs?.find((ref) => ref.kind === kind && ref.id === id && ref.enabled)?.policy;
+}
+
+function customAppExecutable(customApp: RuntimeSnapshot["customApps"][number]): boolean {
+  return customApp.entry.type === "node" || customApp.entry.type === "executable";
+}
+
+function customAppAvailabilityLabel(customApp: RuntimeSnapshot["customApps"][number]): string {
+  if (customApp.entry.type === "node") return "可执行";
+  if (customApp.entry.type === "executable") return "高风险可执行";
+  if (customApp.entry.type === "webview") return "UI 建设中";
+  if (customApp.entry.type === "mcp-adapter") return "MCP 适配建设中";
+  if (customApp.entry.type === "workflow") return "请使用套件 Workflow";
+  return "建设中";
 }
 
 function commandTargetOptions(bot: BotConfig): Array<{ label: string; value: string }> {
@@ -201,6 +253,9 @@ function commandTargetOptions(bot: BotConfig): Array<{ label: string; value: str
     ...snapshot.skills
       .filter((skill) => bot.skillNames.includes(skill.name))
       .map((skill) => ({ label: `Skill / ${skill.name}`, value: `skill:${skill.name}` })),
+    ...snapshot.config.mcpServers
+      .filter((server) => server.enabled && server.transport === "stdio" && server.command.trim() && botHasCapability(bot, "mcp", server.id))
+      .map((server) => ({ label: `MCP / ${server.name}`, value: `mcp:${server.id}` })),
     ...snapshot.suites
       .filter((suite) => botHasCapability(bot, "suite", suite.id))
       .map((suite) => ({ label: `Suite / ${suite.name}`, value: `suite:${suite.id}` })),
@@ -211,7 +266,7 @@ function commandTargetOptions(bot: BotConfig): Array<{ label: string; value: str
         value: `workflow:${suite.id}/${workflow.id}`
       }))),
     ...snapshot.customApps
-      .filter((customApp) => botHasCapability(bot, "app", customApp.id))
+      .filter((customApp) => botHasCapability(bot, "app", customApp.id) && customApp.capabilities.commandCallable && customAppExecutable(customApp))
       .map((customApp) => ({ label: `App / ${customApp.name}`, value: `app:${customApp.id}` }))
   ];
 }
@@ -221,6 +276,9 @@ function scheduledCapabilityOptions(bot: BotConfig): Array<{ label: string; valu
     ...snapshot.skills
       .filter((skill) => bot.skillNames.includes(skill.name))
       .map((skill) => ({ label: `Skill / ${skill.name}`, value: `skill:${skill.name}` })),
+    ...snapshot.config.mcpServers
+      .filter((server) => server.enabled && server.transport === "stdio" && server.command.trim() && botHasCapability(bot, "mcp", server.id))
+      .map((server) => ({ label: `MCP / ${server.name}`, value: `mcp:${server.id}` })),
     ...snapshot.suites
       .filter((suite) => botHasCapability(bot, "suite", suite.id))
       .map((suite) => ({ label: `Suite / ${suite.name}`, value: `suite:${suite.id}` })),
@@ -231,9 +289,61 @@ function scheduledCapabilityOptions(bot: BotConfig): Array<{ label: string; valu
         value: `workflow:${suite.id}/${workflow.id}`
       }))),
     ...snapshot.customApps
-      .filter((customApp) => botHasCapability(bot, "app", customApp.id) && customApp.capabilities.scheduledCallable)
+      .filter((customApp) => botHasCapability(bot, "app", customApp.id) && customApp.capabilities.scheduledCallable && customAppExecutable(customApp))
       .map((customApp) => ({ label: `App / ${customApp.name}`, value: `app:${customApp.id}` }))
   ];
+}
+
+function commandBindingConflicts(bot: BotConfig): string[] {
+  const reserved = new Set(["new", "continue", "owner", "help"]);
+  const seen = new Map<string, string>();
+  const conflicts: string[] = [];
+  for (const binding of bot.commandBindings ?? []) {
+    const tokens = [binding.name, ...(binding.aliases ?? [])].map((item) => item.trim().toLowerCase()).filter(Boolean);
+    for (const token of tokens) {
+      if (reserved.has(token)) {
+        conflicts.push(`/${token} 是系统保留命令，不能作为命令名或别名。`);
+        continue;
+      }
+      const previous = seen.get(token);
+      if (previous) {
+        conflicts.push(`/${token} 同时出现在 ${previous} 和 /${binding.name}，保存时后者可能不可用。`);
+        continue;
+      }
+      seen.set(token, `/${binding.name}`);
+    }
+  }
+  return [...new Set(conflicts)];
+}
+
+function policyPresetValue(policy: NonNullable<BotConfig["capabilityRefs"]>[number]["policy"] | undefined): string {
+  if (policy?.requireOwnerApproval) return "approval";
+  if (policy?.allowAgentUse === false && policy?.allowCommandUse === false && policy?.allowScheduledUse === false) return "blocked";
+  if (policy?.allowAgentUse === true && policy?.allowCommandUse === false && policy?.allowScheduledUse === false) return "agent";
+  if (policy?.allowAgentUse === true && policy?.allowCommandUse === true && policy?.allowScheduledUse === false) return "agent-command";
+  if (policy?.allowAgentUse === true && policy?.allowCommandUse === false && policy?.allowScheduledUse === true) return "agent-scheduled";
+  return "all";
+}
+
+function policyFromPreset(preset: string): NonNullable<NonNullable<BotConfig["capabilityRefs"]>[number]["policy"]> {
+  if (preset === "approval") return { allowAgentUse: true, allowCommandUse: true, allowScheduledUse: true, requireOwnerApproval: true };
+  if (preset === "blocked") return { allowAgentUse: false, allowCommandUse: false, allowScheduledUse: false, requireOwnerApproval: false };
+  if (preset === "agent") return { allowAgentUse: true, allowCommandUse: false, allowScheduledUse: false, requireOwnerApproval: false };
+  if (preset === "agent-command") return { allowAgentUse: true, allowCommandUse: true, allowScheduledUse: false, requireOwnerApproval: false };
+  if (preset === "agent-scheduled") return { allowAgentUse: true, allowCommandUse: false, allowScheduledUse: true, requireOwnerApproval: false };
+  return { allowAgentUse: true, allowCommandUse: true, allowScheduledUse: true, requireOwnerApproval: false };
+}
+
+function capabilityPolicySelect(bot: BotConfig, kind: "mcp" | "app" | "suite", id: string): string {
+  const value = policyPresetValue(botCapabilityPolicy(bot, kind, id));
+  return `<span class="capability-policy-control">${helpButton("capabilityPolicy")}<select class="capability-policy-select" data-edit-bot-capability-policy="${kind}:${escapeHtml(id)}">
+    <option value="all" ${value === "all" ? "selected" : ""}>Agent + 命令 + 定时</option>
+    <option value="agent" ${value === "agent" ? "selected" : ""}>仅 Agent</option>
+    <option value="agent-command" ${value === "agent-command" ? "selected" : ""}>Agent + 命令</option>
+    <option value="agent-scheduled" ${value === "agent-scheduled" ? "selected" : ""}>Agent + 定时</option>
+    <option value="approval" ${value === "approval" ? "selected" : ""}>使用前 Owner 审批</option>
+    <option value="blocked" ${value === "blocked" ? "selected" : ""}>已授权但禁用运行</option>
+  </select></span>`;
 }
 
 function scheduledCommandOptions(bot: BotConfig): string[] {
@@ -243,6 +353,13 @@ function scheduledCommandOptions(bot: BotConfig): string[] {
 function appInUseBy(appId: string): string {
   return snapshot.config.bots
     .filter((bot) => botHasCapability(bot, "app", appId))
+    .map((bot) => bot.name)
+    .join("、");
+}
+
+function suiteInUseBy(suiteId: string): string {
+  return snapshot.config.bots
+    .filter((bot) => botHasCapability(bot, "suite", suiteId))
     .map((bot) => bot.name)
     .join("、");
 }
@@ -267,31 +384,238 @@ function protocolFailureText(protocol: NonNullable<McpServerDiagnostic["protocol
   ].filter(Boolean).join(" / ");
 }
 
+function lastMcpProbeText(diagnostic: McpServerDiagnostic): string {
+  if (!diagnostic.lastProbe) return "";
+  const probe = diagnostic.lastProbe;
+  const parts = [
+    new Date(probe.probedAt).toLocaleString(),
+    probe.status === "ok" ? "OK" : "FAILED",
+    probe.durationMs !== undefined ? `${probe.durationMs}ms` : "",
+    probe.status === "ok" ? `tools: ${probe.tools.join("、") || "无"}` : probe.error || probe.stderrTail || ""
+  ].filter(Boolean);
+  return parts.join(" / ");
+}
+
 function diagnosticLabel(status: McpServerDiagnostic["status"]): string {
   return status === "ok" ? "OK" : status === "warn" ? "WARN" : "ERROR";
+}
+
+function riskLabel(risk: NonNullable<RuntimeSnapshot["capabilityDiagnostics"]>[number]["risk"]): string {
+  return risk === "high" ? "高风险" : risk === "medium" ? "中风险" : "低风险";
+}
+
+function capabilityDiagnosticKindLabel(kind: NonNullable<RuntimeSnapshot["capabilityDiagnostics"]>[number]["kind"]): string {
+  return kind === "app" ? "自定义应用" : kind === "suite" ? "套件" : "Workflow";
+}
+
+function auditStatusLabel(status: CapabilityAuditSummary["lastStatus"]): string {
+  if (status === "success") return "成功";
+  if (status === "failed") return "失败";
+  if (status === "blocked") return "阻断";
+  return "待审批";
+}
+
+function auditTriggerLabel(trigger: CapabilityAuditSummary["trigger"]): string {
+  return trigger === "scheduled" ? "定时" : trigger === "agent" ? "Agent" : "命令";
+}
+
+function capabilityPolicyText(policy: NonNullable<BotConfig["capabilityRefs"]>[number]["policy"] | undefined): string {
+  const values = [
+    policy?.allowAgentUse === false ? "Agent 禁用" : "Agent 可用",
+    policy?.allowCommandUse === false ? "命令禁用" : "命令可用",
+    policy?.allowScheduledUse === false ? "定时禁用" : "定时可用",
+    policy?.requireOwnerApproval ? "需 Owner 审批" : ""
+  ].filter(Boolean);
+  return values.join(" / ");
+}
+
+function botGovernanceRefs(bot: BotConfig): NonNullable<BotConfig["capabilityRefs"]> {
+  const refs = [...(bot.capabilityRefs ?? [])];
+  const seen = new Set(refs.map((ref) => `${ref.kind}:${ref.id}`));
+  for (const skillName of bot.skillNames) {
+    const key = `skill:${skillName}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push({
+      kind: "skill",
+      id: skillName,
+      enabled: true,
+      policy: { allowAgentUse: true, allowCommandUse: true, allowScheduledUse: true }
+    });
+  }
+  return refs;
+}
+
+function auditSummaryFor(botId: string, kind: string, id: string): CapabilityAuditSummary[] {
+  return capabilityAudit.summaries.filter((summary) => summary.botId === botId && summary.capability.kind === kind && summary.capability.id === id);
 }
 
 function resourceOpenButton(kind: "skill" | "app" | "suite", id: string): string {
   return `<button type="button" class="ghost resource-open-folder" data-resource-kind="${kind}" data-resource-id="${escapeHtml(id)}">打开目录</button>`;
 }
 
-function renderCapabilities(): string {
-  const appCount = snapshot.customApps.length;
-  const skillCount = snapshot.skills.length;
-  const suiteCount = snapshot.suites.length;
-  const mcpCount = snapshot.config.mcpServers.length;
-  const mountedRefs = snapshot.config.bots.reduce((count, bot) => count + (bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0) + bot.skillNames.length, 0);
+type CapabilitySection = typeof activeCapabilitySection;
+
+function capabilityHealthCounts(): { ok: number; warn: number; error: number } {
+  const statuses = [
+    ...snapshot.capabilityDiagnostics.map((item) => item.status),
+    ...platformDiagnostics.map((item) => item.status),
+    ...mcpDiagnostics.map((item) => item.status)
+  ];
+  return {
+    ok: statuses.filter((status) => status === "ok").length,
+    warn: statuses.filter((status) => status === "warn").length,
+    error: statuses.filter((status) => status === "error").length
+  };
+}
+
+function renderCapabilitySectionNav(counts: {
+  mountedRefs: number;
+  diagnosticIssues: number;
+  mcpCount: number;
+  suiteCount: number;
+  appCount: number;
+  auditCount: number;
+}): string {
+  const items: Array<{ id: CapabilitySection; title: string; meta: string; body: string }> = [
+    { id: "overview", title: "治理总览", meta: `${counts.mountedRefs} refs`, body: "先看 Bot 授权、policy 和整体使用范围。" },
+    { id: "diagnostics", title: "诊断与排障", meta: `${counts.diagnosticIssues} issues`, body: "集中处理 ERROR/WARN、连接器缺口和建设中能力。" },
+    { id: "mcp", title: "MCP 服务", meta: `${counts.mcpCount} configured`, body: "查看工具服务、授权关系、协议探测和 HTTP/SSE 占位。" },
+    { id: "suites", title: "套件与 Workflow", meta: `${counts.suiteCount} suites`, body: "管理角色化能力包、模板、依赖和工作流。" },
+    { id: "apps", title: "自定义应用", meta: `${counts.appCount} apps`, body: "管理 app.json 模板、执行入口、调用面和权限风险。" },
+    { id: "audit", title: "使用审计", meta: `${counts.auditCount} records`, body: "查看命令、定时任务和审批阻断的最近记录。" }
+  ];
   return `
-    <section class="metrics">
-      <article><span>能力目录</span><strong>${snapshot.capabilities.length}</strong></article>
-      <article><span>Skills</span><strong>${skillCount}</strong></article>
-      <article><span>自定义应用 / 套件 / MCP</span><strong>${appCount} / ${suiteCount} / ${mcpCount}</strong></article>
-      <article><span>Bot 挂载引用</span><strong>${mountedRefs}</strong></article>
+    <aside class="capability-nav panel">
+      <div class="panel-title"><span>CAPABILITY MAP</span><small>分层导航</small></div>
+      <div class="capability-nav-list">
+        ${items.map((item) => `
+          <button type="button" class="${activeCapabilitySection === item.id ? "active" : ""}" data-capability-section="${item.id}">
+            <span>${escapeHtml(item.title)}</span>
+            <strong>${escapeHtml(item.meta)}</strong>
+            <small>${escapeHtml(item.body)}</small>
+          </button>
+        `).join("")}
+      </div>
+    </aside>
+  `;
+}
+
+function renderCapabilityGuide(): string {
+  const health = capabilityHealthCounts();
+  return `
+    <section class="capability-guide">
+      <article>
+        <span>第一步</span>
+        <strong>先看治理总览</strong>
+        <p>确认每个 Bot 授权了哪些能力，以及这些能力是否允许 Agent、命令或定时任务调用。</p>
+      </article>
+      <article>
+        <span>第二步</span>
+        <strong>处理诊断</strong>
+        <p>ERROR 代表授权或运行前必须修；WARN 代表可继续配置，但需要理解风险或建设中边界。</p>
+      </article>
+      <article>
+        <span>第三步</span>
+        <strong>再进资源层</strong>
+        <p>MCP、套件和自定义应用分开管理。模板先复制为本地副本，再进入 Manifest 编辑。</p>
+      </article>
+      <article>
+        <span>健康度</span>
+        <strong>${health.error} ERROR / ${health.warn} WARN / ${health.ok} OK</strong>
+        <p>这里汇总扩展、IM 连接器和 MCP 诊断；真实 IM 收发仍以端到端验证为准。</p>
+      </article>
     </section>
+  `;
+}
+
+function renderCapabilityOverview(): string {
+  return `
+    ${renderCapabilityGuide()}
+    <section class="panel market-panel governance-console-panel">
+      <div class="panel-title"><span>BOT GOVERNANCE CONSOLE</span><small>${snapshot.config.bots.length} bots / ${capabilityAudit.summaries.length} audited targets</small></div>
+      <div class="capability-note">治理控制台按 Bot 汇总已授权能力、policy、命令/定时绑定和最近使用审计。审计来自各 Bot 状态目录的 <code>capability-audit.jsonl</code>，只读展示，不作为授权来源。</div>
+      <div class="governance-list">
+        ${snapshot.config.bots.map((bot) => {
+          const refs = botGovernanceRefs(bot);
+          const commandCount = bot.commandBindings?.filter((binding) => binding.enabled).length ?? 0;
+          const scheduledCount = bot.scheduledTasks?.filter((task) => task.enabled).length ?? 0;
+          return `<article class="governance-bot">
+            <div class="governance-bot-head">
+              <div><strong>${escapeHtml(bot.name || bot.id)}</strong><small>${escapeHtml(bot.enabled ? "启用" : "停用")} / ${commandCount} commands / ${scheduledCount} scheduled</small></div>
+              <span class="source-badge">${refs.filter((ref) => ref.enabled).length} refs</span>
+            </div>
+            <div class="governance-ref-list">
+              ${refs.map((ref) => {
+                const summaries = auditSummaryFor(bot.id, ref.kind, ref.id);
+                const total = summaries.reduce((sum, item) => sum + item.total, 0);
+                const failed = summaries.reduce((sum, item) => sum + item.failed + item.blocked + item.approvalRequired, 0);
+                return `<div class="governance-ref-row ${ref.enabled ? "" : "disabled"}">
+                  <span class="run-status cache">${escapeHtml(ref.kind.toUpperCase().slice(0, 3))}</span>
+                  <div>
+                    <strong>${escapeHtml(ref.id)}</strong>
+                    <small>${escapeHtml(ref.enabled ? "已授权" : "已停用")} / ${escapeHtml(capabilityPolicyText(ref.policy))}</small>
+                  </div>
+                  <small>${total > 0 ? `${total} 次 / ${failed} 异常` : "暂无审计"}</small>
+                </div>`;
+              }).join("") || `<div class="empty">该 Bot 当前没有授权能力。</div>`}
+            </div>
+          </article>`;
+        }).join("") || `<div class="empty">当前没有 Bot。</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderCapabilityDiagnostics(): string {
+  return `
+    <section class="capability-two-column">
+      <section class="panel market-panel">
+        <div class="panel-title"><span>EXTENSIBILITY GOVERNANCE</span><small>${snapshot.capabilityDiagnostics.length} diagnostics</small></div>
+        <div class="capability-note">扩展治理集中检查自定义应用权限风险、套件缺失依赖和 Workflow 步骤引用。导入资源不等于授权给 Bot；授权前应先处理 ERROR/WARN 项。</div>
+        <div class="market-skill-list compact-list">
+          ${snapshot.capabilityDiagnostics.map((diagnostic) => `
+            <article class="market-skill-row">
+              <div class="skill-glyph">${escapeHtml(capabilityDiagnosticKindLabel(diagnostic.kind).slice(0, 2).toUpperCase())}</div>
+              <div>
+                <strong>${escapeHtml(diagnostic.name)}</strong>
+                <p>${escapeHtml(`${capabilityDiagnosticKindLabel(diagnostic.kind)} / ${diagnostic.id} / ${riskLabel(diagnostic.risk)}`)}</p>
+                ${diagnostic.issues.length ? `<small class="diagnostic-issues">${escapeHtml(diagnostic.issues.join("；"))}</small>` : `<small>未发现阻断性问题。</small>`}
+                ${diagnostic.recommendations.length ? `<small>${escapeHtml(diagnostic.recommendations.join("；"))}</small>` : ""}
+              </div>
+              <span class="source-badge diagnostic-badge ${diagnostic.status}">${escapeHtml(diagnosticLabel(diagnostic.status))}</span>
+            </article>
+          `).join("") || `<div class="empty">当前没有需要治理的扩展能力。</div>`}
+        </div>
+      </section>
+      <section class="panel market-panel">
+        <div class="panel-title"><span>IM / CONNECTORS</span><small>${platformDiagnostics.length} bots</small></div>
+        <div class="capability-note">连接器诊断检查消息平台、企业微信事件桥、飞书知识连接器和结果投递路由是否具备启动条件。OK 只代表本机配置完整，真实收发仍需端到端验证。</div>
+        <div class="market-skill-list compact-list">
+          ${platformDiagnostics.map((diagnostic) => `
+            <article class="market-skill-row">
+              <div class="skill-glyph">${escapeHtml(diagnostic.provider.slice(0, 2).toUpperCase())}</div>
+              <div>
+                <strong>${escapeHtml(diagnostic.botName)}</strong>
+                <p>${escapeHtml(diagnostic.provider === "wecom" ? "企业微信主通道" : diagnostic.provider === "lark" ? "飞书主通道" : "钉钉预留通道")}</p>
+                ${diagnostic.issues.length ? `<small class="diagnostic-issues">${escapeHtml(diagnostic.issues.join("；"))}</small>` : `<small>配置完整，等待真实环境验证。</small>`}
+                ${diagnostic.recommendations.length ? `<small>${escapeHtml(diagnostic.recommendations.join("；"))}</small>` : ""}
+              </div>
+              <span class="source-badge diagnostic-badge ${diagnostic.status}">${escapeHtml(diagnosticLabel(diagnostic.status))}</span>
+            </article>
+          `).join("") || `<div class="empty">当前没有 Bot。</div>`}
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderCapabilityMcp(): string {
+  return `
     <section class="panel market-panel">
-      <div class="panel-title"><span>MCP SERVERS</span><small>${mcpCount} configured</small></div>
-      <div class="capability-note">MCP 服务是全局配置、本机运行的工具能力。当前版本支持 stdio 类型，并在 Bot 授权后通过 Claude Agent SDK 传入当前 Bot 上下文。刷新诊断会短暂启动 MCP 做协议握手和工具列表预览。</div>
-      <div class="capability-actions"><button type="button" class="ghost" id="refresh-mcp-diagnostics" ${mcpCount === 0 ? "disabled" : ""}>刷新 MCP 诊断</button></div>
+      <div class="panel-title"><span>MCP SERVERS</span><small>${snapshot.config.mcpServers.length} configured</small></div>
+      <div class="capability-note">MCP 服务是全局配置的工具能力。当前只有 stdio 可在 Bot 授权后进入 Claude Agent SDK、命令和定时任务；HTTP/SSE 会显示建设中诊断，不会被注入运行时。</div>
+      <div class="capability-actions"><button type="button" class="ghost" id="refresh-mcp-diagnostics" ${snapshot.config.mcpServers.length === 0 ? "disabled" : ""}>刷新 MCP 诊断</button></div>
       <div class="market-skill-list">
         ${snapshot.config.mcpServers.map((server) => {
           const diagnostic = mcpDiagnostic(server.id);
@@ -300,12 +624,14 @@ function renderCapabilities(): string {
             <div class="skill-glyph">${escapeHtml(server.name.slice(0, 2).toUpperCase())}</div>
             <div>
               <strong>${escapeHtml(server.name)}</strong>
-              <p>${escapeHtml(server.description || `${server.command} ${server.args.join(" ")}`.trim() || "未提供描述")}</p>
-              <small>${escapeHtml(server.id)} / ${escapeHtml(server.enabled ? "已启用" : "已停用")} / ${escapeHtml(mcpInUseBy(server.id) || "未授权给任何 Bot")}</small>
-              ${diagnostic ? `<small>命令: ${escapeHtml(diagnostic.commandResolved || "未解析")} / 授权: ${escapeHtml(diagnostic.authorizedBotNames.join("、") || "无")}</small>` : ""}
+              <p>${escapeHtml(server.description || (server.transport === "stdio" ? `${server.command} ${server.args.join(" ")}`.trim() : server.url) || "未提供描述")}</p>
+              <small>${escapeHtml(server.id)} / ${escapeHtml(server.transport)} / ${escapeHtml(server.enabled ? "已启用" : "已停用")} / ${escapeHtml(mcpInUseBy(server.id) || "未授权给任何 Bot")}</small>
+              ${diagnostic ? `<small>${server.transport === "stdio" ? `命令: ${escapeHtml(diagnostic.commandResolved || "未解析")}` : `URL: ${escapeHtml(server.url || "未配置")}`} / 授权: ${escapeHtml(diagnostic.authorizedBotNames.join("、") || "无")}</small>` : ""}
               ${diagnostic?.protocol?.status === "ok" ? `<small class="mcp-tools">协议: OK / ${escapeHtml(String(diagnostic.protocol.durationMs ?? 0))}ms / tools: ${escapeHtml(diagnostic.protocol.tools.join("、") || "无")}</small>` : ""}
               ${diagnostic?.protocol?.status === "failed" ? `<small class="mcp-tools failed">协议: FAILED / ${escapeHtml(protocolFailureText(diagnostic.protocol))}</small>` : ""}
-              ${diagnostic?.protocol?.status === "not-run" ? `<small class="mcp-tools">协议: 未探测，点击刷新诊断后执行短生命周期握手。</small>` : ""}
+              ${server.transport === "stdio" && diagnostic?.protocol?.status === "not-run" ? `<small class="mcp-tools">协议: 未探测，点击刷新诊断后执行短生命周期握手。</small>` : ""}
+              ${server.transport !== "stdio" ? `<small class="mcp-tools failed">建设中: ${escapeHtml(server.transport.toUpperCase())} MCP 当前仅保存 URL 和诊断，不进入 Agent、命令或定时任务。</small>` : ""}
+              ${diagnostic?.lastProbe ? `<small class="mcp-tools">最近探测: ${escapeHtml(lastMcpProbeText(diagnostic))}</small>` : ""}
               ${diagnostic?.issues.length ? `<small class="diagnostic-issues">${escapeHtml(diagnostic.issues.join("；"))}</small>` : ""}
             </div>
             <span class="source-badge diagnostic-badge ${diagnostic?.status ?? "warn"}">${escapeHtml(diagnostic ? diagnosticLabel(diagnostic.status) : "CHECK")}</span>
@@ -313,39 +639,53 @@ function renderCapabilities(): string {
         }).join("") || `<div class="empty">当前没有 MCP 服务。前往配置页新增。</div>`}
       </div>
     </section>
+  `;
+}
+
+function renderCapabilitySuites(): string {
+  return `
     <section class="panel market-panel">
-      <div class="panel-title"><span>SUITES</span><small>${suiteCount} imported</small></div>
-      <div class="capability-note">套件用于把行业或角色相关的 Skill、自定义应用、MCP 和工作流说明组织成一个可挂载能力包。当前支持导入、预览和 Bot 挂载授权。</div>
+      <div class="panel-title"><span>SUITES</span><small>${snapshot.suites.length} imported</small></div>
+      <div class="capability-note">套件用于把行业或角色相关的 Skill、自定义应用、MCP 和工作流说明组织成一个可挂载能力包。当前支持导入、预览、Bot 挂载授权、版本可信信息、升级和卸载。</div>
       <div class="market-skill-list">
         ${snapshot.suites.map((suite) => {
-          const inUseBy = snapshot.config.bots
-            .filter((bot) => botHasCapability(bot, "suite", suite.id))
-            .map((bot) => bot.name)
-            .join("、");
+          const inUseBy = suiteInUseBy(suite.id);
           const flags = [
             suite.skills.length ? `${suite.skills.length} Skills` : "",
             suite.apps.length ? `${suite.apps.length} Apps` : "",
             suite.mcpServers.length ? `${suite.mcpServers.length} MCPs` : "",
             suite.workflows.length ? `${suite.workflows.length} Workflows` : ""
           ].filter(Boolean).join(" / ") || "空套件";
+          const diagnostics = suite.diagnostics ?? [];
+          const worstDiagnostic = diagnostics.some((item) => item.status === "error") ? "error" : diagnostics.some((item) => item.status === "warn") ? "warn" : "ok";
+          const lifecycle = suite.source === "builtin" ? "内置模板" : suite.lifecycle?.status === "upgraded" ? "已升级" : suite.lifecycle?.status === "installed" ? "已安装" : "旧版导入";
+          const trust = suite.trusted ? "可信" : "未标记可信";
           return `
           <article class="market-skill-row" data-preview-suite="${escapeHtml(suite.id)}">
             <div class="skill-glyph">${escapeHtml(suite.name.slice(0, 2).toUpperCase())}</div>
             <div>
               <strong>${escapeHtml(suite.name)}</strong>
               <p>${escapeHtml(suite.description || "未提供描述")}</p>
-              <small>${escapeHtml(suite.id)} / ${escapeHtml(flags)} / ${escapeHtml(inUseBy || "未授权给任何 Bot")}</small>
+              <small>${escapeHtml(suite.id)} / v${escapeHtml(suite.version)} / ${escapeHtml(flags)} / ${escapeHtml(trust)} / ${escapeHtml(lifecycle)} / ${escapeHtml(inUseBy || "未授权给任何 Bot")}</small>
+              <small class="diagnostic-line ${escapeHtml(worstDiagnostic)}">${escapeHtml(diagnostics.map((item) => item.message).join("；") || "manifest 校验通过")}</small>
             </div>
             <div class="resource-actions">
-              <span class="source-badge local">套件</span>
+              <span class="source-badge ${suite.source}">${escapeHtml(capabilitySourceLabel(suite.source))}</span>
               ${resourceOpenButton("suite", suite.id)}
+              ${suite.source === "local" ? `<button type="button" class="ghost compact upgrade-suite" data-suite-id="${escapeHtml(suite.id)}">升级</button>` : ""}
+              ${suite.source === "local" ? `<button type="button" class="danger compact remove-suite" data-suite-id="${escapeHtml(suite.id)}" ${inUseBy ? "disabled" : ""}>卸载</button>` : ""}
             </div>
           </article>`;
         }).join("") || `<div class="empty">当前没有套件。点击右上角导入包含 suite.json 的目录。</div>`}
       </div>
     </section>
+  `;
+}
+
+function renderCapabilityApps(): string {
+  return `
     <section class="panel market-panel">
-      <div class="panel-title"><span>CUSTOM APPS</span><small>${appCount} imported</small></div>
+      <div class="panel-title"><span>CUSTOM APPS</span><small>${snapshot.customApps.length} imported</small></div>
       <div class="capability-note">自定义应用通过 <code>app.json</code> 导入，进入统一能力目录后仍需在 Bot 编辑器中显式授权。后续命令和定时任务会引用这些 capability，而不是直接执行任意命令。</div>
       <div class="market-skill-list">
         ${snapshot.customApps.map((customApp) => {
@@ -356,20 +696,79 @@ function renderCapabilities(): string {
             customApp.capabilities.scheduledCallable ? "定时" : "",
             customApp.capabilities.hasUi ? "UI" : ""
           ].filter(Boolean).join(" / ") || "未声明调用面";
+          const diagnostics = customApp.diagnostics ?? [];
+          const worstDiagnostic = diagnostics.some((item) => item.status === "error") ? "error" : diagnostics.some((item) => item.status === "warn") ? "warn" : "ok";
+          const lifecycle = customApp.source === "builtin" ? "内置模板" : customApp.lifecycle?.status === "upgraded" ? "已升级" : customApp.lifecycle?.status === "installed" ? "已安装" : "旧版导入";
           return `
           <article class="market-skill-row" data-preview-custom-app="${escapeHtml(customApp.id)}">
             <div class="skill-glyph">${escapeHtml(customApp.name.slice(0, 2).toUpperCase())}</div>
             <div>
               <strong>${escapeHtml(customApp.name)}</strong>
               <p>${escapeHtml(customApp.description || "未提供描述")}</p>
-              <small>${escapeHtml(customApp.id)} / v${escapeHtml(customApp.version)} / ${escapeHtml(flags)} / ${escapeHtml(inUseBy || "未授权给任何 Bot")}</small>
+              <small>${escapeHtml(customApp.id)} / v${escapeHtml(customApp.version)} / ${escapeHtml(customApp.entry.type)} / ${escapeHtml(customAppAvailabilityLabel(customApp))} / ${escapeHtml(flags)} / ${escapeHtml(lifecycle)} / ${escapeHtml(inUseBy || "未授权给任何 Bot")}</small>
+              <small class="diagnostic-line ${escapeHtml(worstDiagnostic)}">${escapeHtml(diagnostics.map((item) => item.message).join("；") || "manifest 校验通过")}</small>
             </div>
             <div class="resource-actions">
-              <span class="source-badge local">自定义应用</span>
+              <span class="source-badge ${customApp.source}">${escapeHtml(capabilitySourceLabel(customApp.source))}</span>
               ${resourceOpenButton("app", customApp.id)}
+              ${customApp.source === "local" ? `<button type="button" class="ghost compact upgrade-custom-app" data-app-id="${escapeHtml(customApp.id)}">升级</button>` : ""}
+              ${customApp.source === "local" ? `<button type="button" class="danger compact remove-custom-app" data-app-id="${escapeHtml(customApp.id)}" ${inUseBy ? "disabled" : ""}>卸载</button>` : ""}
             </div>
           </article>`;
         }).join("") || `<div class="empty">当前没有自定义应用。点击右上角导入包含 app.json 的目录。</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderCapabilityAudit(): string {
+  return `
+    <section class="panel market-panel governance-console-panel">
+      <div class="panel-title"><span>CAPABILITY USAGE AUDIT</span><small>${capabilityAudit.recent.length} recent records</small></div>
+      <div class="capability-note">这里展示最近能力调用，不承担授权职责。要修改授权和运行策略，请回到配置页的 Bot 编辑弹窗。</div>
+      <div class="run-history-list">
+        ${capabilityAudit.recent.map((record) => `
+          <article class="run-history-row ${record.status === "success" ? "success" : record.status === "failed" ? "failed" : "skipped"}">
+            <div class="run-status ${record.status === "success" ? "success" : record.status === "failed" ? "failed" : "skipped"}">${escapeHtml(auditStatusLabel(record.status))}</div>
+            <div>
+              <strong>${escapeHtml(record.capability.name || record.capability.id)}</strong>
+              <p>${escapeHtml(snapshot.config.bots.find((bot) => bot.id === record.botId)?.name || record.botId)} / ${escapeHtml(auditTriggerLabel(record.trigger))} / ${escapeHtml(record.source)} / ${new Date(record.at).toLocaleString()}</p>
+              <small>${escapeHtml(`${record.capability.kind}:${record.capability.id}`)}${record.durationMs !== undefined ? ` / ${record.durationMs}ms` : ""}${record.detail ? ` / ${escapeHtml(record.detail)}` : ""}</small>
+            </div>
+          </article>`).join("") || `<div class="empty">还没有能力使用审计。命令、定时任务和审批阻断发生后会写入这里。</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderCapabilities(): string {
+  const appCount = snapshot.customApps.length;
+  const skillCount = snapshot.skills.length;
+  const suiteCount = snapshot.suites.length;
+  const mcpCount = snapshot.config.mcpServers.length;
+  const mountedRefs = snapshot.config.bots.reduce((count, bot) => count + (bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0) + bot.skillNames.length, 0);
+  const diagnosticIssues = snapshot.capabilityDiagnostics.filter((item) => item.status !== "ok").length
+    + platformDiagnostics.filter((item) => item.status !== "ok").length
+    + mcpDiagnostics.filter((item) => item.status !== "ok").length;
+  const sections: Record<CapabilitySection, string> = {
+    overview: renderCapabilityOverview(),
+    diagnostics: renderCapabilityDiagnostics(),
+    mcp: renderCapabilityMcp(),
+    suites: renderCapabilitySuites(),
+    apps: renderCapabilityApps(),
+    audit: renderCapabilityAudit()
+  };
+  return `
+    <section class="metrics">
+      <article><span>能力目录</span><strong>${snapshot.capabilities.length}</strong></article>
+      <article><span>Skills</span><strong>${skillCount}</strong></article>
+      <article><span>自定义应用 / 套件 / MCP</span><strong>${appCount} / ${suiteCount} / ${mcpCount}</strong></article>
+      <article><span>Bot 挂载引用</span><strong>${mountedRefs}</strong></article>
+    </section>
+    <section class="capability-layout">
+      ${renderCapabilitySectionNav({ mountedRefs, diagnosticIssues, mcpCount, suiteCount, appCount, auditCount: capabilityAudit.recent.length })}
+      <div class="capability-content">
+        ${sections[activeCapabilitySection]}
       </div>
     </section>
   `;
@@ -429,6 +828,92 @@ function renderPreview(): string {
   </section></div>`;
 }
 
+function renderCustomAppManifestEditor(value: CustomAppPreview): string {
+  const app = value.app;
+  const canEdit = app.source === "local";
+  const suggestedId = `${app.id.replace(/^template[._-]/, "")}-local`;
+  return `<div class="manifest-editor-content" data-editor-kind="app" data-editor-id="${escapeHtml(app.id)}">
+    <section class="manifest-guide">
+      <div>
+        <h3>这个自定义应用是什么</h3>
+        <p>自定义应用是一个可被 Bot 授权的本地能力，必须用 <code>app.json</code> 声明入口、调用面和权限。导入或复制模板后不会自动授权给 Bot，需要在 Bot 编辑弹窗中勾选。</p>
+        <p><strong>当前状态：</strong>${escapeHtml(capabilitySourceLabel(app.source))} / ${escapeHtml(customAppAvailabilityLabel(app))} / ${escapeHtml(app.capabilities.commandCallable ? "可作为命令目标" : "不可作为命令目标")} / ${escapeHtml(app.capabilities.scheduledCallable ? "可作为定时目标" : "不可作为定时目标")}</p>
+      </div>
+      <div>
+        <h3>怎么改</h3>
+        <ol>
+          <li>内置模板先复制为本地副本，再编辑。</li>
+          <li><code>id</code> 是能力 ID，编辑现有本地应用时不能改；需要新 ID 时复制模板或重新导入。</li>
+          <li><code>entry.command</code> 和 <code>entry.args</code> 决定实际执行入口；Node 模板通常保留 <code>node</code> 和 <code>index.js</code>。</li>
+          <li><code>capabilities</code> 决定是否进入 Agent、命令、定时或 UI 入口；建设中的入口不会进入命令/定时目标。</li>
+          <li><code>permissions.requiresOwnerApproval</code> 建议用于 executable、网络访问或高风险应用。</li>
+        </ol>
+      </div>
+    </section>
+    <section class="manifest-editor-panel">
+      <div class="session-meta">
+        <span><strong>ID</strong>${escapeHtml(app.id)}</span>
+        <span><strong>版本</strong>${escapeHtml(app.version)}</span>
+        <span><strong>入口</strong>${escapeHtml(app.entry.type)}</span>
+        <span><strong>文件</strong>${value.files.length} files</span>
+      </div>
+      ${canEdit ? "" : `<label class="manifest-copy-control"><span>复制为本地应用 ID</span><input id="manifest-copy-id" value="${escapeHtml(suggestedId)}" /><button type="button" class="ghost" id="copy-custom-app-template">复制模板</button></label>`}
+      <label><span>app.json</span><textarea id="manifest-editor-text" spellcheck="false">${escapeHtml(value.manifest)}</textarea></label>
+      <div class="form-actions inline-actions">
+        ${canEdit ? `<button type="button" class="primary" id="save-custom-app-manifest">保存 manifest</button>` : `<button type="button" class="primary" id="save-custom-app-manifest" disabled>内置模板需先复制</button>`}
+        ${resourceOpenButton("app", app.id)}
+      </div>
+      <details>
+        <summary>文件清单</summary>
+        <pre class="preview-content">${escapeHtml(value.files.join("\n") || "无文件")}</pre>
+      </details>
+    </section>
+  </div>`;
+}
+
+function renderSuiteManifestEditor(value: SuitePreview): string {
+  const suite = value.suite;
+  const canEdit = suite.source === "local";
+  const suggestedId = `${suite.id.replace(/^template[._-]/, "")}-local`;
+  return `<div class="manifest-editor-content" data-editor-kind="suite" data-editor-id="${escapeHtml(suite.id)}">
+    <section class="manifest-guide">
+      <div>
+        <h3>这个套件是什么</h3>
+        <p>套件用于把某个角色、行业或流程需要的 Skill、自定义应用、MCP 和 Workflow 组织成一个可挂载能力包。挂载套件不会自动授予底层能力，Bot 仍需显式授权相关 Skill/App/MCP。</p>
+        <p><strong>当前状态：</strong>${escapeHtml(capabilitySourceLabel(suite.source))} / ${escapeHtml(suite.trusted ? "可信来源" : "未标记可信")} / ${suite.workflows.length} Workflows / ${suite.skills.length} Skills / ${suite.apps.length} Apps / ${suite.mcpServers.length} MCPs</p>
+      </div>
+      <div>
+        <h3>怎么改</h3>
+        <ol>
+          <li>内置模板先复制为本地副本，再编辑。</li>
+          <li><code>id</code> 是套件 ID，编辑现有本地套件时不能改；需要新 ID 时复制模板或重新导入。</li>
+          <li><code>instructions</code> 会进入 Agent 上下文，用于说明这个套件适合什么场景。</li>
+          <li><code>skills</code>、<code>apps</code>、<code>mcpServers</code> 是推荐依赖，不会自动授权。</li>
+          <li><code>workflows.steps</code> 可声明 prompt 步骤或 capability 步骤，支持 input、condition、repeat、continueOnError、timeoutSeconds 和 retry。</li>
+        </ol>
+      </div>
+    </section>
+    <section class="manifest-editor-panel">
+      <div class="session-meta">
+        <span><strong>ID</strong>${escapeHtml(suite.id)}</span>
+        <span><strong>版本</strong>${escapeHtml(suite.version)}</span>
+        <span><strong>发布者</strong>${escapeHtml(suite.publisher || "未声明")}</span>
+        <span><strong>标签</strong>${escapeHtml(suite.tags.join("、") || "无")}</span>
+      </div>
+      ${canEdit ? "" : `<label class="manifest-copy-control"><span>复制为本地套件 ID</span><input id="manifest-copy-id" value="${escapeHtml(suggestedId)}" /><button type="button" class="ghost" id="copy-suite-template">复制模板</button></label>`}
+      <label><span>suite.json</span><textarea id="manifest-editor-text" spellcheck="false">${escapeHtml(value.manifest)}</textarea></label>
+      <div class="form-actions inline-actions">
+        ${canEdit ? `<button type="button" class="primary" id="save-suite-manifest">保存 manifest</button>` : `<button type="button" class="primary" id="save-suite-manifest" disabled>内置模板需先复制</button>`}
+        ${resourceOpenButton("suite", suite.id)}
+      </div>
+      <details>
+        <summary>文件清单</summary>
+        <pre class="preview-content">${escapeHtml(value.files.join("\n") || "无文件")}</pre>
+      </details>
+    </section>
+  </div>`;
+}
+
 function renderSessionDetail(value: StorageSessionDetail): string {
   const botName = snapshot.config.bots.find((bot) => bot.id === value.botId)?.name || value.botId;
   const turns = value.transcript.length > 0
@@ -437,7 +922,7 @@ function renderSessionDetail(value: StorageSessionDetail): string {
         { time: turn.time, type: "received" as const, title: "接收消息", body: turn.user },
         { time: turn.time, type: "reply" as const, title: "最终回复", body: turn.assistant }
       ]).map((event) => `
-        <article class="session-event ${escapeHtml(event.type)}">
+        <article class="session-event ${escapeHtml(event.type)}" data-session-event-type="${escapeHtml(event.type)}">
           <div class="session-event-head">
             <strong>${escapeHtml(event.title)}</strong>
             <time>${escapeHtml(new Date(event.time).toLocaleString())}</time>
@@ -458,6 +943,17 @@ function renderSessionDetail(value: StorageSessionDetail): string {
     ? value.files.map((file) => `<li><span>${escapeHtml(file.path)}</span><small>${formatBytes(file.bytes)}</small></li>`).join("")
     : `<li><span>无</span><small>0 B</small></li>`;
   return `<div class="session-detail-content">
+    <div class="session-detail-toolbar">
+      <select id="session-event-filter">
+        <option value="all">全部事件</option>
+        <option value="received">接收消息</option>
+        <option value="progress">Agent 过程</option>
+        <option value="notice">提示</option>
+        <option value="reply">最终回复</option>
+        <option value="error">错误</option>
+      </select>
+      <button type="button" class="ghost compact" id="export-session-detail">导出 JSON</button>
+    </div>
     <div class="session-meta">
       <span><strong>Bot</strong>${escapeHtml(botName)}</span>
       <span><strong>Claude session</strong>${escapeHtml(value.sessionId)}</span>
@@ -471,6 +967,20 @@ function renderSessionDetail(value: StorageSessionDetail): string {
         <ul>${files}</ul>
       </aside>
     </div>
+  </div>`;
+}
+
+function renderScheduledRunDetail(run: ScheduledTaskRunSummary): string {
+  return `<div class="run-detail-content">
+    <div class="session-meta">
+      <span><strong>任务</strong>${escapeHtml(run.taskName)}</span>
+      <span><strong>Bot</strong>${escapeHtml(run.botName)}</span>
+      <span><strong>状态</strong>${escapeHtml(runStatusLabel(run.status))}</span>
+      <span><strong>耗时</strong>${escapeHtml(formatDuration(runDurationMs(run)))}</span>
+      <span><strong>开始</strong>${escapeHtml(new Date(run.startedAt).toLocaleString())}</span>
+      <span><strong>结束</strong>${escapeHtml(new Date(run.finishedAt).toLocaleString())}</span>
+    </div>
+    <pre class="run-detail-body">${escapeHtml(run.detail || "无运行详情。")}</pre>
   </div>`;
 }
 
@@ -522,9 +1032,75 @@ function renderManual(): string {
             <h3>快速开始</h3>
             <ol>
               <li>进入“配置”，填写模型服务的 Base URL、模型名和 API Key。</li>
-              <li>在 Bot 列表中新增机器人，选择飞书或企业微信消息平台并填写对应 App/Corp 凭据。</li>
+              <li>在 Bot 列表中新增机器人，选择飞书消息平台并填写对应 App ID / App Secret。企业微信入口当前暂时封闭。</li>
               <li>按需点击“用户态 OAuth”，完成文档搜索、导出和读取所需的用户授权。</li>
               <li>给 Bot 勾选允许访问的 Skills，保存后到“运行台”启动监听。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>场景一：飞书群里问资料</h3>
+            <ol>
+              <li>在飞书开放平台确认应用已发布，且群成员在应用可用范围内。</li>
+              <li>配置飞书 Bot 的 App ID、App Secret，接收和回复身份优先使用 Bot。</li>
+              <li>给 Bot 授权需要的 Skills，例如 Office、文档问答或业务知识 Skill。</li>
+              <li>如果要搜索飞书文档，点击“用户态 OAuth”；缺少导出或云盘权限时，把 scope 加到“用户态 OAuth 额外权限”后重新授权。</li>
+              <li>在运行台启动 Bot。群里 @ 机器人并提问，应用会添加处理中表情，完成后回复并移除表情。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>场景二：企业微信能力暂时封闭</h3>
+            <ol>
+              <li>由于企业微信官方 CLI 不提供稳定的事件长连接，指定会话轮询体验和稳定性不足，当前版本暂时封闭企业微信 Provider。</li>
+              <li>Bot 编辑弹窗会保留企业微信历史配置，但消息平台选项、CLI 缓存初始化、聊天列表获取、事件桥和轮询配置均不可操作。</li>
+              <li>运行台启动旧企业微信 Bot 时会显示“企业微信 Provider 因官方能力限制暂时封闭”，不会启动监听、轮询或投递。</li>
+              <li>当前需要上线的机器人请先选择飞书作为消息平台。企业微信后续会在有稳定回调或事件桥方案后再开放。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>场景三：配置 /日报 命令</h3>
+            <ol>
+              <li>先授权目标能力，可以是 Skill、MCP、套件、Workflow 或声明 commandCallable 的自定义应用。</li>
+              <li>在 Bot 编辑弹窗的“命令映射”新增命令，例如 <code>daily</code>，可增加别名 <code>日报, report</code>。</li>
+              <li>选择目标能力，填写说明，必要时用 Prompt 模板固定格式。模板里用 <code>{{args}}</code> 引用用户在命令后的参数。</li>
+              <li>保存后，用户发送 <code>/daily 今天质量异常</code> 即会优先走该命令；发送 <code>/help</code> 可查看当前 Bot 已启用命令。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>场景四：定时推送日报</h3>
+            <ol>
+              <li>先确认投递 chat_id，定时任务只会投递到配置的 chat。</li>
+              <li>在 Bot 编辑弹窗新增定时任务，选择 interval、daily、weekly 或 5 段 cron。</li>
+              <li>目标选 Agent 时走 Bot 默认授权能力；目标选 command 时复用已启用命令；目标选 capability 时直接调用某个已授权能力。</li>
+              <li>配置失败重试次数和延迟。连续失败超过上限后任务会暂停自动排期，并在任务中心显示暂停原因。</li>
+              <li>保存后可在 Bot 编辑弹窗或“定时任务”页点击“立即执行”，确认运行历史和投递结果。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>场景五：用套件和 Workflow 固化流程</h3>
+            <ol>
+              <li>准备包含 <code>suite.json</code> 的目录，声明套件 ID、版本、发布者、可信标记、依赖能力和 workflows。</li>
+              <li>在“能力”页导入套件，先看 manifest 诊断和缺失依赖。</li>
+              <li>在 Bot 编辑弹窗授权套件，同时确认套件引用的 Skill、自定义应用或 MCP 也已按需授权。</li>
+              <li>Workflow steps 可使用输入模板、条件跳过、循环、失败恢复、超时和重试；定时触发时步骤摘要会写入运行历史。</li>
+              <li>如果套件仍被 Bot、命令或定时任务引用，卸载会被阻止，需要先取消引用。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>场景六：接入 MCP 工具</h3>
+            <ol>
+              <li>stdio MCP：填写命令、参数、cwd 和环境变量；点击“刷新 MCP 诊断”会做短生命周期 initialize 和 tools/list 探测。</li>
+              <li>HTTP/SSE MCP：当前可保存 URL 并做占位诊断，但暂不注入 Claude Agent SDK，真实运行待后续端到端验证。</li>
+              <li>到 Bot 编辑弹窗显式勾选 MCP，并用运行策略决定是否允许 Agent、命令或定时任务使用。</li>
+              <li>命令目标选择 MCP 时，Agent 会聚焦该 MCP；如果工具不可用，需要在回复中说明原因。</li>
+            </ol>
+          </section>
+          <section>
+            <h3>场景七：升级和恢复</h3>
+            <ol>
+              <li>后续安装包默认只面向 Apple Silicon / arm64。升级前建议先退出旧应用。</li>
+              <li>从旧 <code>qah</code> 数据目录迁移时，应用会先创建 <code>backups/legacy-qah-&lt;timestamp&gt;/</code>，再迁移配置、workspace 和状态。</li>
+              <li>升级后若用户态飞书资料读取失败，需要在对应 Bot 配置页重新完成用户态 OAuth。</li>
+              <li>如果升级后配置或状态异常，先不要删除备份目录；可按备份中的 config、workspace、state 人工恢复。</li>
             </ol>
           </section>
           <section>
@@ -535,15 +1111,15 @@ function renderManual(): string {
           </section>
           <section>
             <h3>MCP 服务</h3>
-            <p>“配置”页支持新增全局 MCP 服务，当前支持 <code>stdio</code> 类型。需要填写命令、参数和可选环境变量，再到 Bot 编辑弹窗里显式勾选授权。</p>
-            <p>当前版本会对当前 Bot 启用严格 MCP 配置模式，只把已授权 MCP 传给 Claude Agent SDK，不读取其他磁盘上的 MCP 配置来源。“能力”页会展示 MCP 诊断状态，包括命令解析、cwd、环境变量、Bot 授权、协议握手和工具列表预览。</p>
+            <p>“配置”页支持新增全局 MCP 服务。<code>stdio</code> 需要填写命令、参数和可选环境变量，可进入 Agent、命令和定时任务；HTTP/SSE 当前只保存 URL 并显示建设中诊断。</p>
+            <p>当前版本会对当前 Bot 启用严格 MCP 配置模式，只把已授权且传输类型为 <code>stdio</code> 的 MCP 传给 Claude Agent SDK，不读取其他磁盘上的 MCP 配置来源。“能力”页会展示 MCP 诊断状态，包括命令或 URL、cwd、环境变量、Bot 授权、stdio 协议握手和工具列表预览。</p>
           </section>
           <section>
             <h3>机器人配置</h3>
             <p>配置页中的 Bot 以列表展示，点击行打开编辑弹窗。每个 Bot 拥有独立 IM CLI 状态、连接器状态、Claude home、会话 workspace 和 Skill 授权。</p>
-            <p><strong>消息平台</strong>控制从飞书还是企业微信接收消息并默认回复。<strong>App ID / App Secret</strong>填写当前消息平台的应用凭据。</p>
-            <p><strong>企业微信事件桥命令</strong>只在消息平台为企业微信时生效，用于运行一个本地事件桥并从 stdout 读取一行一个 JSON 的消息事件。官方 wecom-cli 当前是调用型工具，这个字段用于补齐监听入口。</p>
-            <p><strong>飞书知识连接器</strong>用于消息入口不是飞书时仍然读取飞书文档、Wiki、云盘和云 PPT。<strong>结果投递路由</strong>可把最终回复复制发送到另一个平台 chat。</p>
+            <p><strong>消息平台</strong>控制从哪个 IM 接收消息并默认回复。当前正式开放飞书，填写 <strong>App ID / App Secret</strong>；企业微信因官方能力限制暂时封闭，历史 Bot ID / Secret 会保留但不会启动。</p>
+            <p><strong>企业微信事件桥命令</strong>、<strong>企业微信轮询会话</strong>和<strong>获取聊天列表</strong>当前均不可操作，只保留历史配置。应用不会调用 <code>wecom-cli msg get_message</code> 或 <code>get_msg_chat_list</code>。</p>
+            <p><strong>飞书知识连接器</strong>用于后续非飞书入口恢复时读取飞书文档、Wiki、云盘和云 PPT。<strong>结果投递路由</strong>可把最终回复复制发送到另一个平台 chat；当前企业微信投递目标暂时封闭。</p>
             <p><strong>用户态 OAuth 额外权限</strong>用于补充飞书 scope，例如 <code>drive:export:readonly</code>、<code>docs:document:export</code>。保存后需要重新点击“用户态 OAuth”，并且飞书开放平台也必须先开通对应应用权限。</p>
             <p>用户态 OAuth 只授权当前用户用于搜索、读取或导出飞书资料，不会把机器人开放给群内所有成员。若其他成员 @ 机器人时看到“暂时还无法与我对话，需要机器人主人的允许”，需要到飞书开放平台检查该应用的发布状态和可用范围。</p>
             <p><strong>Owner open_id</strong>用于人工协助卡片。<strong>向用户展示工作过程</strong>只展示工具调用和检索进度，不展示模型隐藏推理。</p>
@@ -558,30 +1134,38 @@ function renderManual(): string {
             <h3>能力与自定义应用</h3>
             <p>“能力”页展示 Bot 可治理能力目录。自定义应用必须包含 <code>app.json</code>，导入后会复制到应用受管目录，并以 <code>kind=app</code> 进入能力目录。</p>
             <p>导入自定义应用不会自动授权给任何 Bot。需要在 Bot 编辑弹窗里勾选后，后续命令、定时任务或 Agent 才能在该 Bot 的权限边界内使用。</p>
-            <p><code>app.json</code> 会声明入口、输入输出协议、可调用面和权限需求。授权前应确认入口和权限风险；自定义应用默认不能访问其他 Bot 的状态或 workspace。</p>
+            <p><code>app.json</code> 会声明入口、输入输出协议、可调用面和权限需求。当前 <code>node</code> 和受控 <code>executable</code> 可执行；<code>webview</code>、<code>mcp-adapter</code> 和 <code>workflow</code> 会显示建设中说明，不会出现在命令或定时任务目标里。能力页会展示 manifest 诊断、生命周期状态，并支持升级和卸载；卸载前必须没有 Bot 授权或套件依赖。授权前应确认入口和权限风险；自定义应用默认不能访问其他 Bot 的状态或 workspace。</p>
+            <p><strong>从模板开始：</strong>能力页内置“日报生成器模板”和“审批摘要模板”。点击卡片后先阅读左侧说明，内置模板不能直接编辑；填写新的本地应用 ID 后点击“复制模板”，再在 manifest 编辑器里修改名称、说明、入口和调用面。</p>
+            <p><strong>常用字段：</strong><code>id</code> 是稳定能力 ID；<code>entry.type</code> 当前建议用 <code>node</code> 或 <code>executable</code>；<code>entry.command</code>/<code>entry.args</code> 是执行入口；<code>capabilities.commandCallable</code> 控制是否能配置成 <code>/xxx</code> 命令；<code>capabilities.scheduledCallable</code> 控制是否能被定时任务调用；<code>permissions.requiresOwnerApproval</code> 用于高风险能力审批。</p>
+            <p><strong>保存和验证：</strong>本地应用可在弹窗中直接编辑 <code>app.json</code> 并保存。保存时应用会先校验 manifest；如果 JSON 错误、缺少入口或权限字段不合法，会回滚到保存前内容并提示错误。</p>
           </section>
           <section>
             <h3>套件</h3>
             <p>套件目录必须包含 <code>suite.json</code>。套件用于组合 Skills、自定义应用、MCP 和工作流说明，适合按角色或行业分发一组能力。</p>
-            <p>当前版本支持导入、预览和 Bot 挂载授权。挂载套件不会自动扩大该 Bot 的底层 Skill、自定义应用或 MCP 权限；命令和普通 Agent 执行仍会按具体能力授权再校验。</p>
+            <p>当前版本支持导入、预览、Bot 挂载授权、版本和可信来源展示、升级和卸载。挂载套件不会自动扩大该 Bot 的底层 Skill、自定义应用或 MCP 权限；命令和普通 Agent 执行仍会按具体能力授权再校验。</p>
+            <p>Workflow steps 支持输入模板、步骤输出变量、条件跳过、循环、失败恢复、超时和重试；定时任务触发时会把步骤摘要写入运行历史。</p>
+            <p><strong>从模板开始：</strong>能力页内置“质量复盘套件模板”和“门店日报套件模板”。点击卡片后可查看套件说明、依赖、Workflow 和文件清单；内置模板先复制为本地套件，再编辑 <code>suite.json</code>。</p>
+            <p><strong>常用字段：</strong><code>instructions</code> 会进入 Agent 上下文，用于说明套件适用场景；<code>skills</code>、<code>apps</code>、<code>mcpServers</code> 是推荐依赖，不会自动授权；<code>workflows</code> 可定义可命令调用或定时调用的流程；<code>trusted</code> 用于提醒用户是否确认来源。</p>
+            <p><strong>Workflow 写法：</strong><code>prompt</code> 步骤用于让 Agent 处理一段提示；<code>capability</code> 步骤用于调用已授权 Skill、stdio MCP、套件或自定义应用。步骤可加 <code>input</code> 模板引用 <code>{{input}}</code>、<code>{{previous}}</code> 和 <code>{{steps.stepId}}</code>，也可配置 <code>condition</code>、<code>repeat</code>、<code>continueOnError</code>、<code>timeoutSeconds</code> 和 <code>retry.maxAttempts</code>。</p>
+            <p><strong>保存和验证：</strong>本地套件可在弹窗中直接编辑 <code>suite.json</code> 并保存。保存时会校验 JSON、Workflow 步骤 ID、capability 引用格式和导入阻断项；失败会回滚并提示错误。</p>
           </section>
           <section>
             <h3>MCP</h3>
-            <p>MCP 服务在“配置”页按全局方式维护，当前支持 <code>stdio</code> 类型。配置完成后，还需要在 Bot 编辑弹窗里显式勾选授权。</p>
-            <p>当前版本会把已授权 MCP 直接注入 Claude Agent SDK，并启用严格 MCP 配置模式，不读取其他磁盘上的 MCP 配置来源。能力页的 MCP 卡片会显示 OK/WARN/ERROR 诊断结果，并支持手动刷新静态诊断、协议握手和工具列表预览。</p>
+            <p>MCP 服务在“配置”页按全局方式维护。<code>stdio</code> 配置完成后，还需要在 Bot 编辑弹窗里显式勾选授权，并用同一行策略控制是否开放给 Agent、命令和定时任务。</p>
+            <p>当前版本只会把已授权的 <code>stdio</code> MCP 注入 Claude Agent SDK，并启用严格 MCP 配置模式，不读取其他磁盘上的 MCP 配置来源。HTTP/SSE MCP 只作为 URL 占位和诊断项保存，能力页会明确标记建设中。MCP 卡片会显示 OK/WARN/ERROR 诊断结果，并支持对 stdio 手动刷新静态诊断、协议握手和工具列表预览。</p>
           </section>
           <section>
             <h3>命令映射</h3>
-            <p>Bot 编辑弹窗中的“命令映射”可把 <code>/xxx</code> 绑定到某个 Skill、套件、Workflow 或自定义应用。命令名只建议使用小写字母、数字、短横线和下划线。</p>
-            <p>Skill 命令会把请求路由给目标 Skill；套件命令会把对应套件说明和工作流注入 Agent；Workflow 命令会按选定工作流执行，声明了 steps 时会顺序执行各步骤；自定义应用命令会直接执行目标应用。保留命令 <code>/new</code>、<code>/continue</code> 和 <code>/owner</code> 不能占用。</p>
+            <p>Bot 编辑弹窗中的“命令映射”可新增 <code>/xxx</code>，并绑定到某个 Skill、stdio MCP、套件、Workflow 或可执行自定义应用。命令名只建议使用小写字母、数字、短横线和下划线。</p>
+            <p>Skill 命令会把请求路由给目标 Skill；MCP 命令会聚焦调用目标 stdio MCP；套件命令会把对应套件说明和工作流注入 Agent；Workflow 命令会按选定工作流执行，声明了 steps 时会顺序执行各步骤；自定义应用命令会直接执行 <code>node</code> 或受控 <code>executable</code> 应用。HTTP/SSE MCP 和建设中的自定义应用入口不会出现在目标列表中。保留命令 <code>/new</code>、<code>/continue</code>、<code>/owner</code> 和 <code>/help</code> 不能占用，命令配置区会提示命令名和别名冲突。</p>
             <p><strong>Prompt 模板</strong>可选，使用 <code>{{args}}</code> 引用命令参数，例如把 <code>/ppt 周报</code> 转成固定格式 prompt。</p>
           </section>
           <section>
             <h3>定时任务</h3>
             <p>Bot 编辑弹窗中的“定时任务”支持按 Bot 配置本机调度任务。当前支持 <code>interval</code>、<code>daily</code>、<code>weekly</code> 和 <code>cron</code> 四种计划类型。</p>
             <p><code>cron</code> 使用 5 段表达式：分钟 小时 日 月 周，支持 <code>*</code>、列表、范围和步进，例如 <code>15 9 * * 1-5</code> 表示工作日 09:15，<code>*/30 8-20 * * *</code> 表示每天 08:00 到 20:59 每 30 分钟。</p>
-            <p>任务目标可选 <code>agent</code>、<code>command</code>、<code>capability</code>。命令目标会复用该 Bot 已启用的命令映射；能力目标当前支持 Skill、套件、Workflow，以及声明 <code>scheduledCallable</code> 的自定义应用。</p>
-            <p>定时任务结果会投递到指定 <code>chat_id</code>。任务只在应用运行期间触发，并与普通消息共享并发上限。已保存且启用的任务可在 Bot 编辑弹窗中立即运行；计划触发失败时可按配置重试，超过上限后会自动停用并展示暂停原因；最近运行结果可在“存储管理”的定时任务运行历史中查看，并可按 Bot 和状态筛选。</p>
+            <p>任务目标可选 <code>agent</code>、<code>command</code>、<code>capability</code>。命令目标会复用该 Bot 已启用的命令映射；能力目标当前支持 Skill、stdio MCP、套件、Workflow，以及声明 <code>scheduledCallable</code> 且入口可执行的自定义应用。</p>
+            <p>定时任务结果会投递到指定 <code>chat_id</code>。任务只在应用运行期间触发，并与普通消息共享并发上限；应用启动后发现已到期任务会尽快触发一次。已保存且启用的任务可在 Bot 编辑弹窗或“定时任务”页立即运行；计划触发失败时可按配置重试并向投递 chat 发送失败告警，超过上限后会暂停自动排期并展示暂停原因；最近运行结果可在“定时任务”页和“存储管理”的定时任务运行历史中查看，并可按 Bot 和状态筛选。</p>
           </section>
           <section>
             <h3>运行台</h3>
@@ -598,7 +1182,7 @@ function renderManual(): string {
           <section>
             <h3>存储管理</h3>
             <p>存储管理将会话上下文和文件缓存分开。会话数据包含连续会话 workspace、Claude 会话记录和消息附件；点击会话可查看 Claude session、接收消息、Agent 可观察工作过程、长任务提示、最终回复和文件清单。</p>
-            <p>文件缓存位于应用级内容哈希缓存中，用于复用飞书消息附件、受控 helper 下载或导出的飞书文件，以及 Agent 生成文件。存储管理会只读展示缓存索引，可按 Bot 和来源筛选，但不会暴露全局缓存目录路径。清理缓存不会删除会话记录；清理会话也不会删除应用配置、飞书授权、Skill 市场配置或用户导入 Skills。</p>
+            <p>文件缓存位于应用级内容哈希缓存中，用于复用飞书消息附件、受控 helper 下载或导出的飞书文件，以及 Agent 生成文件。存储管理会只读展示缓存索引、新鲜度状态，可按 Bot 和来源筛选，并提供索引校验修复，但不会暴露全局缓存目录路径。带缓存时间的索引超过 90 天会自动失效；清理缓存不会删除会话记录，清理会话也不会删除应用配置、飞书授权、Skill 市场配置或用户导入 Skills。</p>
             <p>定时任务运行历史读取各 Bot 的 <code>scheduled-runs.jsonl</code>，展示最近运行状态、耗时和详情。它是只读审计信息，不会被会话清理或文件缓存清理删除。</p>
           </section>
           <section>
@@ -679,7 +1263,7 @@ function renderStorage(): string {
       <div class="panel storage-card">
         <div class="panel-title"><span>FILE CACHE</span><small>${formatBytes(storage.cacheBytes)}</small></div>
         <p>清理应用级内容哈希缓存。缓存用于复用飞书下载的大文件和 Agent 生成文件；清理后不会删除会话记录，但后续需要时会重新下载或生成。</p>
-        <button class="ghost" id="clear-file-cache" ${storage.cacheBytes === 0 ? "disabled" : ""}>清理文件缓存</button>
+        <div class="form-actions inline-actions"><button class="ghost" id="repair-file-cache" ${storage.cacheBytes === 0 ? "disabled" : ""}>校验缓存索引</button><button class="ghost" id="clear-file-cache" ${storage.cacheBytes === 0 ? "disabled" : ""}>清理文件缓存</button></div>
       </div>
       <div class="panel storage-card danger-zone">
         <div class="panel-title"><span>ALL SESSION DATA</span><small>不可恢复</small></div>
@@ -708,12 +1292,19 @@ function renderStorage(): string {
             <div>
               <strong>${escapeHtml(entry.fileName)}</strong>
               <p>${escapeHtml(cacheSourceLabel(entry.sourceType))} / ${formatBytes(entry.bytes)} / ${escapeHtml(entry.botIds.map((botId) => snapshot.config.bots.find((bot) => bot.id === botId)?.name || botId).join("、") || "未关联 Bot")}</p>
-              <small>${escapeHtml(entry.label)}${entry.freshnessKey ? ` / ${escapeHtml(entry.freshnessKey)}` : ""}</small>
+              <small>${escapeHtml(entry.label)}${entry.freshnessKey ? ` / ${escapeHtml(entry.freshnessKey)}` : ""}${entry.cachedAt ? ` / cached ${escapeHtml(new Date(entry.cachedAt).toLocaleDateString())}` : ""}</small>
+              <small class="diagnostic-line ${escapeHtml(entry.freshness.status)}">${escapeHtml(cacheFreshnessLabel(entry.freshness))}</small>
             </div>
             <button type="button" class="danger compact remove-cache-entry" data-cache-key="${escapeHtml(entry.cacheKey)}">删除缓存</button>
           </article>`).join("") || `<div class="empty">${storage.cacheEntries.length === 0 ? "当前没有可展示的文件缓存索引。消息附件或受控文件 helper 命中后会在这里出现。" : "当前筛选条件下没有缓存索引。"}</div>`}
       </div>
     </section>
+    ${renderScheduledRunHistory(visibleRuns)}
+  `;
+}
+
+function renderScheduledRunHistory(visibleRuns = filteredScheduledRuns()): string {
+  return `
     <section class="panel scheduled-runs-panel">
       <div class="panel-title"><span>SCHEDULED RUN HISTORY</span><small>${visibleRuns.length} / ${scheduledRuns.length} recent runs</small></div>
       <div class="run-history-toolbar">
@@ -729,17 +1320,52 @@ function renderStorage(): string {
         </select>
       </div>
       <div class="run-history-list">
-        ${visibleRuns.map((run) => `
+        ${visibleRuns.map((run, index) => `
           <article class="run-history-row ${escapeHtml(run.status)}">
             <div class="run-status ${escapeHtml(run.status)}">${runStatusLabel(run.status)}</div>
             <div>
               <strong>${escapeHtml(run.taskName)}</strong>
               <p>${escapeHtml(run.botName)} / ${new Date(run.startedAt).toLocaleString()} / ${formatDuration(runDurationMs(run))}</p>
-              ${run.detail ? `<pre>${escapeHtml(run.detail)}</pre>` : `<small>无运行详情。</small>`}
+              <small>${escapeHtml(run.detail ? run.detail.replace(/\s+/g, " ").slice(0, 140) : "无运行详情。")}${run.detail && run.detail.length > 140 ? "..." : ""}</small>
             </div>
+            <button type="button" class="ghost compact run-detail-view" data-run-index="${index}">详情</button>
           </article>`).join("") || `<div class="empty">${scheduledRuns.length === 0 ? "当前没有定时任务运行记录。任务触发后会显示最近运行状态和 Workflow 步骤摘要。" : "当前筛选条件下没有运行记录。"}</div>`}
       </div>
     </section>
+  `;
+}
+
+function renderScheduledCenter(): string {
+  const tasks = snapshot.config.bots.flatMap((bot) => (bot.scheduledTasks ?? []).map((task) => ({ bot, task })));
+  const enabled = tasks.filter((item) => item.task.enabled).length;
+  const paused = tasks.filter((item) => item.task.pausedReason).length;
+  const failed = tasks.filter((item) => item.task.lastStatus === "failed").length;
+  return `
+    <section class="metrics">
+      <article><span>定时任务</span><strong>${tasks.length}</strong></article>
+      <article><span>启用</span><strong>${enabled}</strong></article>
+      <article><span>失败</span><strong>${failed}</strong></article>
+      <article><span>暂停</span><strong>${paused}</strong></article>
+    </section>
+    <section class="panel scheduled-runs-panel">
+      <div class="panel-title"><span>SCHEDULED TASKS</span><small>${enabled} enabled</small></div>
+      <div class="scheduled-task-list">
+        ${tasks.map(({ bot, task }, index) => `
+          <article class="scheduled-task-list-row">
+            <div>
+              <strong>${escapeHtml(task.name)}</strong>
+              <small>${escapeHtml(bot.name || bot.id)} / ${task.enabled ? "启用" : "停用"} / ${escapeHtml(scheduledTaskScheduleText(task))} / ${escapeHtml(scheduledTaskTargetText(task))}</small>
+              <small>投递：${escapeHtml(task.delivery.chatId || "未配置")} / 下次：${escapeHtml(task.nextRunAt ? new Date(task.nextRunAt).toLocaleString() : "未计划")} / 上次：${escapeHtml(task.lastStatus ? runStatusLabel(task.lastStatus) : "未运行")}</small>
+              ${(task.failureCount ?? 0) > 0 || task.retryAt || task.pausedReason ? `<small>治理：失败 ${escapeHtml(String(task.failureCount ?? 0))} 次${task.retryAt ? ` / 重试 ${escapeHtml(new Date(task.retryAt).toLocaleString())}` : ""}${task.pausedReason ? ` / 暂停：${escapeHtml(task.pausedReason)}` : ""}</small>` : ""}
+            </div>
+            <div class="scheduled-task-list-actions">
+              <button type="button" class="ghost compact run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled ? "" : "disabled"}>立即执行</button>
+              <button type="button" class="ghost compact scheduled-edit-bot" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" data-task-index="${index}">编辑</button>
+            </div>
+          </article>`).join("") || `<div class="empty">当前没有定时任务。进入配置页打开 Bot 后可以新增。</div>`}
+      </div>
+    </section>
+    ${renderScheduledRunHistory()}
   `;
 }
 
@@ -753,6 +1379,11 @@ function cacheSourceShortLabel(sourceType: StorageStats["cacheEntries"][number][
   if (sourceType === "lark-message-resource") return "MSG";
   if (sourceType === "lark-drive-export") return "EXP";
   return "DRV";
+}
+
+function cacheFreshnessLabel(freshness: StorageStats["cacheEntries"][number]["freshness"]): string {
+  const prefix = freshness.status === "fresh" ? "新鲜度 OK" : freshness.status === "stale" ? "可能过期" : "新鲜度未知";
+  return `${prefix} / ${freshness.reason}`;
 }
 
 function renderConsole(): string {
@@ -777,11 +1408,11 @@ function renderConsole(): string {
               <div class="skill-glyph">${escapeHtml(bot.name.slice(0, 2).toUpperCase())}</div>
               <div class="bot-runtime-main">
                 <strong>${statusDot(snapshot.connectedBotIds.includes(bot.id))}${escapeHtml(bot.name)}</strong>
-                <p>${bot.skillNames.length} 个 Skill / ${bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0} 个能力引用 / ${snapshot.runningBotIds.includes(bot.id) ? "监听中" : bot.enabled ? "未启动" : "已停用"}</p>
+                <p>${bot.skillNames.length} 个 Skill / ${bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0} 个能力引用 / ${snapshot.runningBotIds.includes(bot.id) ? "监听中" : botCanStart(bot) ? "未启动" : botStartBlockReason(bot)}</p>
               </div>
               ${snapshot.runningBotIds.includes(bot.id)
                 ? `<button class="danger bot-stop" data-id="${escapeHtml(bot.id)}">停止</button>`
-                : `<button class="primary bot-start" data-id="${escapeHtml(bot.id)}" ${botCanStart(bot) ? "" : "disabled"}>启动</button>`}
+                : `<button class="primary bot-start" data-id="${escapeHtml(bot.id)}" ${botCanStart(bot) ? "" : "disabled"} title="${escapeHtml(botCanStart(bot) ? "启动监听" : botStartBlockReason(bot))}">启动</button>`}
             </div>`).join("") || `<div class="empty">前往配置页添加机器人。</div>`}
         </div>
       </div>
@@ -828,9 +1459,11 @@ function renderBotEditor(): string {
   const bot = snapshot.config.bots.find((item) => item.id === editingBotId);
   if (!bot) return "";
   const editingTask = bot.scheduledTasks?.find((task) => task.id === editingScheduledTaskId);
+  const commandConflicts = commandBindingConflicts(bot);
+  const provider = bot.provider ?? "lark";
   return `
     <div class="modal-backdrop" id="bot-editor-backdrop">
-      <section class="release-modal bot-editor-modal" role="dialog" aria-modal="true">
+      <section class="release-modal bot-editor-modal" role="dialog" aria-modal="true" data-provider="${escapeHtml(provider)}">
         <div class="release-modal-header">
           <div>
             <p class="eyebrow">BOT CONFIGURATION</p>
@@ -843,26 +1476,63 @@ function renderBotEditor(): string {
         ${botField(bot, "机器人名称", "name", "text", "botName")}
         <label><span>启用${helpButton("botEnabled")}</span><select data-edit-bot-field="enabled"><option value="true" ${bot.enabled ? "selected" : ""}>启用</option><option value="false" ${!bot.enabled ? "selected" : ""}>停用</option></select></label>
       </div>
-      <label><span>消息平台${helpButton("imProvider")}</span><select data-edit-bot-field="provider">
-        <option value="lark" ${(bot.provider ?? "lark") === "lark" ? "selected" : ""}>飞书</option>
-        <option value="wecom" ${bot.provider === "wecom" ? "selected" : ""}>企业微信</option>
-        <option value="dingtalk" ${bot.provider === "dingtalk" ? "selected" : ""} disabled>钉钉（预留）</option>
-      </select><small>消息入口和默认回复平台。知识库和结果转发可以通过连接器和投递路由配置到其他平台。</small></label>
-      ${botField(bot, "App ID", "appId")}
-      ${botField(bot, "App Secret", "appSecret", "password")}
-      <label><span>企业微信事件桥命令${helpButton("wecomEventCommand")}</span><textarea id="wecom-event-command" rows="2" placeholder="/path/to/wecom-event-bridge --bot wecom-1">${escapeHtml(bot.providerOptions?.eventCommand ?? "")}</textarea><small>仅消息平台为企业微信时生效。命令需持续输出一行一个 JSON 事件，应用会按 Bot 隔离运行并归一化为消息。</small></label>
-      <div class="field-row">
+      <label><span>消息平台${helpButton("imProvider")}</span><select data-edit-bot-field="provider" id="bot-provider-select">
+        <option value="lark" ${provider === "lark" ? "selected" : ""}>飞书</option>
+        <option value="wecom" ${bot.provider === "wecom" ? "selected" : ""} disabled>企业微信（暂时封闭）</option>
+        <option value="dingtalk" ${bot.provider === "dingtalk" ? "selected" : ""} disabled>钉钉（建设中）</option>
+      </select><small>消息入口和默认回复平台。当前仅开放飞书；企业微信因官方能力限制暂时封闭，钉钉仅预留结构，二者不能启动监听。</small></label>
+      <div class="provider-section provider-lark">
+        <div class="skill-access-heading"><span>飞书主通道</span><small>事件订阅 / 消息回复 / 用户态 OAuth</small></div>
+        <small>用于飞书 Bot 收消息、加处理中表情、回复消息和发起用户态 OAuth。每个 Bot 会使用独立 lark-cli HOME。</small>
+      </div>
+      <div class="provider-section provider-wecom">
+        <div class="skill-access-heading"><span>企业微信主通道</span><small>暂时封闭</small></div>
+        <div class="config-warning">
+          <strong>企业微信能力暂时封闭</strong>
+          <small>${escapeHtml(WECOM_PROVIDER_CLOSED_MESSAGE)}</small>
+        </div>
+        <div class="config-callout is-disabled">
+          <strong>企业微信 CLI 缓存初始化已暂停</strong>
+          <small>历史配置会保留，但当前版本不会写入 CLI 缓存，也不会启动企业微信轮询或事件桥。</small>
+          <div class="form-actions inline-actions"><button type="button" class="ghost init-wecom-cli" data-id="${escapeHtml(bot.id)}" disabled>初始化/刷新企业微信 CLI 缓存</button></div>
+          ${wecomInitStatus[bot.id] ? `<small class="inline-status ${escapeHtml(wecomInitStatus[bot.id].level)}">${escapeHtml(wecomInitStatus[bot.id].text)}</small>` : ""}
+        </div>
+      </div>
+      <div class="provider-section provider-dingtalk config-warning">
+        <strong>钉钉建设中</strong><small>当前仅保留配置结构，不能启动监听。请选择飞书或企业微信作为主消息平台。</small>
+      </div>
+      <label><span><span class="provider-copy provider-lark">飞书 App ID</span><span class="provider-copy provider-wecom">企业微信 Bot ID</span><span class="provider-copy provider-dingtalk">钉钉 App Key</span>${helpButton("appId")}</span><input data-edit-bot-field="appId" value="${escapeHtml(bot.appId)}" /></label>
+      <label><span><span class="provider-copy provider-lark">飞书 App Secret</span><span class="provider-copy provider-wecom">企业微信 Bot Secret</span><span class="provider-copy provider-dingtalk">钉钉 App Secret</span>${helpButton("appSecret")}</span><input data-edit-bot-field="appSecret" type="password" value="${escapeHtml(bot.appSecret)}" /></label>
+      <label class="provider-section provider-wecom"><span>企业微信事件桥命令${helpButton("wecomEventCommand")}</span><textarea id="wecom-event-command" rows="2" disabled placeholder="企业微信能力暂时封闭">${escapeHtml(bot.providerOptions?.eventCommand ?? "")}</textarea><small>企业微信 Provider 暂时封闭；此字段只保留历史值，当前版本不会执行该命令。</small></label>
+      <div class="field-row provider-section provider-wecom">
+        <label><span>轮询会话类型${helpButton("wecomPollChat")}</span><select id="wecom-poll-chat-type" disabled><option value="2" ${(bot.providerOptions?.pollChatType ?? "2") === "2" ? "selected" : ""}>群聊</option><option value="1" ${bot.providerOptions?.pollChatType === "1" ? "selected" : ""}>单聊</option></select></label>
+        <label><span>轮询 Chat ID 列表${helpButton("wecomPollChat")}</span><textarea id="wecom-poll-chat-id" rows="3" disabled placeholder="企业微信轮询暂时封闭">${escapeHtml(bot.providerOptions?.pollChatId ?? "")}</textarea></label>
+      </div>
+      <div class="provider-section provider-wecom config-callout is-disabled">
+        <strong>企业微信聊天列表获取已暂停</strong>
+        <small>考虑到企业微信当前官方能力限制，应用不会调用 <code>wecom-cli msg get_msg_chat_list</code>。已保存的监听列表会保留供后续参考。</small>
+        <div class="form-actions inline-actions"><button type="button" class="ghost fetch-wecom-chat-list" data-id="${escapeHtml(bot.id)}" disabled>获取聊天列表</button></div>
+        ${renderWeComChatListSelector(bot)}
+      </div>
+      <div class="field-row provider-section provider-wecom">
+        <label><span>轮询间隔(ms)</span><input id="wecom-poll-interval-ms" type="number" min="2000" disabled value="${escapeHtml(bot.providerOptions?.pollIntervalMs ?? "5000")}" /></label>
+        <label><span>回看窗口(秒)${helpButton("wecomPollWindow")}</span><input id="wecom-poll-window-seconds" type="number" min="10" max="604800" disabled value="${escapeHtml(bot.providerOptions?.pollWindowSeconds ?? "300")}" /></label>
+      </div>
+      <label class="provider-section provider-wecom"><span>高级轮询 JSON 参数</span><textarea id="wecom-poll-payload" rows="2" disabled placeholder="企业微信轮询暂时封闭">${escapeHtml(bot.providerOptions?.pollPayload ?? "")}</textarea><small>企业微信轮询暂时封闭；此字段只保留历史值。</small></label>
+      <div class="field-row provider-section provider-lark">
         <label><span>接收身份${helpButton("receiveIdentity")}</span><select data-edit-bot-field="receiveIdentity"><option value="bot" ${bot.receiveIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.receiveIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
         <label><span>回复身份${helpButton("replyIdentity")}</span><select data-edit-bot-field="replyIdentity"><option value="bot" ${bot.replyIdentity === "bot" ? "selected" : ""}>Bot</option><option value="user" ${bot.replyIdentity === "user" ? "selected" : ""}>用户态</option></select></label>
       </div>
-      ${botField(bot, "处理中表情", "pendingReaction")}
-      ${botField(bot, "Owner 飞书 open_id", "ownerOpenId")}
+      <div class="provider-section provider-lark">
+        ${botField(bot, "处理中表情", "pendingReaction")}
+        ${botField(bot, "Owner 飞书 open_id", "ownerOpenId")}
+        ${botTextarea(bot, "用户态 OAuth 额外权限", "oauthScopes", "默认会申请 search:docs:read；这里可填写额外 scope，支持空格、逗号或换行分隔，例如 drive:export:readonly、docs:document:export。修改后需重新点击用户态 OAuth。")}
+      </div>
       <div class="field-row">
         ${botField(bot, "长任务提示秒数", "longTaskNoticeSeconds", "number")}
         ${botField(bot, "长任务提示文案", "longTaskNoticeText", "text")}
       </div>
-      ${botTextarea(bot, "用户态 OAuth 额外权限", "oauthScopes", "默认会申请 search:docs:read；这里可填写额外 scope，支持空格、逗号或换行分隔，例如 drive:export:readonly、docs:document:export。修改后需重新点击用户态 OAuth。")}
-      <div class="skill-access">
+      <div class="skill-access provider-section provider-not-lark">
         <div class="skill-access-heading"><span>飞书知识连接器${helpButton("larkConnector")}</span><small>${bot.connectors?.lark?.enabled ? "enabled" : "disabled"}</small></div>
         <small>当消息入口是企业微信时，仍可通过这里配置飞书知识库、云盘文件和云文档导出能力。留空则只使用主消息平台。</small>
         <label class="check"><input type="checkbox" id="lark-connector-enabled" ${bot.connectors?.lark?.enabled ? "checked" : ""}/><span><strong>启用飞书连接器</strong><small>用于跨平台知识检索和结果转发到飞书。</small></span></label>
@@ -885,7 +1555,7 @@ function renderBotEditor(): string {
               <label><span>名称</span><input data-route-name="${index}" value="${escapeHtml(route.name ?? "")}" placeholder="例如 同步到飞书群" /></label>
               <label><span>平台</span><select data-route-provider="${index}">
                 <option value="lark" ${route.provider === "lark" ? "selected" : ""}>飞书</option>
-                <option value="wecom" ${route.provider === "wecom" ? "selected" : ""}>企业微信</option>
+                <option value="wecom" ${route.provider === "wecom" ? "selected" : ""} disabled>企业微信（暂时封闭）</option>
               </select></label>
               <label><span>启用</span><select data-route-enabled="${index}"><option value="true" ${route.enabled ? "selected" : ""}>启用</option><option value="false" ${!route.enabled ? "selected" : ""}>停用</option></select></label>
               <label class="command-wide"><span>Chat ID</span><input data-route-chat-id="${index}" value="${escapeHtml(route.chatId)}" placeholder="目标平台 chat_id" /></label>
@@ -911,32 +1581,34 @@ function renderBotEditor(): string {
       </div>
       <div class="skill-access">
         <div class="skill-access-heading"><span>允许访问的 MCP${helpButton("mcpAccess")}</span><small>${bot.capabilityRefs?.filter((ref) => ref.kind === "mcp" && ref.enabled).length ?? 0} / ${snapshot.config.mcpServers.length} 已授权</small></div>
-        <small>MCP 服务是全局配置、本机运行的工具能力。只有勾选后才会进入该 Bot 的 Claude Agent 上下文。</small>
+        <small>MCP 服务是全局配置、本机运行的工具能力。勾选后可通过策略决定是否开放给 Agent、命令和定时任务。</small>
         <div class="skill-check-list">
-          ${snapshot.config.mcpServers.map((server) => `<label class="check"><input type="checkbox" data-edit-bot-mcp="${bot.id}" value="${escapeHtml(server.id)}" ${botHasCapability(bot, "mcp", server.id) ? "checked" : ""}/><span><strong>${escapeHtml(server.name)}</strong><small>${escapeHtml(server.id)} / ${escapeHtml(server.description || server.command)}</small></span></label>`).join("") || `<small>请先在配置页新增 MCP 服务。</small>`}
+          ${snapshot.config.mcpServers.map((server) => `<label class="check capability-policy-row"><input type="checkbox" data-edit-bot-mcp="${bot.id}" value="${escapeHtml(server.id)}" ${botHasCapability(bot, "mcp", server.id) ? "checked" : ""}/><span><strong>${escapeHtml(server.name)}</strong><small>${escapeHtml(server.id)} / ${escapeHtml(server.transport)} / ${escapeHtml(server.description || (server.transport === "stdio" ? server.command : server.url) || "未提供描述")}</small></span>${capabilityPolicySelect(bot, "mcp", server.id)}</label>`).join("") || `<small>请先在配置页新增 MCP 服务。</small>`}
         </div>
       </div>
       <div class="skill-access">
         <div class="skill-access-heading"><span>允许访问的自定义应用${helpButton("customAppAccess")}</span><small>${bot.capabilityRefs?.filter((ref) => ref.kind === "app" && ref.enabled).length ?? 0} / ${snapshot.customApps.length} 已授权</small></div>
         <small>自定义应用导入后默认不授权。授权只记录 capability 引用，后续命令和定时任务会复用这层治理边界。</small>
         <div class="skill-check-list">
-          ${snapshot.customApps.map((customApp) => `<label class="check"><input type="checkbox" data-edit-bot-app="${bot.id}" value="${escapeHtml(customApp.id)}" ${botHasCapability(bot, "app", customApp.id) ? "checked" : ""}/><span><strong>${escapeHtml(customApp.name)}</strong><small>${escapeHtml(customApp.id)} / ${escapeHtml(customApp.description || "自定义应用")}</small></span></label>`).join("") || `<small>请先在“能力”页导入自定义应用。</small>`}
+          ${snapshot.customApps.map((customApp) => `<label class="check capability-policy-row"><input type="checkbox" data-edit-bot-app="${bot.id}" value="${escapeHtml(customApp.id)}" ${botHasCapability(bot, "app", customApp.id) ? "checked" : ""}/><span><strong>${escapeHtml(customApp.name)}</strong><small>${escapeHtml(customApp.id)} / ${escapeHtml(customApp.entry.type)} / ${escapeHtml(customAppAvailabilityLabel(customApp))}${customAppExecutable(customApp) ? "" : " / 不会出现在命令或定时任务目标中"}</small></span>${capabilityPolicySelect(bot, "app", customApp.id)}</label>`).join("") || `<small>请先在“能力”页导入自定义应用。</small>`}
         </div>
       </div>
       <div class="skill-access">
         <div class="skill-access-heading"><span>允许访问的套件${helpButton("suiteAccess")}</span><small>${bot.capabilityRefs?.filter((ref) => ref.kind === "suite" && ref.enabled).length ?? 0} / ${snapshot.suites.length} 已授权</small></div>
         <small>套件挂载用于角色化和行业化能力编排，不自动替代底层 Skill、自定义应用或 MCP 授权；套件命令和普通 Agent 只会看到其中已实际授权的子能力。</small>
         <div class="skill-check-list">
-          ${snapshot.suites.map((suite) => `<label class="check"><input type="checkbox" data-edit-bot-suite="${bot.id}" value="${escapeHtml(suite.id)}" ${botHasCapability(bot, "suite", suite.id) ? "checked" : ""}/><span><strong>${escapeHtml(suite.name)}</strong><small>${escapeHtml(suite.id)} / ${escapeHtml(suite.description || "套件")}</small></span></label>`).join("") || `<small>请先在“能力”页导入套件。</small>`}
+          ${snapshot.suites.map((suite) => `<label class="check capability-policy-row"><input type="checkbox" data-edit-bot-suite="${bot.id}" value="${escapeHtml(suite.id)}" ${botHasCapability(bot, "suite", suite.id) ? "checked" : ""}/><span><strong>${escapeHtml(suite.name)}</strong><small>${escapeHtml(suite.id)} / ${escapeHtml(suite.description || "套件")}</small></span>${capabilityPolicySelect(bot, "suite", suite.id)}</label>`).join("") || `<small>请先在“能力”页导入套件。</small>`}
         </div>
       </div>
       <div class="skill-access">
         <div class="skill-access-heading"><span>命令映射${helpButton("commandBindings")}</span><small>${bot.commandBindings?.filter((binding) => binding.enabled).length ?? 0} enabled</small></div>
-        <small>命令会在收到 <code>/xxx 参数</code> 时优先执行。Skill 命令会只把请求交给目标 Skill；Suite 命令会在目标套件上下文中执行；Workflow 命令会按工作流 prompt 或 steps 执行；App 命令会直接执行目标自定义应用。</small>
+        <small>命令会在收到 <code>/xxx 参数</code> 时优先执行，<code>/help</code> 会列出当前 Bot 可用命令。Skill 命令会只把请求交给目标 Skill；MCP 命令会聚焦调用目标 MCP；Suite 命令会在目标套件上下文中执行；Workflow 命令会按工作流 prompt 或 steps 执行；App 命令会直接执行目标自定义应用。</small>
+        ${commandConflicts.length > 0 ? `<div class="config-warning"><strong>命令冲突</strong>${commandConflicts.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}</div>` : ""}
         <div class="command-binding-list">
           ${(bot.commandBindings ?? []).map((binding, index) => `
             <div class="command-binding-row">
               <label><span>命令名</span><input data-command-name="${index}" value="${escapeHtml(binding.name)}" placeholder="例如 ppt" /></label>
+              <label><span>别名</span><input data-command-aliases="${index}" value="${escapeHtml((binding.aliases ?? []).join(", "))}" placeholder="例如 deck, slides" /></label>
               <label><span>目标</span><select data-command-target="${index}">
                 ${commandTargetOptions(bot).map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === `${binding.target.capability.kind}:${binding.target.capability.id}` ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
               </select></label>
@@ -950,14 +1622,14 @@ function renderBotEditor(): string {
       </div>
       <div class="skill-access">
         <div class="skill-access-heading"><span>定时任务${helpButton("scheduledTasks")}</span><small>${bot.scheduledTasks?.filter((task) => task.enabled).length ?? 0} enabled</small></div>
-        <small>定时任务会在应用运行期间由本机调度执行，并把结果投递到指定 chat_id。支持 interval、daily、weekly 和 cron；命令目标要求先配置并启用对应命令；能力目标当前支持 Skill、套件、Workflow 和声明 scheduledCallable 的自定义应用。</small>
+        <small>定时任务会在应用运行期间由本机调度执行，并把结果投递到指定 chat_id。支持 interval、daily、weekly 和 cron；命令目标要求先配置并启用对应命令；能力目标支持 Skill、MCP、套件、Workflow 和声明 scheduledCallable 的自定义应用。</small>
         <div class="scheduled-task-list">
           ${(bot.scheduledTasks ?? []).map((task, index) => renderScheduledTaskSummary(bot, task, index)).join("") || `<div class="empty">当前没有定时任务。</div>`}
         </div>
         <div class="form-actions inline-actions"><button type="button" class="ghost add-scheduled-task" data-id="${bot.id}">新增定时任务</button></div>
       </div>
       <div class="form-actions bot-editor-actions">
-        <button type="button" class="ghost oauth-bot" data-id="${bot.id}" ${(bot.provider ?? "lark") === "lark" ? "" : "disabled"}>${(bot.provider ?? "lark") === "lark" ? "用户态 OAuth" : "飞书主平台 OAuth"}</button>
+        <button type="button" class="ghost oauth-bot provider-section provider-lark" data-id="${bot.id}">用户态 OAuth</button>
         <button type="button" class="danger remove-bot" data-id="${bot.id}">删除</button>
         <button type="submit" class="primary">保存 Bot 配置</button>
       </div>
@@ -966,6 +1638,35 @@ function renderBotEditor(): string {
       ${editingTask ? renderScheduledTaskEditor(bot, editingTask, (bot.scheduledTasks ?? []).findIndex((task) => task.id === editingTask.id)) : ""}
     </div>
   `;
+}
+
+function renderWeComChatListSelector(bot: BotConfig): string {
+  const status = wecomChatListStatus[bot.id];
+  if (!status) return "";
+  const statusLine = `<small class="inline-status ${escapeHtml(status.level)}">${escapeHtml(status.text)}</small>`;
+  if (!status.result || status.result.chats.length === 0) return statusLine;
+  const selected = selectedWeComPollingTargets(bot.providerOptions?.pollChatId ?? "");
+  return `
+    ${statusLine}
+    <div class="wecom-chat-list">
+      ${status.result.chats.map((chat) => {
+        const value = `2:${chat.chatId}`;
+        const checked = selected.has(value) || selected.has(chat.chatId);
+        const meta = [
+          chat.lastMsgTime ? `最后消息 ${chat.lastMsgTime}` : "",
+          typeof chat.msgCount === "number" ? `${chat.msgCount} 条` : ""
+        ].filter(Boolean).join(" / ");
+        return `<label class="check"><input type="checkbox" class="wecom-chat-select" value="${escapeHtml(value)}" ${checked ? "checked" : ""}/><span><strong>${escapeHtml(chat.chatName || chat.chatId)}</strong><small>${escapeHtml(chat.chatId)}${meta ? ` / ${escapeHtml(meta)}` : ""}</small></span></label>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function selectedWeComPollingTargets(value: string): Set<string> {
+  return new Set(value
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean));
 }
 
 function scheduledTaskScheduleText(task: ScheduledTask): string {
@@ -1056,7 +1757,7 @@ function renderScheduledTaskEditor(bot: BotConfig, task: ScheduledTask, index: n
             <div class="scheduled-task-grid">
               <label><span>最大重试次数</span><input data-task-max-retries="${index}" type="number" min="0" max="20" value="${escapeHtml(task.retry?.maxRetries ?? 0)}" /><small>0 表示失败后不立即重试。</small></label>
               <label><span>重试延迟分钟</span><input data-task-retry-delay="${index}" type="number" min="1" max="1440" value="${escapeHtml(task.retry?.delayMinutes ?? 10)}" /></label>
-              <label class="command-wide"><span>暂停原因</span><input value="${escapeHtml(task.pausedReason ?? "")}" placeholder="自动停用后显示" disabled /></label>
+              <label class="command-wide"><span>暂停原因</span><input value="${escapeHtml(task.pausedReason ?? "")}" placeholder="暂停自动排期后显示" disabled /></label>
             </div>
           </div>
           <div class="form-actions">
@@ -1119,7 +1820,7 @@ function readScheduledTaskFromEditor(bot: BotConfig, index: number): ScheduledTa
   if (targetType === "capability") {
     const raw = document.querySelector<HTMLSelectElement>(`[data-task-capability="${index}"]`)?.value ?? "";
     const [kind, id] = raw.split(":");
-    if (kind && id) normalized.target.capability = { kind: kind as "skill" | "app" | "suite" | "workflow", id };
+    if (kind && id) normalized.target.capability = { kind: kind as "skill" | "mcp" | "app" | "suite" | "workflow", id };
   }
   return normalized;
 }
@@ -1155,10 +1856,12 @@ function renderConfig(): string {
               <div class="command-binding-row">
                 <label><span>名称</span><input data-mcp-name="${index}" value="${escapeHtml(server.name)}" placeholder="例如 质量库" /></label>
                 <label><span>ID</span><input data-mcp-id="${index}" value="${escapeHtml(server.id)}" placeholder="quality-db" /></label>
+                <label><span>传输${helpButton("mcpTransport")}</span><select data-mcp-transport="${index}"><option value="stdio" ${server.transport === "stdio" ? "selected" : ""}>stdio</option><option value="http" ${server.transport === "http" ? "selected" : ""}>HTTP 占位</option><option value="sse" ${server.transport === "sse" ? "selected" : ""}>SSE 占位</option></select></label>
                 <label><span>启用</span><select data-mcp-enabled="${index}"><option value="true" ${server.enabled ? "selected" : ""}>启用</option><option value="false" ${!server.enabled ? "selected" : ""}>停用</option></select></label>
-                <label class="command-wide"><span>命令</span><input data-mcp-command="${index}" value="${escapeHtml(server.command)}" placeholder="node" /></label>
+                <label class="command-wide"><span>命令${helpButton("mcpCommand")}</span><input data-mcp-command="${index}" value="${escapeHtml(server.command)}" placeholder="node" /></label>
                 <label class="command-wide"><span>参数</span><input data-mcp-args="${index}" value="${escapeHtml(server.args.join(" "))}" placeholder="dist/server.js --mode prod" /></label>
-                <label class="command-wide"><span>环境变量</span><input data-mcp-env="${index}" value="${escapeHtml(server.env.map((item) => `${item.name}=${item.value}`).join("\n"))}" placeholder="TOKEN=xxx" /></label>
+                <label class="command-wide"><span>HTTP/SSE URL${helpButton("mcpUrl")}</span><input data-mcp-url="${index}" value="${escapeHtml(server.url ?? "")}" placeholder="https://example.com/mcp" /><small>HTTP/SSE 当前仅保存配置并提示诊断，运行时注入和协议探测待后续验证。</small></label>
+                <label class="command-wide"><span>环境变量${helpButton("mcpEnv")}</span><input data-mcp-env="${index}" value="${escapeHtml(server.env.map((item) => `${item.name}=${item.value}`).join("\n"))}" placeholder="TOKEN=xxx" /></label>
                 <label><span>超时(ms)</span><input data-mcp-timeout="${index}" type="number" min="1000" value="${escapeHtml(server.timeoutMs ?? "")}" placeholder="5000" /></label>
                 <label><span>始终加载</span><select data-mcp-always-load="${index}"><option value="false" ${!server.alwaysLoad ? "selected" : ""}>否</option><option value="true" ${server.alwaysLoad ? "selected" : ""}>是</option></select></label>
                 <label class="command-wide"><span>说明</span><input data-mcp-description="${index}" value="${escapeHtml(server.description ?? "")}" placeholder="说明此 MCP 服务用途" /></label>
@@ -1173,7 +1876,7 @@ function renderConfig(): string {
             ${c.bots.map((bot) => `
               <button type="button" class="config-bot-row" data-edit-bot="${escapeHtml(bot.id)}">
                 <span>${statusDot(bot.enabled)}<strong>${escapeHtml(bot.name || "未命名机器人")}</strong></span>
-                <small>${escapeHtml((bot.provider ?? "lark") === "wecom" ? "企业微信" : "飞书")} / ${escapeHtml(bot.appId || "未配置 App ID")} / ${bot.skillNames.length} Skills / ${bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0} capability refs / ${bot.oauthScopes?.length ?? 0} extra scopes</small>
+                <small>${escapeHtml(imProviderLabel(bot.provider))} / ${escapeHtml(bot.appId || "未配置 App ID")} / ${bot.skillNames.length} Skills / ${bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0} capability refs / ${bot.oauthScopes?.length ?? 0} extra scopes</small>
               </button>`).join("") || `<div class="empty">还没有机器人。点击下方按钮新增。</div>`}
           </div>
           <div class="form-actions"><button type="button" class="ghost" id="add-bot">新增机器人</button></div>
@@ -1238,6 +1941,13 @@ function bindEvents(): void {
     button.onclick = async () => {
       activeView = button.dataset.view as typeof activeView;
       if (activeView === "storage") storage = await window.quarkfanTools.storageStats();
+      if (activeView === "scheduled") scheduledRuns = await window.quarkfanTools.scheduledRuns();
+      if (activeView === "capabilities") {
+        [capabilityAudit, platformDiagnostics] = await Promise.all([
+          window.quarkfanTools.capabilityAudit(),
+          window.quarkfanTools.platformDiagnostics()
+        ]);
+      }
       render();
     };
   });
@@ -1252,6 +1962,12 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#import-suite")?.addEventListener("click", async () => {
     snapshot = await window.quarkfanTools.importSuite();
     render();
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-capability-section]").forEach((button) => {
+    button.onclick = () => {
+      activeCapabilitySection = button.dataset.capabilitySection as CapabilitySection;
+      render();
+    };
   });
   document.querySelector<HTMLInputElement>("#market-search")?.addEventListener("input", (event) => {
     marketSearch = (event.currentTarget as HTMLInputElement).value;
@@ -1268,16 +1984,64 @@ function bindEvents(): void {
   document.querySelectorAll<HTMLElement>("[data-preview-custom-app]").forEach((row) => {
     row.onclick = async () => {
       const value: CustomAppPreview = await window.quarkfanTools.customAppPreview(String(row.dataset.previewCustomApp));
-      preview = { title: `${value.app.name} / ${value.app.id}`, body: `${value.manifest}\n\nFILES\n${value.files.join("\n")}` };
+      preview = { title: `${value.app.name} / ${value.app.id}`, html: renderCustomAppManifestEditor(value) };
       render();
     };
   });
   document.querySelectorAll<HTMLElement>("[data-preview-suite]").forEach((row) => {
     row.onclick = async () => {
       const value: SuitePreview = await window.quarkfanTools.suitePreview(String(row.dataset.previewSuite));
-      preview = { title: `${value.suite.name} / ${value.suite.id}`, body: `${value.manifest}\n\nFILES\n${value.files.join("\n")}` };
+      preview = { title: `${value.suite.name} / ${value.suite.id}`, html: renderSuiteManifestEditor(value) };
       render();
     };
+  });
+  document.querySelector<HTMLButtonElement>("#save-custom-app-manifest")?.addEventListener("click", async () => {
+    const id = document.querySelector<HTMLElement>("[data-editor-kind='app']")?.dataset.editorId ?? "";
+    const manifestText = document.querySelector<HTMLTextAreaElement>("#manifest-editor-text")?.value ?? "";
+    try {
+      snapshot = await window.quarkfanTools.saveCustomAppManifest(id, manifestText);
+      const value = await window.quarkfanTools.customAppPreview(id);
+      preview = { title: `${value.app.name} / ${value.app.id}`, html: renderCustomAppManifestEditor(value) };
+    } catch (error) {
+      window.alert(String(error instanceof Error ? error.message : error));
+    }
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#copy-custom-app-template")?.addEventListener("click", async () => {
+    const id = document.querySelector<HTMLElement>("[data-editor-kind='app']")?.dataset.editorId ?? "";
+    const newId = document.querySelector<HTMLInputElement>("#manifest-copy-id")?.value.trim() ?? "";
+    try {
+      snapshot = await window.quarkfanTools.copyCustomAppTemplate(id, newId);
+      const value = await window.quarkfanTools.customAppPreview(newId);
+      preview = { title: `${value.app.name} / ${value.app.id}`, html: renderCustomAppManifestEditor(value) };
+    } catch (error) {
+      window.alert(String(error instanceof Error ? error.message : error));
+    }
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#save-suite-manifest")?.addEventListener("click", async () => {
+    const id = document.querySelector<HTMLElement>("[data-editor-kind='suite']")?.dataset.editorId ?? "";
+    const manifestText = document.querySelector<HTMLTextAreaElement>("#manifest-editor-text")?.value ?? "";
+    try {
+      snapshot = await window.quarkfanTools.saveSuiteManifest(id, manifestText);
+      const value = await window.quarkfanTools.suitePreview(id);
+      preview = { title: `${value.suite.name} / ${value.suite.id}`, html: renderSuiteManifestEditor(value) };
+    } catch (error) {
+      window.alert(String(error instanceof Error ? error.message : error));
+    }
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#copy-suite-template")?.addEventListener("click", async () => {
+    const id = document.querySelector<HTMLElement>("[data-editor-kind='suite']")?.dataset.editorId ?? "";
+    const newId = document.querySelector<HTMLInputElement>("#manifest-copy-id")?.value.trim() ?? "";
+    try {
+      snapshot = await window.quarkfanTools.copySuiteTemplate(id, newId);
+      const value = await window.quarkfanTools.suitePreview(newId);
+      preview = { title: `${value.suite.name} / ${value.suite.id}`, html: renderSuiteManifestEditor(value) };
+    } catch (error) {
+      window.alert(String(error instanceof Error ? error.message : error));
+    }
+    render();
   });
   document.querySelectorAll<HTMLButtonElement>(".resource-open-folder").forEach((button) => {
     button.onclick = async (event) => {
@@ -1286,6 +2050,54 @@ function bindEvents(): void {
       const id = String(button.dataset.resourceId ?? "");
       if (!kind || !id) return;
       await window.quarkfanTools.showResourceInFolder(kind, id);
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".upgrade-custom-app").forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      try {
+        snapshot = await window.quarkfanTools.upgradeCustomApp();
+      } catch (error) {
+        window.alert(String(error instanceof Error ? error.message : error));
+      }
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".remove-custom-app").forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      const id = String(button.dataset.appId ?? "");
+      if (!id || !window.confirm(`确认卸载自定义应用“${id}”？应用目录会从本机受管目录删除。`)) return;
+      try {
+        snapshot = await window.quarkfanTools.removeCustomApp(id);
+      } catch (error) {
+        window.alert(String(error instanceof Error ? error.message : error));
+      }
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".upgrade-suite").forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      try {
+        snapshot = await window.quarkfanTools.upgradeSuite();
+      } catch (error) {
+        window.alert(String(error instanceof Error ? error.message : error));
+      }
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".remove-suite").forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      const id = String(button.dataset.suiteId ?? "");
+      if (!id || !window.confirm(`确认卸载套件“${id}”？套件目录会从本机受管目录删除。`)) return;
+      try {
+        snapshot = await window.quarkfanTools.removeSuite(id);
+      } catch (error) {
+        window.alert(String(error instanceof Error ? error.message : error));
+      }
+      render();
     };
   });
   document.querySelector<HTMLSelectElement>("#market-source")?.addEventListener("change", (event) => {
@@ -1318,7 +2130,9 @@ function bindEvents(): void {
   });
   document.querySelectorAll<HTMLButtonElement>("[data-edit-bot]").forEach((button) => {
     button.onclick = () => {
-      editingBotId = String(button.dataset.editBot);
+      const nextEditingBotId = String(button.dataset.editBot);
+      if (nextEditingBotId !== editingBotId) botEditorScrollTop = 0;
+      editingBotId = nextEditingBotId;
       render();
     };
   });
@@ -1334,6 +2148,12 @@ function bindEvents(): void {
       selectedBotId = String(button.dataset.id);
       const bot = snapshot.config.bots.find((item) => item.id === selectedBotId);
       appendLocalLog("info", "正在启动机器人监听", bot?.name ?? selectedBotId, selectedBotId);
+      if ((bot?.provider ?? "lark") === "wecom") {
+        appendLocalLog("warn", "企业微信 Provider 暂时封闭", WECOM_PROVIDER_CLOSED_MESSAGE, selectedBotId);
+        window.alert(WECOM_PROVIDER_CLOSED_MESSAGE);
+        render();
+        return;
+      }
       render();
       try {
         snapshot = await window.quarkfanTools.startBot(selectedBotId);
@@ -1351,6 +2171,94 @@ function bindEvents(): void {
       render();
     };
   });
+  document.querySelectorAll<HTMLButtonElement>(".init-wecom-cli").forEach((button) => {
+    button.onclick = async () => {
+      const botId = String(button.dataset.id);
+      const bot = snapshot.config.bots.find((item) => item.id === botId);
+      if ((bot?.provider ?? "lark") === "wecom") {
+        appendLocalLog("warn", "企业微信 CLI 缓存初始化已暂停", WECOM_PROVIDER_CLOSED_MESSAGE, botId);
+        window.alert(WECOM_PROVIDER_CLOSED_MESSAGE);
+        return;
+      }
+      appendLocalLog("info", "正在初始化企业微信 CLI 缓存", "应用会使用当前 Bot ID / Secret 写入隔离 CLI 缓存并拉取 MCP 配置。", botId);
+      wecomInitStatus = {
+        ...wecomInitStatus,
+        [botId]: { level: "info", text: "正在初始化/刷新企业微信 CLI 缓存..." }
+      };
+      button.disabled = true;
+      button.textContent = "初始化中...";
+      render();
+      try {
+        const result = await window.quarkfanTools.initWeComCli(botId);
+        const detail = result?.output || `已刷新 ${bot?.name || botId} 的官方 CLI 缓存。`;
+        appendLocalLog("success", "企业微信 CLI 缓存初始化完成", detail, botId);
+        wecomInitStatus = {
+          ...wecomInitStatus,
+          [botId]: { level: "success", text: detail }
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendLocalLog("error", "企业微信 CLI 缓存初始化失败", message, botId);
+        wecomInitStatus = {
+          ...wecomInitStatus,
+          [botId]: { level: "error", text: message }
+        };
+        window.alert(message);
+      }
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".fetch-wecom-chat-list").forEach((button) => {
+    button.onclick = async () => {
+      const botId = String(button.dataset.id);
+      const bot = snapshot.config.bots.find((item) => item.id === botId);
+      if ((bot?.provider ?? "lark") === "wecom") {
+        appendLocalLog("warn", "企业微信聊天列表获取已暂停", WECOM_PROVIDER_CLOSED_MESSAGE, botId);
+        window.alert(WECOM_PROVIDER_CLOSED_MESSAGE);
+        return;
+      }
+      appendLocalLog("info", "正在获取企业微信聊天列表", "应用会调用官方 wecom-cli msg get_msg_chat_list 拉取最近 7 天会话。", botId);
+      wecomChatListStatus = {
+        ...wecomChatListStatus,
+        [botId]: { level: "info", text: "正在获取最近 7 天企业微信聊天列表..." }
+      };
+      render();
+      try {
+        const result = await window.quarkfanTools.weComChatList(botId);
+        const text = result.chats.length > 0
+          ? `获取 ${result.chats.length} 个会话，时间范围 ${result.beginTime} - ${result.endTime}。`
+          : `最近 7 天未获取到会话，时间范围 ${result.beginTime} - ${result.endTime}。`;
+        appendLocalLog("success", "企业微信聊天列表获取完成", text, botId);
+        wecomChatListStatus = {
+          ...wecomChatListStatus,
+          [botId]: { level: "success", text, result }
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendLocalLog("error", "企业微信聊天列表获取失败", message, botId);
+        wecomChatListStatus = {
+          ...wecomChatListStatus,
+          [botId]: { level: "error", text: message }
+        };
+        window.alert(message);
+      }
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLInputElement>(".wecom-chat-select").forEach((input) => {
+    input.onchange = () => {
+      const textarea = document.querySelector<HTMLTextAreaElement>("#wecom-poll-chat-id");
+      const candidateValues = new Set([...document.querySelectorAll<HTMLInputElement>(".wecom-chat-select")].map((item) => item.value));
+      const manualValues = (textarea?.value ?? "")
+        .split(/[\n,]+/)
+        .map((item) => item.trim())
+        .filter((item) => item && !candidateValues.has(item) && !candidateValues.has(`2:${item}`) && !candidateValues.has(`1:${item}`));
+      const values = manualValues.concat([...document.querySelectorAll<HTMLInputElement>(".wecom-chat-select:checked")]
+        .map((item) => item.value)
+        .filter(Boolean));
+      if (textarea) textarea.value = values.join("\n");
+    };
+  });
   document.querySelector<HTMLSelectElement>("#log-level")?.addEventListener("change", (event) => {
     logLevel = (event.currentTarget as HTMLSelectElement).value as typeof logLevel;
     render();
@@ -1364,7 +2272,16 @@ function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>(".session-view").forEach((button) => {
     button.onclick = async () => {
       const value: StorageSessionDetail = await window.quarkfanTools.storageSessionDetail(String(button.dataset.id));
+      sessionDetailForPreview = value;
       preview = { title: `会话 ${value.conversationKey}`, html: renderSessionDetail(value) };
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".run-detail-view").forEach((button) => {
+    button.onclick = () => {
+      const run = filteredScheduledRuns()[Number(button.dataset.runIndex)];
+      if (!run) return;
+      preview = { title: `定时任务运行 / ${run.taskName}`, html: renderScheduledRunDetail(run) };
       render();
     };
   });
@@ -1372,9 +2289,25 @@ function bindEvents(): void {
     mcpDiagnostics = await window.quarkfanTools.mcpDiagnostics(true);
     render();
   });
-  document.querySelector<HTMLButtonElement>("#close-preview")?.addEventListener("click", () => { preview = null; render(); });
+  document.querySelector<HTMLSelectElement>("#session-event-filter")?.addEventListener("change", (event) => {
+    const selected = (event.currentTarget as HTMLSelectElement).value;
+    document.querySelectorAll<HTMLElement>("[data-session-event-type]").forEach((item) => {
+      item.hidden = selected !== "all" && item.dataset.sessionEventType !== selected;
+    });
+  });
+  document.querySelector<HTMLButtonElement>("#export-session-detail")?.addEventListener("click", () => {
+    if (!sessionDetailForPreview) return;
+    const blob = new Blob([`${JSON.stringify(sessionDetailForPreview, null, 2)}\n`], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `qft-session-${sessionDetailForPreview.botId}-${sessionDetailForPreview.id.replace(/[^a-z0-9._-]+/gi, "_")}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
+  document.querySelector<HTMLButtonElement>("#close-preview")?.addEventListener("click", () => { preview = null; sessionDetailForPreview = null; render(); });
   document.querySelector<HTMLElement>("#preview-backdrop")?.addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) { preview = null; render(); }
+    if (event.target === event.currentTarget) { preview = null; sessionDetailForPreview = null; render(); }
   });
   document.querySelectorAll<HTMLButtonElement>(".skill-select-visible").forEach((button) => {
     button.onclick = () => setVisibleBotSkills(String(button.dataset.id), true);
@@ -1397,6 +2330,11 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>("#clear-file-cache")?.addEventListener("click", async () => {
     if (!window.confirm("确认清理文件缓存？会话记录会保留，但后续需要相关文件时可能重新下载或生成。")) return;
     storage = await window.quarkfanTools.clearFileCacheStorage();
+    scheduledRuns = await window.quarkfanTools.scheduledRuns();
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#repair-file-cache")?.addEventListener("click", async () => {
+    storage = await window.quarkfanTools.repairFileCacheStorage();
     scheduledRuns = await window.quarkfanTools.scheduledRuns();
     render();
   });
@@ -1449,14 +2387,23 @@ function bindEvents(): void {
     next.bots.push(bot);
     snapshot = await window.quarkfanTools.saveConfig(next);
     editingBotId = bot.id;
+    botEditorScrollTop = 0;
     render();
   });
   document.querySelector<HTMLButtonElement>("#close-bot-editor")?.addEventListener("click", () => {
     editingBotId = "";
+    botEditorScrollTop = 0;
     render();
   });
   document.querySelector<HTMLElement>("#bot-editor-backdrop")?.addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) { editingBotId = ""; render(); }
+    if (event.target === event.currentTarget) { editingBotId = ""; botEditorScrollTop = 0; render(); }
+  });
+  document.querySelector<HTMLElement>("#bot-editor-form")?.addEventListener("scroll", (event) => {
+    botEditorScrollTop = (event.currentTarget as HTMLElement).scrollTop;
+  });
+  document.querySelector<HTMLSelectElement>("#bot-provider-select")?.addEventListener("change", (event) => {
+    const modal = document.querySelector<HTMLElement>(".bot-editor-modal");
+    if (modal) modal.dataset.provider = (event.currentTarget as HTMLSelectElement).value;
   });
   document.querySelectorAll<HTMLButtonElement>(".remove-bot").forEach((button) => {
     button.onclick = async () => {
@@ -1466,6 +2413,7 @@ function bindEvents(): void {
       next.bots = next.bots.filter((item) => item.id !== button.dataset.id);
       snapshot = await window.quarkfanTools.saveConfig(next);
       editingBotId = "";
+      botEditorScrollTop = 0;
       render();
     };
   });
@@ -1474,9 +2422,10 @@ function bindEvents(): void {
   });
   document.querySelector<HTMLButtonElement>("#add-mcp-server")?.addEventListener("click", async () => {
     const next = structuredClone(snapshot.config);
+    const nextIndex = next.mcpServers.length + 1;
     next.mcpServers.push({
-      id: `mcp-${next.mcpServers.length + 1}`,
-      name: `MCP ${next.mcpServers.length + 1}`,
+      id: `mcp-${nextIndex}`,
+      name: `MCP ${nextIndex}`,
       enabled: true,
       transport: "stdio",
       command: "",
@@ -1484,6 +2433,7 @@ function bindEvents(): void {
       env: []
     });
     snapshot = await window.quarkfanTools.saveConfig(next);
+    mcpDiagnostics = await window.quarkfanTools.mcpDiagnostics();
     render();
   });
   document.querySelectorAll<HTMLButtonElement>(".remove-mcp-server").forEach((button) => {
@@ -1508,7 +2458,7 @@ function bindEvents(): void {
         target: {
           type: "capability",
           capability: {
-            kind: kind as "skill" | "app" | "suite" | "workflow",
+            kind: kind as "skill" | "mcp" | "app" | "suite" | "workflow",
             id
           }
         }
@@ -1572,7 +2522,7 @@ function bindEvents(): void {
         enabled: true,
         name: `定时任务 ${(bot.scheduledTasks?.length ?? 0) + 1}`,
         schedule: { type: "daily", timezone: "Asia/Shanghai", timeOfDay: "09:00" },
-        target: { type: "agent", commandName, capability: id ? { kind: kind as "skill" | "app" | "suite" | "workflow", id } : undefined, prompt: "请执行定时任务" },
+        target: { type: "agent", commandName, capability: id ? { kind: kind as "skill" | "mcp" | "app" | "suite" | "workflow", id } : undefined, prompt: "请执行定时任务" },
         delivery: { type: "chat", chatId: "" }
       }];
       snapshot = await window.quarkfanTools.saveConfig(next);
@@ -1641,6 +2591,14 @@ function bindEvents(): void {
       render();
     };
   });
+  document.querySelectorAll<HTMLButtonElement>(".scheduled-edit-bot").forEach((button) => {
+    button.onclick = () => {
+      editingBotId = String(button.dataset.botId ?? "");
+      editingScheduledTaskId = String(button.dataset.taskId ?? "");
+      botEditorScrollTop = 0;
+      render();
+    };
+  });
   document.querySelectorAll<HTMLSelectElement>("[data-task-schedule-type]").forEach((select) => {
     select.onchange = () => {
       const card = select.closest<HTMLElement>(".scheduled-task-modal");
@@ -1667,11 +2625,33 @@ function bindEvents(): void {
             : input.value;
     });
     const wecomEventCommand = document.querySelector<HTMLTextAreaElement>("#wecom-event-command")?.value.trim() ?? "";
+    const wecomPollChatType = document.querySelector<HTMLSelectElement>("#wecom-poll-chat-type")?.value.trim() ?? "2";
+    const wecomPollChatId = document.querySelector<HTMLTextAreaElement>("#wecom-poll-chat-id")?.value.trim() ?? "";
+    const wecomPollIntervalMs = document.querySelector<HTMLInputElement>("#wecom-poll-interval-ms")?.value.trim() ?? "";
+    const wecomPollWindowSeconds = document.querySelector<HTMLInputElement>("#wecom-poll-window-seconds")?.value.trim() ?? "";
+    const wecomPollPayload = document.querySelector<HTMLTextAreaElement>("#wecom-poll-payload")?.value.trim() ?? "";
     bot.providerOptions = { ...(bot.providerOptions ?? {}) };
-    if (wecomEventCommand) {
+    if (bot.provider === "wecom" && wecomEventCommand) {
       bot.providerOptions.eventCommand = wecomEventCommand;
     } else {
       delete bot.providerOptions.eventCommand;
+    }
+    if (bot.provider === "wecom") {
+      bot.providerOptions.pollChatType = wecomPollChatType === "1" ? "1" : "2";
+      if (wecomPollChatId) bot.providerOptions.pollChatId = wecomPollChatId;
+      else delete bot.providerOptions.pollChatId;
+      if (wecomPollIntervalMs) bot.providerOptions.pollIntervalMs = wecomPollIntervalMs;
+      else delete bot.providerOptions.pollIntervalMs;
+      if (wecomPollWindowSeconds) bot.providerOptions.pollWindowSeconds = wecomPollWindowSeconds;
+      else delete bot.providerOptions.pollWindowSeconds;
+      if (wecomPollPayload) bot.providerOptions.pollPayload = wecomPollPayload;
+      else delete bot.providerOptions.pollPayload;
+    } else {
+      delete bot.providerOptions.pollChatType;
+      delete bot.providerOptions.pollChatId;
+      delete bot.providerOptions.pollIntervalMs;
+      delete bot.providerOptions.pollWindowSeconds;
+      delete bot.providerOptions.pollPayload;
     }
     bot.skillNames = [...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-skill="${editingBotId}"]:checked`)].map((input) => input.value);
     const larkConnectorEnabled = document.querySelector<HTMLInputElement>("#lark-connector-enabled")?.checked ?? false;
@@ -1708,6 +2688,11 @@ function bindEvents(): void {
     const selectedMcps = new Set([...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-mcp="${editingBotId}"]:checked`)].map((input) => input.value));
     const selectedApps = new Set([...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-app="${editingBotId}"]:checked`)].map((input) => input.value));
     const selectedSuites = new Set([...document.querySelectorAll<HTMLInputElement>(`[data-edit-bot-suite="${editingBotId}"]:checked`)].map((input) => input.value));
+    const selectedPolicy = (kind: "mcp" | "app" | "suite", id: string) => {
+      const select = [...document.querySelectorAll<HTMLSelectElement>("[data-edit-bot-capability-policy]")]
+        .find((item) => item.dataset.editBotCapabilityPolicy === `${kind}:${id}`);
+      return policyFromPreset(select?.value ?? policyPresetValue(botCapabilityPolicy(bot, kind, id)));
+    };
     const existingNonManagedRefs = (bot.capabilityRefs ?? []).filter((ref) => !["app", "suite", "mcp"].includes(ref.kind));
     bot.capabilityRefs = [
       ...existingNonManagedRefs,
@@ -1715,31 +2700,19 @@ function bindEvents(): void {
         kind: "mcp" as const,
         id,
         enabled: true,
-        policy: {
-          allowAgentUse: true,
-          allowCommandUse: false,
-          allowScheduledUse: false
-        }
+        policy: selectedPolicy("mcp", id)
       })),
       ...[...selectedApps].map((id) => ({
         kind: "app" as const,
         id,
         enabled: true,
-        policy: {
-          allowAgentUse: true,
-          allowCommandUse: true,
-          allowScheduledUse: true
-        }
+        policy: selectedPolicy("app", id)
       })),
       ...[...selectedSuites].map((id) => ({
         kind: "suite" as const,
         id,
         enabled: true,
-        policy: {
-          allowAgentUse: true,
-          allowCommandUse: true,
-          allowScheduledUse: true
-        }
+        policy: selectedPolicy("suite", id)
       }))
     ];
       bot.commandBindings = [...document.querySelectorAll<HTMLInputElement>("[data-command-name]")]
@@ -1750,13 +2723,17 @@ function bindEvents(): void {
         if (!/^[a-z0-9_-]+$/.test(name) || !kind || !id) return null;
         return {
           name,
+          aliases: [...new Set((document.querySelector<HTMLInputElement>(`[data-command-aliases="${index}"]`)?.value ?? "")
+            .split(/[\s,]+/)
+            .map((alias) => alias.trim().toLowerCase().replace(/^\//, ""))
+            .filter((alias) => /^[a-z0-9_-]+$/.test(alias) && alias !== name && !["new", "continue", "owner", "help"].includes(alias)))],
           enabled: (document.querySelector<HTMLSelectElement>(`[data-command-enabled="${index}"]`)?.value ?? "true") === "true",
           description: document.querySelector<HTMLInputElement>(`[data-command-description="${index}"]`)?.value.trim() || undefined,
           promptTemplate: document.querySelector<HTMLInputElement>(`[data-command-template="${index}"]`)?.value.trim() || undefined,
           target: {
             type: "capability" as const,
             capability: {
-              kind: kind as "skill" | "app" | "suite" | "workflow",
+              kind: kind as "skill" | "mcp" | "app" | "suite" | "workflow",
               id
             }
           }
@@ -1789,15 +2766,18 @@ function bindEvents(): void {
       .map((input, index) => {
         const id = document.querySelector<HTMLInputElement>(`[data-mcp-id="${index}"]`)?.value.trim() || "";
         const name = input.value.trim();
+        const transport = (document.querySelector<HTMLSelectElement>(`[data-mcp-transport="${index}"]`)?.value ?? "stdio") as "stdio" | "http" | "sse";
         const command = document.querySelector<HTMLInputElement>(`[data-mcp-command="${index}"]`)?.value.trim() || "";
-        if (!id || !name || !command) return null;
+        const url = document.querySelector<HTMLInputElement>(`[data-mcp-url="${index}"]`)?.value.trim() || "";
+        if (!id || !name) return null;
         return {
           id,
           name,
           enabled: (document.querySelector<HTMLSelectElement>(`[data-mcp-enabled="${index}"]`)?.value ?? "true") === "true",
-          transport: "stdio" as const,
+          transport,
           command,
           args: (document.querySelector<HTMLInputElement>(`[data-mcp-args="${index}"]`)?.value ?? "").split(/\s+/).map((item) => item.trim()).filter(Boolean),
+          url: url || undefined,
           env: (document.querySelector<HTMLInputElement>(`[data-mcp-env="${index}"]`)?.value ?? "")
             .split(/\n+/)
             .map((line) => line.trim())
@@ -1852,12 +2832,14 @@ function setVisibleBotSkills(botId: string, checked: boolean): void {
 }
 
 async function bootstrap(): Promise<void> {
-  [snapshot, logs, storage, scheduledRuns, mcpDiagnostics, applicationInfo] = await Promise.all([
+  [snapshot, logs, storage, scheduledRuns, mcpDiagnostics, capabilityAudit, platformDiagnostics, applicationInfo] = await Promise.all([
     window.quarkfanTools.snapshot(),
     window.quarkfanTools.logs(),
     window.quarkfanTools.storageStats(),
     window.quarkfanTools.scheduledRuns(),
     window.quarkfanTools.mcpDiagnostics(),
+    window.quarkfanTools.capabilityAudit(),
+    window.quarkfanTools.platformDiagnostics(),
     window.quarkfanTools.appInfo()
   ]);
   window.quarkfanTools.onSnapshot((value) => {

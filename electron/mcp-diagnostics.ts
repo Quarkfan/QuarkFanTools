@@ -1,27 +1,33 @@
 import { constants } from "node:fs";
-import { access } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile } from "node:fs/promises";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
-import type { AppConfig, McpServerConfig, McpServerDiagnostic } from "./types.js";
+import { stateRoot } from "./paths.js";
+import type { AppConfig, McpServerConfig, McpServerDiagnostic, McpServerProbeSummary } from "./types.js";
 
 export interface McpDiagnosticsOptions {
   probeProtocol?: boolean;
+  persistProbeLog?: boolean;
 }
 
 export async function mcpServerDiagnostics(config: AppConfig, options: McpDiagnosticsOptions = {}): Promise<McpServerDiagnostic[]> {
-  return Promise.all(config.mcpServers.map((server) => diagnoseMcpServer(config, server, options)));
+  const lastProbeByServer = await latestMcpProbeSummaries();
+  return Promise.all(config.mcpServers.map((server) => diagnoseMcpServer(config, server, options, lastProbeByServer.get(server.id))));
 }
 
-async function diagnoseMcpServer(config: AppConfig, server: McpServerConfig, options: McpDiagnosticsOptions): Promise<McpServerDiagnostic> {
+async function diagnoseMcpServer(config: AppConfig, server: McpServerConfig, options: McpDiagnosticsOptions, lastProbe?: McpServerProbeSummary): Promise<McpServerDiagnostic> {
   const issues: string[] = [];
   if (!server.enabled) issues.push("MCP 服务已停用");
-  if (server.transport !== "stdio") issues.push(`不支持的传输类型: ${server.transport}`);
-  if (!server.command.trim()) issues.push("未配置启动命令");
+  if (server.transport === "stdio" && !server.command.trim()) issues.push("未配置启动命令");
+  if (server.transport !== "stdio") {
+    if (!server.url?.trim()) issues.push(`${server.transport.toUpperCase()} MCP 未配置 URL`);
+    issues.push(`${server.transport.toUpperCase()} MCP 已可保存配置，但运行时注入和协议探测尚未接入`);
+  }
 
-  const commandResolved = server.command.trim()
+  const commandResolved = server.transport === "stdio" && server.command.trim()
     ? await resolveCommand(server.command, server.cwd, process.env.PATH ?? "")
     : undefined;
-  if (server.command.trim() && !commandResolved) issues.push("启动命令无法在 cwd 或 PATH 中解析");
+  if (server.transport === "stdio" && server.command.trim() && !commandResolved) issues.push("启动命令无法在 cwd 或 PATH 中解析");
 
   if (server.cwd) {
     try {
@@ -39,7 +45,7 @@ async function diagnoseMcpServer(config: AppConfig, server: McpServerConfig, opt
     .map((bot) => bot.name || bot.id);
   if (server.enabled && authorizedBotNames.length === 0) issues.push("尚未授权给任何 Bot");
 
-  const status: McpServerDiagnostic["status"] = issues.some((issue) => /无法|不存在|不可读|未配置|不支持/.test(issue))
+  const status: McpServerDiagnostic["status"] = issues.some((issue) => /无法|不存在|不可读|未配置/.test(issue))
     ? "error"
     : issues.length > 0 ? "warn" : "ok";
   const diagnostic: McpServerDiagnostic = {
@@ -49,17 +55,86 @@ async function diagnoseMcpServer(config: AppConfig, server: McpServerConfig, opt
     commandResolved,
     authorizedBotNames,
     issues,
-    protocol: { status: "not-run", tools: [] }
+    protocol: { status: "not-run", tools: [] },
+    lastProbe
   };
   if (options.probeProtocol && status !== "error" && server.enabled && server.transport === "stdio" && commandResolved) {
     const protocol = await probeMcpServer(server, commandResolved);
     diagnostic.protocol = protocol;
+    const summary = mcpProbeSummary(server, protocol);
+    diagnostic.lastProbe = summary;
+    if (options.persistProbeLog !== false) await appendMcpProbeSummary(summary);
     if (protocol.status === "failed") {
       diagnostic.issues.push(`协议探测失败: ${protocol.error ?? "未知错误"}`);
       diagnostic.status = "error";
     }
   }
   return diagnostic;
+}
+
+export async function latestMcpProbeSummaries(limit = 200): Promise<Map<string, McpServerProbeSummary>> {
+  const byServer = new Map<string, McpServerProbeSummary>();
+  let content = "";
+  try {
+    content = await readFile(mcpProbeLogPath(), "utf8");
+  } catch {
+    return byServer;
+  }
+  const lines = content.split(/\r?\n/).filter(Boolean).slice(-Math.max(1, limit));
+  for (const line of lines) {
+    const summary = mcpProbeSummaryValue(line);
+    if (summary) byServer.set(summary.serverId, summary);
+  }
+  return byServer;
+}
+
+async function appendMcpProbeSummary(summary: McpServerProbeSummary): Promise<void> {
+  await mkdir(path.dirname(mcpProbeLogPath()), { recursive: true });
+  await appendFile(mcpProbeLogPath(), `${JSON.stringify(summary)}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+function mcpProbeLogPath(): string {
+  return path.join(stateRoot(), "mcp-diagnostics.jsonl");
+}
+
+function mcpProbeSummary(server: McpServerConfig, protocol: NonNullable<McpServerDiagnostic["protocol"]>): McpServerProbeSummary {
+  return {
+    serverId: server.id,
+    serverName: server.name,
+    probedAt: new Date().toISOString(),
+    status: protocol.status === "ok" ? "ok" : "failed",
+    durationMs: protocol.durationMs,
+    tools: protocol.tools.slice(0, 20),
+    error: protocol.error,
+    stderrTail: protocol.stderrTail,
+    exitCode: protocol.exitCode,
+    signal: protocol.signal
+  };
+}
+
+function mcpProbeSummaryValue(line: string): McpServerProbeSummary | null {
+  try {
+    const value = JSON.parse(line) as Partial<McpServerProbeSummary>;
+    const serverId = String(value.serverId ?? "").trim();
+    const serverName = String(value.serverName ?? "").trim();
+    const status = String(value.status ?? "");
+    const probedAt = String(value.probedAt ?? "").trim();
+    if (!serverId || !serverName || !probedAt || !["ok", "failed"].includes(status)) return null;
+    return {
+      serverId,
+      serverName,
+      probedAt,
+      status: status as McpServerProbeSummary["status"],
+      durationMs: typeof value.durationMs === "number" && Number.isFinite(value.durationMs) ? value.durationMs : undefined,
+      tools: Array.isArray(value.tools) ? value.tools.map(String).filter(Boolean).slice(0, 20) : [],
+      error: typeof value.error === "string" && value.error.trim() ? value.error.trim().slice(0, 500) : undefined,
+      stderrTail: typeof value.stderrTail === "string" && value.stderrTail.trim() ? value.stderrTail.trim().slice(-1000) : undefined,
+      exitCode: typeof value.exitCode === "number" || value.exitCode === null ? value.exitCode : undefined,
+      signal: typeof value.signal === "string" && value.signal.trim() ? value.signal.trim() : value.signal === null ? null : undefined
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function probeMcpServer(server: McpServerConfig, command: string): Promise<NonNullable<McpServerDiagnostic["protocol"]>> {

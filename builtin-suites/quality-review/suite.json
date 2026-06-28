@@ -1,0 +1,62 @@
+{
+  "id": "template.quality-review",
+  "name": "质量复盘套件模板",
+  "description": "演示套件如何组合 Skill、MCP、自定义应用和 Workflow，用于质量问题复盘。",
+  "version": "1.0.0",
+  "publisher": "QuarkfanTools",
+  "trusted": true,
+  "tags": [
+    "template",
+    "quality",
+    "workflow"
+  ],
+  "skills": [
+    "word-documents",
+    "excel-workbooks"
+  ],
+  "apps": [
+    "template.daily-report-writer"
+  ],
+  "mcpServers": [
+    "template-quality-db"
+  ],
+  "instructions": "用于质量异常复盘。先收集事实，再分析可能原因，最后输出负责人、措施和验证方式。",
+  "workflows": [
+    {
+      "id": "root-cause-review",
+      "name": "根因复盘",
+      "prompt": "基于用户输入和可用资料完成质量问题根因复盘。",
+      "steps": [
+        {
+          "id": "collect",
+          "name": "收集事实",
+          "type": "prompt",
+          "prompt": "从输入中提取时间、地点、批次、现象、影响范围和已采取动作。",
+          "input": "{{input}}",
+          "timeoutSeconds": 120,
+          "retry": {
+            "maxAttempts": 2
+          }
+        },
+        {
+          "id": "analyze",
+          "name": "分析原因",
+          "type": "prompt",
+          "prompt": "基于上一步事实，用 5 Why 或鱼骨图思路列出可能根因和需要补充的数据。",
+          "input": "{{previous}}",
+          "continueOnError": true
+        },
+        {
+          "id": "report",
+          "name": "输出报告",
+          "type": "capability",
+          "prompt": "把复盘结果整理为日报格式，包含进展、风险、明日计划。",
+          "capability": {
+            "kind": "app",
+            "id": "template.daily-report-writer"
+          }
+        }
+      ]
+    }
+  ]
+}

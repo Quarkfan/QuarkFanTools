@@ -1,6 +1,6 @@
 import electron from "electron";
 import { existsSync } from "node:fs";
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const { app } = electron;
@@ -44,10 +44,22 @@ export function appsRoot(): string {
     : path.join(projectRoot(), "apps");
 }
 
+export function builtinAppsRoot(): string {
+  return isPackaged()
+    ? path.join(process.resourcesPath, "builtin-apps")
+    : path.join(projectRoot(), "builtin-apps");
+}
+
 export function suitesRoot(): string {
   return isPackaged()
     ? path.join(appPath("userData"), "workspace", "suites")
     : path.join(projectRoot(), "suites");
+}
+
+export function builtinSuitesRoot(): string {
+  return isPackaged()
+    ? path.join(process.resourcesPath, "builtin-suites")
+    : path.join(projectRoot(), "builtin-suites");
 }
 
 export function stateRoot(): string {
@@ -86,10 +98,27 @@ export function localConfigPath(): string {
   return path.join(appPath("userData"), "config", "local.json");
 }
 
+export async function backupLegacyDataBeforeMigration(legacyRoot: string, targetRoot: string, timestamp = backupTimestamp()): Promise<string | null> {
+  if (!existsSync(legacyRoot)) return null;
+  const backupRoot = path.join(targetRoot, "backups", `legacy-qah-${timestamp}`);
+  await mkdir(path.dirname(backupRoot), { recursive: true });
+  await cp(legacyRoot, backupRoot, { recursive: true, force: false, errorOnExist: true });
+  await writeFile(path.join(backupRoot, "BACKUP-README.txt"), [
+    "QuarkfanTools legacy qah data backup.",
+    "This backup was created before migrating config/workspace/state into the current app data directory.",
+    "It is safe to keep for rollback or manual recovery if an old-version data shape cannot be fully adapted.",
+    ""
+  ].join("\n"), { encoding: "utf8", mode: 0o600 });
+  return backupRoot;
+}
+
 export async function migrateLegacyData(): Promise<void> {
   if (!isPackaged()) return;
   const legacyRoot = path.join(appPath("appData"), "qah");
   const targetRoot = appPath("userData");
+  const marker = path.join(targetRoot, ".legacy-qah-migrated");
+  if (!existsSync(legacyRoot) || existsSync(marker)) return;
+  await backupLegacyDataBeforeMigration(legacyRoot, targetRoot);
   for (const name of ["config", "workspace", "state"]) {
     const source = path.join(legacyRoot, name);
     const target = path.join(targetRoot, name);
@@ -98,4 +127,9 @@ export async function migrateLegacyData(): Promise<void> {
       await cp(source, target, { recursive: true, force: false, errorOnExist: false });
     }
   }
+  await writeFile(marker, `${new Date().toISOString()}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+function backupTimestamp(): string {
+  return new Date().toISOString().replace(/[:.]/g, "-");
 }

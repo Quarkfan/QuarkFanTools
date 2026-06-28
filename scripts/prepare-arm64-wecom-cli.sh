@@ -17,13 +17,9 @@ prepare_arch() {
 }
 
 prepare_arch arm64 arm64
-prepare_arch x64 x64
 
 rm -rf "$DEST"
 mkdir -p "$DEST/bin"
-lipo -create \
-  "$WORK/arm64/package/bin/wecom-cli" \
-  "$WORK/x64/package/bin/wecom-cli" \
-  -output "$DEST/bin/wecom-cli"
+cp "$WORK/arm64/package/bin/wecom-cli" "$DEST/bin/wecom-cli"
 chmod 755 "$DEST/bin/wecom-cli"
-lipo -info "$DEST/bin/wecom-cli"
+file "$DEST/bin/wecom-cli"

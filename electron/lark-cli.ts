@@ -2,6 +2,7 @@ import electron from "electron";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import path from "node:path";
+import { accessSync, constants } from "node:fs";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { botLarkHomeRoot, projectRoot, stateRoot } from "./paths.js";
@@ -18,13 +19,44 @@ const preparedCredentials = new Map<string, string>();
 const LARK_CAPTURE_TIMEOUT_MS = 30_000;
 
 function bundledLarkBinary(): string {
-  return app.isPackaged
+  return app?.isPackaged
     ? path.join(process.resourcesPath, "runtime", "lark-cli", "bin", "lark-cli")
     : path.join(projectRoot(), "node_modules", "@larksuite", "cli", "bin", "lark-cli");
 }
 
+function isExecutableFile(filePath: string): boolean {
+  try {
+    accessSync(filePath, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function localLarkBinary(): string | null {
+  const candidates = [
+    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, "lark-cli")),
+    "/opt/homebrew/bin/lark-cli",
+    "/usr/local/bin/lark-cli"
+  ];
+  const bundled = path.resolve(bundledLarkBinary());
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const normalized = path.resolve(candidate);
+    if (seen.has(normalized) || normalized === bundled) continue;
+    seen.add(normalized);
+    if (isExecutableFile(normalized)) return normalized;
+  }
+  return null;
+}
+
+function preferredLarkBinary(bot: BotConfig): string {
+  if (bot.cliPath) return bot.cliPath;
+  return localLarkBinary() ?? bundledLarkBinary();
+}
+
 export function larkRuntimeEnvironment(bot: BotConfig): NodeJS.ProcessEnv {
-  const binaryDir = path.dirname(bot.cliPath || bundledLarkBinary());
+  const binaryDir = path.dirname(preferredLarkBinary(bot));
   const botHome = botLarkHomeRoot(bot.id);
   return {
     HOME: botHome,
@@ -37,10 +69,7 @@ export function larkRuntimeEnvironment(bot: BotConfig): NodeJS.ProcessEnv {
 }
 
 export async function resolveLarkCommand(bot: BotConfig): Promise<{ command: string; prefix: string[] }> {
-  if (bot.cliPath) {
-    return { command: bot.cliPath, prefix: [] };
-  }
-  const binary = bundledLarkBinary();
+  const binary = preferredLarkBinary(bot);
   await access(binary);
   return { command: binary, prefix: [] };
 }

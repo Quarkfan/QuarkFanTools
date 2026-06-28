@@ -15,13 +15,9 @@ download_arch() {
   tar -xzf "$WORK/$archive" -C "$WORK/$arch"
 }
 
-mkdir -p "$WORK/arm64" "$WORK/amd64" "$PACKAGE_ROOT/bin"
+mkdir -p "$WORK/arm64" "$PACKAGE_ROOT/bin"
 download_arch arm64
-download_arch amd64
 
-lipo -create \
-  "$WORK/arm64/lark-cli" \
-  "$WORK/amd64/lark-cli" \
-  -output "$PACKAGE_ROOT/bin/lark-cli"
+cp "$WORK/arm64/lark-cli" "$PACKAGE_ROOT/bin/lark-cli"
 chmod 755 "$PACKAGE_ROOT/bin/lark-cli"
-lipo -info "$PACKAGE_ROOT/bin/lark-cli"
+file "$PACKAGE_ROOT/bin/lark-cli"

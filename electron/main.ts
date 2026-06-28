@@ -4,13 +4,16 @@ import { QuarkfanToolsRuntime } from "./runtime.js";
 import { saveConfig } from "./config.js";
 import { migrateLegacyData } from "./paths.js";
 import { loginLarkUser } from "./lark-cli.js";
+import { fetchWeComChatList, initializeWeComCli } from "./wecom-cli.js";
 import { mcpServerDiagnostics } from "./mcp-diagnostics.js";
+import { platformConnectorDiagnostics } from "./platform-diagnostics.js";
+import { capabilityAuditReport } from "./capability-audit.js";
 import { importSkillFolder, removeLocalSkill, skillPreview } from "./skills.js";
-import { customAppPreview, importCustomAppFolder } from "./apps.js";
-import { importSuiteFolder, suitePreview } from "./suites.js";
+import { copyCustomAppTemplate, customAppPreview, importCustomAppFolder, removeCustomAppFolder, saveCustomAppManifest, upgradeCustomAppFolder } from "./apps.js";
+import { copySuiteTemplate, importSuiteFolder, removeSuiteFolder, saveSuiteManifest, suitePreview, upgradeSuiteFolder } from "./suites.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { scheduledTaskRunHistory } from "./scheduled-tasks.js";
-import { clearAllSessionStorage, clearExpiredStorage, clearFileCacheEntryStorage, clearFileCacheStorage, clearSelectedSessionStorage, storageSessionDetail, storageStats } from "./storage.js";
+import { clearAllSessionStorage, clearExpiredStorage, clearFileCacheEntryStorage, clearFileCacheStorage, clearSelectedSessionStorage, repairFileCacheStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
 import { resourceDirectory, type ResourceLocationKind } from "./resource-locations.js";
 import type { AppConfig } from "./types.js";
@@ -110,6 +113,8 @@ ipcMain.handle("runtime:logs", () => runtime.logger.list());
 ipcMain.handle("scheduled:runs", () => scheduledTaskRunHistory(runtime.snapshot().config));
 ipcMain.handle("scheduled:run-now", async (_event, botId: string, taskId: string) => runtime.triggerScheduledTaskNow(botId, taskId));
 ipcMain.handle("mcp:diagnostics", (_event, probeProtocol?: boolean) => mcpServerDiagnostics(runtime.snapshot().config, { probeProtocol: Boolean(probeProtocol) }));
+ipcMain.handle("platform:diagnostics", () => platformConnectorDiagnostics(runtime.snapshot().config));
+ipcMain.handle("capability:audit", () => capabilityAuditReport(runtime.snapshot().config));
 ipcMain.handle("app:info", () => appInfo(app.getVersion()));
 ipcMain.handle("storage:stats", () => storageStats());
 ipcMain.handle("storage:session-detail", (_event, id: string) => storageSessionDetail(id));
@@ -154,6 +159,11 @@ ipcMain.handle("storage:clear-cache-entry", async (_event, cacheKey: string) => 
   await runtime.logger.write(removed ? "success" : "warn", removed ? "已删除文件缓存条目" : "文件缓存条目不存在", String(cacheKey ?? ""));
   return storageStats();
 });
+ipcMain.handle("storage:repair-cache", async () => {
+  const report = await repairFileCacheStorage();
+  await runtime.logger.write("success", "文件缓存索引校验完成", `移除索引 ${report.removedEntries} 条 / 移除孤立内容 ${report.removedHashes} 个 / 修复字段 ${report.repairedEntries} 处`);
+  return storageStats();
+});
 ipcMain.handle("runtime:start-bot", async (_event, botId: string) => {
   await runtime.startBot(botId);
   return runtime.snapshot();
@@ -190,6 +200,42 @@ ipcMain.handle("apps:import", async () => {
   await runtime.logger.write("success", "自定义应用已导入", imported);
   return runtime.snapshot();
 });
+ipcMain.handle("apps:upgrade", async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: "选择新版自定义应用文件夹",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
+  const upgraded = await upgradeCustomAppFolder(result.filePaths[0]);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "自定义应用已升级", upgraded);
+  return runtime.snapshot();
+});
+ipcMain.handle("apps:remove", async (_event, id: string) => {
+  const snapshot = runtime.snapshot();
+  const appToRemove = snapshot.customApps.find((app) => app.id === id);
+  if (appToRemove?.source === "builtin") throw new Error("内置自定义应用模板不能卸载。");
+  const inUseBy = snapshot.config.bots.filter((bot) => bot.capabilityRefs?.some((ref) => ref.kind === "app" && ref.id === id && ref.enabled)).map((bot) => bot.name || bot.id);
+  if (inUseBy.length > 0) throw new Error(`自定义应用仍被 Bot 授权使用：${inUseBy.join("、")}`);
+  const suiteInUseBy = snapshot.suites.filter((suite) => suite.apps.includes(id)).map((suite) => suite.name || suite.id);
+  if (suiteInUseBy.length > 0) throw new Error(`自定义应用仍被套件引用：${suiteInUseBy.join("、")}`);
+  await removeCustomAppFolder(String(id ?? ""));
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "自定义应用已卸载", String(id ?? ""));
+  return runtime.snapshot();
+});
+ipcMain.handle("apps:save-manifest", async (_event, id: string, manifestText: string) => {
+  const saved = await saveCustomAppManifest(String(id ?? ""), String(manifestText ?? ""));
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "自定义应用 manifest 已保存", saved);
+  return runtime.snapshot();
+});
+ipcMain.handle("apps:copy-template", async (_event, id: string, newId: string) => {
+  const copied = await copyCustomAppTemplate(String(id ?? ""), String(newId ?? ""));
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "自定义应用模板已复制为本地副本", copied);
+  return runtime.snapshot();
+});
 ipcMain.handle("suites:import", async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     title: "选择包含 suite.json 的套件文件夹",
@@ -199,6 +245,51 @@ ipcMain.handle("suites:import", async () => {
   const imported = await importSuiteFolder(result.filePaths[0]);
   await runtime.initialize(false);
   await runtime.logger.write("success", "套件已导入", imported);
+  return runtime.snapshot();
+});
+ipcMain.handle("suites:save-manifest", async (_event, id: string, manifestText: string) => {
+  const saved = await saveSuiteManifest(String(id ?? ""), String(manifestText ?? ""));
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "套件 manifest 已保存", saved);
+  return runtime.snapshot();
+});
+ipcMain.handle("suites:copy-template", async (_event, id: string, newId: string) => {
+  const copied = await copySuiteTemplate(String(id ?? ""), String(newId ?? ""));
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "套件模板已复制为本地副本", copied);
+  return runtime.snapshot();
+});
+ipcMain.handle("suites:upgrade", async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: "选择新版套件文件夹",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
+  const upgraded = await upgradeSuiteFolder(result.filePaths[0]);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "套件已升级", upgraded);
+  return runtime.snapshot();
+});
+ipcMain.handle("suites:remove", async (_event, id: string) => {
+  const snapshot = runtime.snapshot();
+  const suiteId = String(id ?? "");
+  const suiteToRemove = snapshot.suites.find((suite) => suite.id === suiteId);
+  if (suiteToRemove?.source === "builtin") throw new Error("内置套件模板不能卸载。");
+  const isTargetingSuite = (kind: string | undefined, capabilityId: string | undefined) =>
+    (kind === "suite" && capabilityId === suiteId) || (kind === "workflow" && capabilityId?.startsWith(`${suiteId}/`));
+  const inUseBy = snapshot.config.bots.filter((bot) => bot.capabilityRefs?.some((ref) => ref.kind === "suite" && ref.id === suiteId && ref.enabled)).map((bot) => bot.name || bot.id);
+  if (inUseBy.length > 0) throw new Error(`套件仍被 Bot 授权使用：${inUseBy.join("、")}`);
+  const commandInUseBy = snapshot.config.bots.flatMap((bot) => (bot.commandBindings ?? [])
+    .filter((binding) => binding.enabled && isTargetingSuite(binding.target.capability?.kind, binding.target.capability?.id))
+    .map((binding) => `${bot.name || bot.id}/${binding.name}`));
+  if (commandInUseBy.length > 0) throw new Error(`套件仍被命令引用：${commandInUseBy.join("、")}`);
+  const scheduledInUseBy = snapshot.config.bots.flatMap((bot) => (bot.scheduledTasks ?? [])
+    .filter((task) => task.enabled && isTargetingSuite(task.target.capability?.kind, task.target.capability?.id))
+    .map((task) => `${bot.name || bot.id}/${task.name || task.id}`));
+  if (scheduledInUseBy.length > 0) throw new Error(`套件仍被定时任务引用：${scheduledInUseBy.join("、")}`);
+  await removeSuiteFolder(suiteId);
+  await runtime.initialize(false);
+  await runtime.logger.write("success", "套件已卸载", suiteId);
   return runtime.snapshot();
 });
 ipcMain.handle("skills:market-sync", async () => {
@@ -241,3 +332,42 @@ ipcMain.handle("lark:login-user", async (_event, botId: string) => {
     throw error;
   }
 });
+ipcMain.handle("wecom:init", async (_event, botId: string) => {
+  try {
+    const bot = runtime.snapshot().config.bots.find((item) => item.id === botId);
+    if (!bot) throw new Error("机器人不存在");
+    if ((bot.provider ?? "lark") !== "wecom") throw new Error("当前机器人不是企业微信消息平台");
+    await runtime.logger.write("info", "正在初始化企业微信 CLI 缓存", "应用会使用当前 Bot 配置中的企业微信 Bot ID / Secret 写入隔离 CLI 缓存，并拉取官方 MCP 配置。", bot.id);
+    const result = await initializeWeComCli(bot);
+    await runtime.logger.write("success", "企业微信 CLI 缓存初始化完成", summarizeWeComInitResult(result.output), bot.id);
+    return { output: result.output };
+  } catch (error) {
+    await runtime.logger.write("error", "企业微信 CLI 缓存初始化失败", String(error instanceof Error ? error.message : error), botId);
+    throw error;
+  }
+});
+ipcMain.handle("wecom:chat-list", async (_event, botId: string) => {
+  try {
+    const bot = runtime.snapshot().config.bots.find((item) => item.id === botId);
+    if (!bot) throw new Error("机器人不存在");
+    if ((bot.provider ?? "lark") !== "wecom") throw new Error("当前机器人不是企业微信消息平台");
+    await runtime.logger.write("info", "正在获取企业微信聊天列表", "应用会调用官方 wecom-cli msg get_msg_chat_list 拉取最近 7 天内有消息的会话。", bot.id);
+    const result = await fetchWeComChatList(bot);
+    await runtime.logger.write("success", "企业微信聊天列表获取完成", `获取 ${result.chats.length} 个会话，时间范围 ${result.beginTime} - ${result.endTime}。`, bot.id);
+    return result;
+  } catch (error) {
+    await runtime.logger.write("error", "企业微信聊天列表获取失败", String(error instanceof Error ? error.message : error), botId);
+    throw error;
+  }
+});
+
+function summarizeWeComInitResult(output: string): string {
+  const cleaned = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/[▀▄█]/.test(line))
+    .slice(-8)
+    .join("\n");
+  return cleaned || "官方 wecom-cli 缓存已初始化。";
+}

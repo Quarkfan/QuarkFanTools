@@ -22,7 +22,5 @@ prepare_arch() {
 
 mkdir -p "$DEST"
 prepare_arch arm64 arm64
-prepare_arch x64 x64
 
 file "$DEST/arm64/claude"
-file "$DEST/x64/claude"

@@ -71,12 +71,13 @@ export interface BotCapabilityRef {
 
 export interface BotCommandBinding {
   name: string;
+  aliases?: string[];
   enabled: boolean;
   description?: string;
   target: {
     type: "capability";
     capability: {
-      kind: "skill" | "app" | "suite" | "workflow";
+      kind: "skill" | "mcp" | "app" | "suite" | "workflow";
       id: string;
     };
   };
@@ -100,7 +101,7 @@ export interface ScheduledTask {
     type: "agent" | "command" | "capability";
     commandName?: string;
     capability?: {
-      kind: "skill" | "app" | "suite" | "workflow";
+      kind: "skill" | "mcp" | "app" | "suite" | "workflow";
       id: string;
     };
     prompt: string;
@@ -114,6 +115,16 @@ export interface ScheduledTask {
     maxRetries: number;
     delayMinutes: number;
   };
+  lastRunAt?: string;
+  nextRunAt?: string;
+  lastStatus?: "success" | "failed" | "skipped";
+  failureCount?: number;
+  retryAt?: string;
+  pausedReason?: string;
+}
+
+export interface ScheduledTaskRuntimeState {
+  id: string;
   lastRunAt?: string;
   nextRunAt?: string;
   lastStatus?: "success" | "failed" | "skipped";
@@ -144,13 +155,58 @@ export interface CapabilityDefinition {
   tags?: string[];
 }
 
+export interface CapabilityGovernanceDiagnostic {
+  kind: "app" | "suite" | "workflow";
+  id: string;
+  name: string;
+  status: "ok" | "warn" | "error";
+  risk: "low" | "medium" | "high";
+  issues: string[];
+  recommendations: string[];
+}
+
+export interface CapabilityAuditRecord {
+  at: string;
+  botId: string;
+  trigger: "agent" | "command" | "scheduled";
+  source: string;
+  capability: {
+    kind: CapabilityKind;
+    id: string;
+    name?: string;
+  };
+  status: "success" | "failed" | "blocked" | "approval-required";
+  detail?: string;
+  durationMs?: number;
+}
+
+export interface CapabilityAuditSummary {
+  botId: string;
+  botName: string;
+  trigger: CapabilityAuditRecord["trigger"];
+  capability: CapabilityAuditRecord["capability"];
+  total: number;
+  success: number;
+  failed: number;
+  blocked: number;
+  approvalRequired: number;
+  lastStatus: CapabilityAuditRecord["status"];
+  lastAt: string;
+}
+
+export interface CapabilityAuditReport {
+  summaries: CapabilityAuditSummary[];
+  recent: CapabilityAuditRecord[];
+}
+
 export interface McpServerConfig {
   id: string;
   name: string;
   enabled: boolean;
-  transport: "stdio";
+  transport: "stdio" | "http" | "sse";
   command: string;
   args: string[];
+  url?: string;
   env: Array<{
     name: string;
     value: string;
@@ -178,6 +234,43 @@ export interface McpServerDiagnostic {
     exitCode?: number | null;
     signal?: string | null;
   };
+  lastProbe?: McpServerProbeSummary;
+}
+
+export interface PlatformConnectorDiagnostic {
+  botId: string;
+  botName: string;
+  provider: ImProviderId;
+  status: "ok" | "warn" | "error";
+  issues: string[];
+  recommendations: string[];
+}
+
+export interface WeComChatListItem {
+  chatId: string;
+  chatName?: string;
+  lastMsgTime?: string;
+  msgCount?: number;
+}
+
+export interface WeComChatListResult {
+  beginTime: string;
+  endTime: string;
+  chats: WeComChatListItem[];
+  output: string;
+}
+
+export interface McpServerProbeSummary {
+  serverId: string;
+  serverName: string;
+  probedAt: string;
+  status: "ok" | "failed";
+  durationMs?: number;
+  tools: string[];
+  error?: string;
+  stderrTail?: string;
+  exitCode?: number | null;
+  signal?: string | null;
 }
 
 export interface AppConfig {
@@ -223,7 +316,7 @@ export interface CustomAppSummary {
   description: string;
   version: string;
   path: string;
-  source: "local";
+  source: "local" | "builtin";
   entry: {
     type: "node" | "executable" | "webview" | "mcp-adapter" | "workflow";
     command?: string;
@@ -240,6 +333,17 @@ export interface CustomAppSummary {
     filesystem: string[];
     requiresOwnerApproval: boolean;
   };
+  lifecycle?: {
+    installedAt?: string;
+    updatedAt?: string;
+    status: "installed" | "upgraded" | "legacy";
+  };
+  diagnostics?: CustomAppDiagnostic[];
+}
+
+export interface CustomAppDiagnostic {
+  status: "ok" | "warn" | "error";
+  message: string;
 }
 
 export interface SuiteWorkflowSummary {
@@ -254,23 +358,57 @@ export interface SuiteWorkflowStepSummary {
   name: string;
   type: "prompt" | "capability";
   prompt: string;
+  input?: string;
+  condition?: WorkflowStepCondition;
+  continueOnError?: boolean;
+  repeat?: {
+    maxTimes: number;
+    until?: WorkflowStepCondition;
+  };
+  timeoutSeconds?: number;
+  retry?: {
+    maxAttempts: number;
+  };
   capability?: {
-    kind: "skill" | "app" | "suite";
+    kind: "skill" | "mcp" | "app" | "suite";
     id: string;
   };
+}
+
+export interface WorkflowStepCondition {
+  if?: string;
+  equals?: string;
+  includes?: string;
+  matches?: string;
+  not?: boolean;
 }
 
 export interface SuiteSummary {
   id: string;
   name: string;
   description: string;
+  version: string;
+  publisher?: string;
+  trusted: boolean;
+  tags: string[];
   path: string;
-  source: "local";
+  source: "local" | "builtin";
   skills: string[];
   apps: string[];
   mcpServers: string[];
   instructions?: string;
   workflows: SuiteWorkflowSummary[];
+  lifecycle?: {
+    installedAt?: string;
+    updatedAt?: string;
+    status: "installed" | "upgraded" | "legacy";
+  };
+  diagnostics?: SuiteDiagnostic[];
+}
+
+export interface SuiteDiagnostic {
+  status: "ok" | "warn" | "error";
+  message: string;
 }
 
 export interface ChatMessage {
@@ -328,6 +466,7 @@ export interface RuntimeSnapshot {
   customApps: CustomAppSummary[];
   suites: SuiteSummary[];
   capabilities: CapabilityDefinition[];
+  capabilityDiagnostics: CapabilityGovernanceDiagnostic[];
   config: AppConfig;
 }
 
@@ -348,9 +487,21 @@ export interface FileCacheEntrySummary {
   botIds: string[];
   fileName: string;
   bytes: number;
+  cachedAt?: string;
   hash: string;
   label: string;
   freshnessKey?: string;
+  freshness: {
+    status: "fresh" | "stale" | "unknown";
+    reason: string;
+    ageDays?: number;
+  };
+}
+
+export interface FileCacheRepairReport {
+  removedEntries: number;
+  removedHashes: number;
+  repairedEntries: number;
 }
 
 export interface StorageSession {

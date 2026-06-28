@@ -49,6 +49,9 @@ const suite: SuiteSummary = {
   id: "manufacturing-qa",
   name: "Manufacturing QA",
   description: "Suite for manufacturing quality tasks",
+  version: "1.0.0",
+  trusted: true,
+  tags: ["quality"],
   path: "/suites/manufacturing-qa",
   source: "local",
   skills: ["legacy-skill"],
@@ -63,7 +66,16 @@ const suite: SuiteSummary = {
       prompt: "Follow a structured QA process.",
       steps: [
         { id: "collect", name: "Collect", type: "prompt", prompt: "Collect known facts." },
-        { id: "analyze", name: "Analyze", type: "capability", prompt: "Analyze with the QA skill.", capability: { kind: "skill", id: "legacy-skill" } }
+        {
+          id: "analyze",
+          name: "Analyze",
+          type: "capability",
+          prompt: "Analyze with the QA skill.",
+          input: "{{stepPrompt}}\n\nFacts:\n{{previous}}\n\nRequest:\n{{input}}",
+          timeoutSeconds: 120,
+          retry: { maxAttempts: 3 },
+          capability: { kind: "skill", id: "legacy-skill" }
+        }
       ]
     }
   ]
@@ -142,6 +154,9 @@ test("resolves a workflow with declarative steps", () => {
   assert.equal(binding.steps.length, 2);
   assert.equal(binding.steps[0]?.type, "prompt");
   assert.equal(binding.steps[1]?.type, "capability");
+  assert.equal(binding.steps[1]?.input, "{{stepPrompt}}\n\nFacts:\n{{previous}}\n\nRequest:\n{{input}}");
+  assert.equal(binding.steps[1]?.timeoutSeconds, 120);
+  assert.deepEqual(binding.steps[1]?.retry, { maxAttempts: 3 });
 });
 
 test("resolves an app capability to a custom-app binding", () => {
@@ -157,6 +172,96 @@ test("resolves an app capability to a custom-app binding", () => {
   });
   assert.equal(binding.type, "custom-app");
   assert.equal(binding.customApp.id, "daily-report");
+});
+
+test("rejects custom app entry types that are not runtime-ready", () => {
+  assert.throws(() => resolveExecutableCapabilityBinding({
+    bot,
+    capability: { kind: "app", id: "ui-app" },
+    trigger: "command",
+    botSkills: [skill],
+    customApps: [{
+      ...customApp,
+      id: "ui-app",
+      name: "UI App",
+      entry: { type: "webview", command: "", args: [] },
+      capabilities: { agentCallable: false, commandCallable: true, scheduledCallable: false, hasUi: true }
+    }],
+    suites: [suite],
+    suiteContexts: [suiteContext],
+    errorLabel: "命令 /ui"
+  }), /建设中能力展示/);
+});
+
+test("resolves an mcp capability to a focused claude binding", () => {
+  const binding = resolveExecutableCapabilityBinding({
+    bot,
+    capability: { kind: "mcp", id: "quality-db" },
+    trigger: "command",
+    botSkills: [skill],
+    customApps: [customApp],
+    mcpServers: [{
+      id: "quality-db",
+      name: "Quality DB",
+      enabled: true,
+      transport: "stdio",
+      command: "node",
+      args: [],
+      env: []
+    }],
+    suites: [suite],
+    suiteContexts: [suiteContext],
+    errorLabel: "命令 /quality"
+  });
+  assert.equal(binding.type, "claude");
+  assert.equal(binding.capability.kind, "mcp");
+  assert.equal(binding.capability.id, "quality-db");
+  assert.match(binding.workflowPrompt ?? "", /Quality DB/);
+});
+
+test("rejects non-stdio MCP capability triggers until runtime support lands", () => {
+  assert.throws(() => resolveExecutableCapabilityBinding({
+    bot,
+    capability: { kind: "mcp", id: "remote-mcp" },
+    trigger: "command",
+    botSkills: [skill],
+    customApps: [customApp],
+    mcpServers: [{
+      id: "remote-mcp",
+      name: "Remote MCP",
+      enabled: true,
+      transport: "http",
+      command: "",
+      args: [],
+      env: [],
+      url: "https://example.com/mcp"
+    }],
+    suites: [suite],
+    suiteContexts: [suiteContext],
+    errorLabel: "命令 /remote"
+  }), /尚未接入运行时/);
+});
+
+test("rejects MCP drafts without a startup command", () => {
+  assert.throws(() => resolveExecutableCapabilityBinding({
+    bot,
+    capability: { kind: "mcp", id: "draft-mcp" },
+    trigger: "command",
+    botSkills: [skill],
+    customApps: [customApp],
+    mcpServers: [{
+      id: "draft-mcp",
+      name: "Draft MCP",
+      enabled: true,
+      transport: "stdio",
+      command: "",
+      args: [],
+      env: []
+    }],
+    suites: [suite],
+    suiteContexts: [suiteContext],
+    errorLabel: "命令 /draft"
+  }), /尚未配置启动命令/);
 });
 
 test("rejects capability triggers that policy disables", () => {

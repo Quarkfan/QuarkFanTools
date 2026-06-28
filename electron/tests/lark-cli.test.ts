@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { normalizeLarkEvent } from "../lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "../lark-commands.js";
-import { normalizeLarkConfigProfilesContent } from "../lark-cli.js";
+import { larkRuntimeEnvironment, normalizeLarkConfigProfilesContent, resolveLarkCommand } from "../lark-cli.js";
 import { selectLarkMessageTarget } from "../lark-message-router.js";
 import { messageTargetsBot } from "../message-target.js";
 import type { BotConfig, LarkBotIdentity } from "../types.js";
@@ -66,6 +69,54 @@ test("user login merges custom OAuth scopes", () => {
     "--no-wait",
     "--json"
   ]);
+});
+
+test("uses a local lark-cli from PATH before the bundled runtime", async () => {
+  const previousPath = process.env.PATH;
+  const dir = await mkdtemp(path.join(os.tmpdir(), "qft-local-lark-cli-"));
+  const binary = path.join(dir, "lark-cli");
+  try {
+    await writeFile(binary, "#!/bin/sh\nexit 0\n");
+    await chmod(binary, 0o755);
+    process.env.PATH = `${dir}${path.delimiter}${previousPath ?? ""}`;
+
+    const command = await resolveLarkCommand({ ...bot, cliPath: "" });
+    const env = larkRuntimeEnvironment({ ...bot, cliPath: "" });
+
+    assert.equal(command.command, binary);
+    assert.equal(command.prefix.length, 0);
+    assert.equal(env.PATH?.split(path.delimiter)[0], dir);
+  } finally {
+    process.env.PATH = previousPath;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("uses an explicitly configured lark-cli path before PATH discovery", async () => {
+  const previousPath = process.env.PATH;
+  const dir = await mkdtemp(path.join(os.tmpdir(), "qft-configured-lark-cli-"));
+  const configuredDir = await mkdtemp(path.join(os.tmpdir(), "qft-configured-lark-cli-explicit-"));
+  const localBinary = path.join(dir, "lark-cli");
+  const configuredBinary = path.join(configuredDir, "custom-lark-cli");
+  try {
+    await writeFile(localBinary, "#!/bin/sh\nexit 0\n");
+    await chmod(localBinary, 0o755);
+    await writeFile(configuredBinary, "#!/bin/sh\nexit 0\n");
+    await chmod(configuredBinary, 0o755);
+    process.env.PATH = `${dir}${path.delimiter}${previousPath ?? ""}`;
+
+    const command = await resolveLarkCommand({ ...bot, cliPath: configuredBinary });
+    const env = larkRuntimeEnvironment({ ...bot, cliPath: configuredBinary });
+
+    assert.equal(command.command, configuredBinary);
+    assert.equal(env.PATH?.split(path.delimiter)[0], configuredDir);
+  } finally {
+    process.env.PATH = previousPath;
+    await Promise.all([
+      rm(dir, { recursive: true, force: true }),
+      rm(configuredDir, { recursive: true, force: true })
+    ]);
+  }
 });
 
 test("normalizes legacy duplicate lark-cli app profiles", () => {

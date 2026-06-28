@@ -2,6 +2,8 @@ import { runClaude } from "./claude.js";
 import { runCustomApp } from "./custom-app-runner.js";
 import type { AppConfig, BotConfig, LarkMessage } from "./types.js";
 import type { ExecutableCapabilityBinding } from "./executable-capability-bindings.js";
+import { buildWorkflowStepPrompt } from "./workflow-steps.js";
+import { evaluateWorkflowCondition } from "./workflow-control.js";
 
 export interface CapabilityExecutionRequest {
   config: AppConfig;
@@ -24,8 +26,10 @@ export interface WorkflowStepExecutionEvent {
   stepId: string;
   stepName: string;
   stepType: "prompt" | "capability";
-  status: "started" | "success" | "failed";
+  status: "started" | "success" | "failed" | "skipped";
   at: string;
+  attempt?: number;
+  maxAttempts?: number;
   output?: string;
   error?: string;
 }
@@ -35,27 +39,76 @@ export async function executeCapabilityTarget(request: CapabilityExecutionReques
     return executeClaudeBinding(request, request.binding, request.prompt);
   }
   if (request.binding.type === "workflow") {
+    const workflowBinding = request.binding;
     let previous = "";
-    for (const step of request.binding.steps) {
-      request.onProgress?.(`工作流步骤 ${step.name}`);
-      emitWorkflowStep(request, step, "started");
-      try {
-        const stepPrompt = [
-          request.binding.prompt,
-          step.prompt,
-          previous ? `上一步输出：\n${previous}` : "",
-          `当前输入：\n${request.prompt}`
-        ].filter(Boolean).join("\n\n");
-        previous = step.type === "prompt"
-          ? await executeClaudeBinding(request, step.claude, stepPrompt)
-          : await executeCapabilityTarget({ ...request, binding: step.binding, prompt: stepPrompt });
-        emitWorkflowStep(request, step, "success", { output: previous });
-      } catch (error) {
-        emitWorkflowStep(request, step, "failed", { error: String(error instanceof Error ? error.message : error) });
-        throw error;
+    const steps: Record<string, string> = {};
+    const variables: Record<string, string> = {
+      input: request.prompt,
+      workflowPrompt: workflowBinding.prompt
+    };
+    for (const step of workflowBinding.steps) {
+      const context = () => ({
+        workflowPrompt: workflowBinding.prompt,
+        stepPrompt: step.prompt,
+        input: request.prompt,
+        previous,
+        steps,
+        variables
+      });
+      if (!evaluateWorkflowCondition(step.condition, context())) {
+        emitWorkflowStep(request, step, "skipped");
+        continue;
+      }
+      const repeatMax = step.repeat?.maxTimes ?? 1;
+      const maxAttempts = step.retry?.maxAttempts ?? 1;
+      for (let repeat = 1; repeat <= repeatMax; repeat += 1) {
+        let completed = false;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          request.onProgress?.(`工作流步骤 ${step.name}${repeatMax > 1 ? `（循环 ${repeat}/${repeatMax}）` : ""}${maxAttempts > 1 ? `（第 ${attempt}/${maxAttempts} 次）` : ""}`);
+          emitWorkflowStep(request, step, "started", { attempt, maxAttempts });
+          try {
+            const stepPrompt = buildWorkflowStepPrompt({
+              workflowPrompt: workflowBinding.prompt,
+              stepPrompt: step.prompt,
+              input: request.prompt,
+              previous,
+              steps,
+              variables,
+              template: step.input
+            });
+            previous = await withTimeout(
+              step.type === "prompt"
+                ? executeClaudeBinding(request, step.claude, stepPrompt)
+                : executeCapabilityTarget({ ...request, binding: step.binding, prompt: stepPrompt }),
+              step.timeoutSeconds,
+              `Workflow 步骤 ${step.name} 超过 ${step.timeoutSeconds} 秒未完成`
+            );
+            steps[step.id] = previous;
+            variables[`steps.${step.id}`] = previous;
+            emitWorkflowStep(request, step, "success", { output: previous, attempt, maxAttempts });
+            completed = true;
+            break;
+          } catch (error) {
+            const message = String(error instanceof Error ? error.message : error);
+            emitWorkflowStep(request, step, "failed", { error: message, attempt, maxAttempts });
+            if (attempt >= maxAttempts) {
+              if (step.continueOnError) {
+                previous = "";
+                steps[step.id] = "";
+                completed = true;
+                break;
+              }
+              throw error;
+            }
+          }
+        }
+        if (!completed) break;
+        if (step.repeat?.until && evaluateWorkflowCondition(step.repeat.until, context())) {
+          break;
+        }
       }
     }
-    return previous || `${request.binding.capability.name} 执行完成，但没有生成可回复内容。`;
+    return previous || `${workflowBinding.capability.name} 执行完成，但没有生成可回复内容。`;
   }
   return (await runCustomApp(
     request.bot,
@@ -71,7 +124,7 @@ function emitWorkflowStep(
   request: CapabilityExecutionRequest,
   step: Extract<ExecutableCapabilityBinding, { type: "workflow" }>["steps"][number],
   status: WorkflowStepExecutionEvent["status"],
-  detail: Pick<WorkflowStepExecutionEvent, "output" | "error"> = {}
+  detail: Pick<WorkflowStepExecutionEvent, "attempt" | "maxAttempts" | "output" | "error"> = {}
 ): void {
   if (request.binding.type !== "workflow") return;
   request.onWorkflowStep?.({
@@ -84,6 +137,21 @@ function emitWorkflowStep(
     at: new Date().toISOString(),
     ...detail
   });
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutSeconds: number | undefined, message: string): Promise<T> {
+  if (!timeoutSeconds) return promise;
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutSeconds * 1000);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function executeClaudeBinding(

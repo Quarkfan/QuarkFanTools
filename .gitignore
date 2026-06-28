@@ -4,8 +4,12 @@ dist-electron/
 build/
 release/
 runtime/
+github/
 state/
 bots/
+skills/store-bd-daily-followup/
+skills/*/data/
+.obsidian/
 config/local.json
 *.log
 .DS_Store

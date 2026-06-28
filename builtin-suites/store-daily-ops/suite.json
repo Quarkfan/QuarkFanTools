@@ -1,0 +1,47 @@
+{
+  "id": "template.store-daily-ops",
+  "name": "门店日报套件模板",
+  "description": "演示面向门店运营的套件结构，适合定时任务每天生成经营摘要。",
+  "version": "1.0.0",
+  "publisher": "QuarkfanTools",
+  "trusted": true,
+  "tags": [
+    "template",
+    "store",
+    "daily"
+  ],
+  "skills": [
+    "excel-workbooks"
+  ],
+  "apps": [
+    "template.daily-report-writer"
+  ],
+  "mcpServers": [],
+  "instructions": "用于门店日报。关注销售、库存、异常、人员和待跟进事项。输出要简洁，适合投递到 IM 群。",
+  "workflows": [
+    {
+      "id": "daily-brief",
+      "name": "每日经营简报",
+      "prompt": "根据输入数据生成门店每日经营简报。",
+      "steps": [
+        {
+          "id": "summarize",
+          "name": "经营摘要",
+          "type": "prompt",
+          "prompt": "提取销售表现、库存异常、客户反馈和待跟进事项。",
+          "input": "{{input}}"
+        },
+        {
+          "id": "format",
+          "name": "日报格式化",
+          "type": "capability",
+          "prompt": "把经营摘要格式化成可直接发送到群里的日报。",
+          "capability": {
+            "kind": "app",
+            "id": "template.daily-report-writer"
+          }
+        }
+      ]
+    }
+  ]
+}

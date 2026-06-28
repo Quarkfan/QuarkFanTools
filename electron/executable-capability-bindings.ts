@@ -1,5 +1,5 @@
 import type { ClaudeSuiteContext } from "./claude.js";
-import type { BotConfig, CustomAppSummary, SkillSummary, SuiteWorkflowStepSummary, SuiteSummary } from "./types.js";
+import type { BotConfig, CustomAppSummary, McpServerConfig, SkillSummary, SuiteWorkflowStepSummary, SuiteSummary } from "./types.js";
 
 export type ExecutableCapabilityTrigger = "command" | "scheduled" | "agent";
 
@@ -8,7 +8,7 @@ export type ExecutableCapabilityBinding =
       type: "claude";
       trigger: ExecutableCapabilityTrigger;
       capability: {
-        kind: "skill" | "suite" | "workflow";
+        kind: "skill" | "mcp" | "suite" | "workflow";
         id: string;
         name: string;
       };
@@ -44,6 +44,14 @@ export type ExecutableWorkflowStep =
       name: string;
       type: "prompt";
       prompt: string;
+      input?: string;
+      condition?: SuiteWorkflowStepSummary["condition"];
+      continueOnError?: boolean;
+      repeat?: SuiteWorkflowStepSummary["repeat"];
+      timeoutSeconds?: number;
+      retry?: {
+        maxAttempts: number;
+      };
       claude: Extract<ExecutableCapabilityBinding, { type: "claude" }>;
     }
   | {
@@ -51,18 +59,27 @@ export type ExecutableWorkflowStep =
       name: string;
       type: "capability";
       prompt: string;
+      input?: string;
+      condition?: SuiteWorkflowStepSummary["condition"];
+      continueOnError?: boolean;
+      repeat?: SuiteWorkflowStepSummary["repeat"];
+      timeoutSeconds?: number;
+      retry?: {
+        maxAttempts: number;
+      };
       binding: Exclude<ExecutableCapabilityBinding, { type: "workflow" }>;
     };
 
 export interface ResolveExecutableCapabilityBindingOptions {
   bot: BotConfig;
   capability: {
-    kind: "skill" | "app" | "suite" | "workflow";
+    kind: "skill" | "mcp" | "app" | "suite" | "workflow";
     id: string;
   };
   trigger: ExecutableCapabilityTrigger;
   botSkills: SkillSummary[];
   customApps: CustomAppSummary[];
+  mcpServers?: McpServerConfig[];
   suites: SuiteSummary[];
   suiteContexts: ClaudeSuiteContext[];
   capabilityPolicies?: Map<string, NonNullable<BotConfig["capabilityRefs"]>[number]["policy"] | undefined>;
@@ -102,6 +119,25 @@ export function resolveExecutableCapabilityBinding(options: ResolveExecutableCap
       },
       skills: suiteSkills.length > 0 ? suiteSkills : options.botSkills,
       suiteContexts: options.suiteContexts.filter((item) => item.suite.id === suite.id)
+    };
+  }
+
+  if (options.capability.kind === "mcp") {
+    const server = options.mcpServers?.find((item) => item.id === options.capability.id);
+    if (!server || !server.enabled) throw new Error(`${options.errorLabel} 指向的 MCP 不存在、未启用或未授权。`);
+    if (server.transport !== "stdio") throw new Error(`${options.errorLabel} 指向的 MCP 已保存为 ${server.transport.toUpperCase()} 占位配置，当前尚未接入运行时。`);
+    if (!server.command.trim()) throw new Error(`${options.errorLabel} 指向的 MCP 尚未配置启动命令。`);
+    return {
+      type: "claude",
+      trigger: options.trigger,
+      capability: {
+        kind: "mcp",
+        id: server.id,
+        name: server.name
+      },
+      skills: [],
+      suiteContexts: [],
+      workflowPrompt: `本次请求绑定到 MCP 服务「${server.name}」（${server.id}）。请优先使用该 Bot 已授权的对应 MCP 工具完成任务；如果该 MCP 无法完成，请明确说明原因。`
     };
   }
 
@@ -152,6 +188,9 @@ export function resolveExecutableCapabilityBinding(options: ResolveExecutableCap
   if (options.trigger === "agent" && !customApp.capabilities.agentCallable) {
     throw new Error(`${options.errorLabel} 指向的自定义应用未声明 Agent 调用能力。`);
   }
+  if (!["node", "executable"].includes(customApp.entry.type)) {
+    throw new Error(`${options.errorLabel} 指向的自定义应用入口类型为 ${customApp.entry.type}，当前仅作为建设中能力展示，暂不能执行。`);
+  }
   return {
     type: "custom-app",
     trigger: options.trigger,
@@ -175,6 +214,12 @@ function resolveWorkflowStep(
       name: step.name,
       type: "prompt",
       prompt: step.prompt,
+      input: step.input,
+      condition: step.condition,
+      continueOnError: step.continueOnError,
+      repeat: step.repeat,
+      timeoutSeconds: step.timeoutSeconds,
+      retry: step.retry,
       claude: {
         ...claudeBinding,
         workflowPrompt: undefined
@@ -195,6 +240,12 @@ function resolveWorkflowStep(
     name: step.name,
     type: "capability",
     prompt: step.prompt,
+    input: step.input,
+    condition: step.condition,
+    continueOnError: step.continueOnError,
+    repeat: step.repeat,
+    timeoutSeconds: step.timeoutSeconds,
+    retry: step.retry,
     binding
   };
 }

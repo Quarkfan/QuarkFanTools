@@ -21,7 +21,11 @@ export function parseSlashCommand(text: string): ParsedCommandInvocation | null 
 
 export function findCommandBinding(bindings: BotCommandBinding[] | undefined, name: string): BotCommandBinding | null {
   if (!bindings?.length) return null;
-  return bindings.find((binding) => binding.enabled && binding.name.toLowerCase() === name.toLowerCase()) ?? null;
+  const normalized = name.toLowerCase();
+  return bindings.find((binding) =>
+    binding.enabled &&
+    (binding.name.toLowerCase() === normalized || (binding.aliases ?? []).some((alias) => alias.toLowerCase() === normalized))
+  ) ?? null;
 }
 
 export function commandPrompt(binding: BotCommandBinding, args: string): string {
@@ -29,4 +33,17 @@ export function commandPrompt(binding: BotCommandBinding, args: string): string 
     return binding.promptTemplate.replaceAll("{{args}}", args);
   }
   return args || `执行命令 /${binding.name}`;
+}
+
+export function commandHelpText(bindings: BotCommandBinding[] | undefined): string {
+  const active = (bindings ?? []).filter((binding) => binding.enabled);
+  if (active.length === 0) return "当前 Bot 没有配置可用命令。";
+  return [
+    "当前 Bot 可用命令：",
+    ...active.map((binding) => {
+      const aliases = (binding.aliases ?? []).length > 0 ? `（别名：${binding.aliases?.map((alias) => `/${alias}`).join("、")}）` : "";
+      const description = binding.description ? ` - ${binding.description}` : "";
+      return `- /${binding.name}${aliases}${description}`;
+    })
+  ].join("\n");
 }

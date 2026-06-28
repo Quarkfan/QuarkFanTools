@@ -1,13 +1,13 @@
 # QuarkfanTools
 
-QuarkfanTools 是运行在 macOS 上的本地多 IM Skill Agent。安装包内置 Electron、Claude Agent SDK、飞书 CLI、企业微信 CLI，以及 Word、PowerPoint、Excel 基础 Skills；支持多个相互隔离、可独立启停的机器人。
+QuarkfanTools 是运行在 macOS 上的本地多 IM Skill Agent。安装包内置 Electron、Claude Agent SDK、飞书 CLI、企业微信 CLI，以及 Word、PowerPoint、Excel 基础 Skills；支持多个相互隔离、可独立启停的机器人。当前正式开放的消息平台是飞书，企业微信因官方能力限制暂时封闭入口。
 
-当前版本为 `2.0.3`。应用左下角显示当前版本，点击版本号可查看面向用户的更新记录。项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，开发变更历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+当前版本为 `2.2.0`。应用左下角显示当前版本，点击版本号可查看面向用户的更新记录。产品经理接手请先看 [`docs/PRODUCT_HANDOFF.md`](docs/PRODUCT_HANDOFF.md) 和 [`docs/PRD.md`](docs/PRD.md)；项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，开发变更历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 核心能力
 
-- 分别提供 Apple Silicon 与 Intel macOS 安装包。
-- 支持配置多个飞书或企业微信机器人，每个机器人使用独立凭据、HOME、状态与 Claude 工作区，并可在运行台独立启动和停止监听；飞书事件进入 Runtime 后按被艾特 Bot 统一路由。
+- 后续发布默认提供 Apple Silicon / arm64 macOS 安装包；Intel x64 只作为历史版本兼容样本。
+- 支持配置多个飞书机器人，每个机器人使用独立凭据、HOME、状态与 Claude 工作区，并可在运行台独立启动和停止监听；飞书事件进入 Runtime 后按被艾特 Bot 统一路由。企业微信配置会保留历史值，但当前版本不能启动监听、轮询或投递。
 - 点击运行台中的机器人可查看其独立详细日志，并按信息、成功、警告或错误等级筛选。
 - 每个机器人只能访问明确授权的 Skills；导入或同步的新 Skill 默认不授权，授权区支持搜索和对筛选结果批量操作。
 - 使用内置 `lark-cli event +subscribe` NDJSON 长连接接收飞书事件，异常断线自动重连。
@@ -63,24 +63,23 @@ npm run dev
 
 `npm run dev` 使用 Vite 热更新。`npm start` 会先构建再启动 Electron；开发服务器不可用时，Electron 会自动加载本地构建页面。
 
-分别生成 Intel 与 Apple Silicon 安装包：
+生成 Apple Silicon / arm64 安装包：
 
 ```bash
 npm run pack:mac
 ```
 
-也可以只构建一个架构：
+等价的单独构建命令：
 
 ```bash
 npm run pack:mac:arm64
-npm run pack:mac:x64
 ```
 
-输出位于 `release/arm64/` 和 `release/x64/`。
+输出位于 `release/arm64/`。
 
 ## 本机数据
 
-开发模式下状态保存在项目的 `state/`；打包应用的数据保存在 `~/Library/Application Support/quarkfantools/`。点击“导入到本地 Skill 市场”后，所选文件夹会复制到 `workspace/skills/`，但不会默认授权给任何机器人。首次运行会自动迁移旧版 `~/Library/Application Support/qah/` 中的配置、Skills 和状态。
+开发模式下状态保存在项目的 `state/`；打包应用的数据保存在 `~/Library/Application Support/quarkfantools/`。点击“导入到本地 Skill 市场”后，所选文件夹会复制到 `workspace/skills/`，但不会默认授权给任何机器人。首次运行会自动迁移旧版 `~/Library/Application Support/qah/` 中的配置、Skills 和状态；迁移前会先备份旧目录到 `~/Library/Application Support/quarkfantools/backups/legacy-qah-<timestamp>/`，便于升级异常时人工恢复。
 
 每个机器人使用独立目录：
 

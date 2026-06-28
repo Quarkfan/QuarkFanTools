@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { botCapabilityRefs, capabilityDefinitions, resolveBotCapabilities } from "../capabilities.js";
+import { botCapabilityRefs, capabilityDefinitions, capabilityGovernanceDiagnostics, resolveBotCapabilities } from "../capabilities.js";
 import type { BotConfig, CustomAppSummary, McpServerConfig, SkillSummary, SuiteSummary } from "../types.js";
 
 const bot: BotConfig = {
@@ -46,6 +46,9 @@ const suite: SuiteSummary = {
   id: "manufacturing-qa",
   name: "Manufacturing QA",
   description: "Suite for manufacturing quality tasks",
+  version: "1.0.0",
+  trusted: true,
+  tags: ["quality"],
   path: "/suites/manufacturing-qa",
   source: "local",
   skills: ["legacy-skill"],
@@ -92,4 +95,48 @@ test("resolves legacy skill names and explicit capability refs for a bot", () =>
     "skill:legacy-skill",
     "workflow:manufacturing-qa/root-cause-analysis"
   ]);
+});
+
+test("diagnoses extensibility risks and missing suite dependencies", () => {
+  const riskyApp: CustomAppSummary = {
+    ...customApp,
+    id: "shell-runner",
+    name: "Shell Runner",
+    entry: { type: "executable", command: "./runner", args: [] },
+    permissions: { network: true, filesystem: ["workspace", "/tmp"], requiresOwnerApproval: true }
+  };
+  const brokenSuite: SuiteSummary = {
+    ...suite,
+    id: "broken-suite",
+    name: "Broken Suite",
+    skills: ["legacy-skill", "missing-skill"],
+    apps: ["missing-app"],
+    mcpServers: ["missing-mcp"],
+    workflows: [{
+      id: "broken-flow",
+      name: "Broken Flow",
+      prompt: "Run missing dependency.",
+      steps: [{
+        id: "missing-step",
+        name: "Missing Step",
+        type: "capability",
+        prompt: "Use missing app.",
+        capability: { kind: "app", id: "missing-app" }
+      }]
+    }]
+  };
+
+  const diagnostics = capabilityGovernanceDiagnostics([skill], [customApp, riskyApp], [suite, brokenSuite], [mcpServer]);
+  const risky = diagnostics.find((item) => item.kind === "app" && item.id === "shell-runner");
+  assert.equal(risky?.status, "warn");
+  assert.equal(risky?.risk, "high");
+  assert.match(risky?.issues.join("\n") ?? "", /executable[\s\S]*网络[\s\S]*文件系统/);
+
+  const suiteDiagnostic = diagnostics.find((item) => item.kind === "suite" && item.id === "broken-suite");
+  assert.equal(suiteDiagnostic?.status, "error");
+  assert.match(suiteDiagnostic?.issues.join("\n") ?? "", /missing-skill[\s\S]*missing-app[\s\S]*missing-mcp/);
+
+  const workflowDiagnostic = diagnostics.find((item) => item.kind === "workflow" && item.id === "broken-suite/broken-flow");
+  assert.equal(workflowDiagnostic?.status, "error");
+  assert.match(workflowDiagnostic?.issues.join("\n") ?? "", /missing-step[\s\S]*missing-app/);
 });

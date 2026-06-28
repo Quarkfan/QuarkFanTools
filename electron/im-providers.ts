@@ -50,7 +50,7 @@ export function imProviderForBot(bot: BotConfig): ImProvider {
 }
 
 export function imProvider(provider: ImProviderId): ImProvider {
-  if (provider === "wecom") return wecomProvider;
+  if (provider === "wecom") throw new Error("企业微信 Provider 因官方能力限制暂时封闭");
   if (provider === "dingtalk") throw new Error("钉钉 IM Provider 尚未实现");
   return larkProvider;
 }

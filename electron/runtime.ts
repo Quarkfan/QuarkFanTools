@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
@@ -10,7 +11,7 @@ import { preprocessOfficeResources } from "./office.js";
 import { discoverSkills } from "./skills.js";
 import { discoverCustomApps } from "./apps.js";
 import { discoverSuites } from "./suites.js";
-import { capabilityDefinitions } from "./capabilities.js";
+import { capabilityDefinitions, capabilityGovernanceDiagnostics } from "./capabilities.js";
 import { stateRoot } from "./paths.js";
 import { conversationKey } from "./conversation.js";
 import { SessionStore } from "./sessions.js";
@@ -20,11 +21,13 @@ import { TaskLimiter } from "./task-limiter.js";
 import { addDeferredTask, continueTaskId, getDeferredTask, parseDeferredTask, updateDeferredTask, type DeferredTask } from "./deferred-tasks.js";
 import { parseLarkCachedFileRequest } from "./lark-cached-file-protocol.js";
 import { cacheMessageResources } from "./file-cache.js";
-import { commandPrompt, findCommandBinding, parseSlashCommand } from "./commands.js";
+import { commandHelpText, commandPrompt, findCommandBinding, parseSlashCommand } from "./commands.js";
 import { botCapabilityRefs, resolveBotCapabilities } from "./capabilities.js";
+import { capabilityOwnerApprovalReason } from "./capability-approval.js";
+import { appendCapabilityAudit, auditCapability } from "./capability-audit.js";
 import { executeCapabilityTarget, type WorkflowStepExecutionEvent } from "./capability-executor.js";
 import { resolveExecutableCapabilityBinding } from "./executable-capability-bindings.js";
-import { appendScheduledTaskRun, dueScheduledTasks, nextTaskRun, persistBotScheduledTasks, refreshBotScheduledTasks } from "./scheduled-tasks.js";
+import { appendScheduledTaskRun, dueScheduledTasks, hydrateBotScheduledTasks, nextTaskRun, persistBotScheduledTasks, refreshBotScheduledTasks } from "./scheduled-tasks.js";
 import { larkConnectorBot, primaryProvider } from "./platform-connectors.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
 import { selectLarkMessageTarget } from "./lark-message-router.js";
@@ -66,7 +69,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.customApps = await discoverCustomApps();
     this.suites = await discoverSuites();
     await Promise.all(this.config.bots.flatMap((bot) => [this.loadProcessed(bot.id), this.sessionStore.load(bot)]));
-    this.refreshAllScheduledTasks();
+    await this.refreshAllScheduledTasks();
     this.emitSnapshot();
   }
 
@@ -75,12 +78,12 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     this.skills = await discoverSkills();
     this.customApps = await discoverCustomApps();
     this.suites = await discoverSuites();
-    const bots = this.config.bots.filter((bot) => bot.enabled && bot.appId && bot.appSecret);
+    const bots = this.config.bots.filter((bot) => bot.enabled && bot.appId && bot.appSecret && primaryProvider(bot) !== "wecom");
     await this.logger.write("info", "正在启动 QuarkfanTools", `${bots.length} 个机器人，${this.skills.length} 个 Skill`);
     for (const bot of bots) {
       await this.startBot(bot.id);
     }
-    this.refreshAllScheduledTasks();
+    await this.refreshAllScheduledTasks();
   }
 
   async startBot(botId: string): Promise<void> {
@@ -96,6 +99,11 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (!bot) throw new Error("机器人不存在");
     await this.logger.write("info", "收到机器人启动请求", bot.name, bot.id);
     if (!bot.enabled) throw new Error("机器人已停用，请先在配置中启用");
+    if (primaryProvider(bot) === "wecom") {
+      const message = "企业微信 Provider 因官方能力限制暂时封闭。当前版本不会启动企业微信监听、轮询或投递；请先改用飞书 Bot。";
+      await this.logger.write("warn", "企业微信 Provider 暂时封闭", message, bot.id);
+      throw new Error(message);
+    }
     if (!bot.appId || !bot.appSecret) throw new Error("机器人 App ID 或 App Secret 未配置");
     if (!this.config.model.baseUrl || !this.config.model.model || !this.config.model.apiKey) {
       throw new Error("Claude 兼容模型连接未完整配置");
@@ -127,7 +135,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       await this.logger.write("error", "机器人启动失败", String(error), bot.id);
     }
-    this.refreshBotScheduledTimers(bot);
+    await this.refreshBotScheduledTimers(bot);
     this.emitSnapshot();
   }
 
@@ -177,6 +185,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       customApps: this.customApps,
       suites: this.suites,
       capabilities: capabilityDefinitions(this.skills, this.customApps, this.suites, this.config.mcpServers),
+      capabilityDiagnostics: capabilityGovernanceDiagnostics(this.skills, this.customApps, this.suites, this.config.mcpServers),
       config: this.config
     };
   }
@@ -630,11 +639,12 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     return null;
   }
 
-  private refreshAllScheduledTasks(): void {
-    for (const bot of this.config.bots) this.refreshBotScheduledTimers(bot);
+  private async refreshAllScheduledTasks(): Promise<void> {
+    await Promise.all(this.config.bots.map((bot) => this.refreshBotScheduledTimers(bot)));
   }
 
-  private refreshBotScheduledTimers(bot: BotConfig): void {
+  private async refreshBotScheduledTimers(bot: BotConfig): Promise<void> {
+    await hydrateBotScheduledTasks(bot);
     bot.scheduledTasks = refreshBotScheduledTasks(bot);
     for (const [key, timer] of this.scheduledTaskTimers.entries()) {
       if (!key.startsWith(`${bot.id}:`)) continue;
@@ -659,7 +669,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     const workflowSteps: WorkflowStepExecutionEvent[] = [];
     if (this.activeScheduledRuns.has(runKey)) {
       await this.completeScheduledTask(bot, task, startedAt, "skipped", "上一次运行仍未结束", trigger);
-      this.refreshBotScheduledTimers(bot);
+      await this.refreshBotScheduledTimers(bot);
       return;
     }
     this.activeScheduledRuns.add(runKey);
@@ -673,7 +683,9 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         return;
       }
       if (!this.config.model.baseUrl || !this.config.model.model || !this.config.model.apiKey) {
-        await this.completeScheduledTask(bot, task, startedAt, "failed", "模型配置不完整", trigger);
+        const detail = "模型配置不完整";
+        await this.completeScheduledTask(bot, task, startedAt, "failed", detail, trigger);
+        await this.notifyScheduledTaskFailure(bot, task, detail, trigger);
         return;
       }
       const limit = Math.max(1, Math.floor(this.config.runtime.maxConcurrentTasks || 1));
@@ -686,10 +698,12 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         release();
       }
     } catch (error) {
-      await this.completeScheduledTask(bot, task, startedAt, "failed", scheduledRunDetail(String(error), workflowSteps), trigger);
+      const detail = scheduledRunDetail(String(error), workflowSteps);
+      await this.completeScheduledTask(bot, task, startedAt, "failed", detail, trigger);
+      await this.notifyScheduledTaskFailure(bot, task, detail, trigger);
     } finally {
       this.activeScheduledRuns.delete(runKey);
-      if (trigger === "scheduled") this.refreshBotScheduledTimers(bot);
+      if (trigger === "scheduled") await this.refreshBotScheduledTimers(bot);
       this.emitSnapshot();
     }
   }
@@ -726,6 +740,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         botCapabilities,
         botCapabilityPolicies,
         replyMode: "capture",
+        trigger: "scheduled",
         suiteContexts: botSuiteContexts,
         onWorkflowStep: (event) => {
           workflowSteps.push(event);
@@ -737,36 +752,69 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     }
     if (task.target.type === "capability") {
       if (!task.target.capability) throw new Error(`定时任务 ${task.name} 缺少 capability 目标`);
+      const approvalReason = capabilityOwnerApprovalReason(task.target.capability, botCapabilityPolicies, this.customApps);
+      if (approvalReason) {
+        await this.auditCapabilityUse(bot, {
+          trigger: "scheduled",
+          source: `定时任务 ${task.name}`,
+          capability: auditCapability(task.target.capability.kind, task.target.capability.id),
+          status: "approval-required",
+          detail: approvalReason
+        });
+        throw new Error(`定时任务 ${task.name} 指向的能力需要 Owner 审批：${approvalReason}`);
+      }
       const binding = resolveExecutableCapabilityBinding({
         bot,
         capability: task.target.capability,
         trigger: "scheduled",
         botSkills,
         customApps: this.customApps,
+        mcpServers: this.config.mcpServers,
         suites: this.suites,
         suiteContexts: botSuiteContexts,
         capabilityPolicies: botCapabilityPolicies,
         errorLabel: `定时任务 ${task.name}`
       });
-      return executeCapabilityTarget({
-        config: this.config,
-        bot,
-        conversationKey: conversation,
-        messageId,
-        originalUserText: `[scheduled] ${task.name}`,
-        baseMessage,
-        prompt: task.target.prompt,
-        binding,
-        resumeSessionId: this.sessionStore.get(bot, conversation),
-        onProgress: (text) => {
-          void this.logger.write("info", "Agent 工作过程", `定时任务 ${task.name} / ${text}`, bot.id);
-        },
-        onWorkflowStep: (event) => {
-          workflowSteps.push(event);
-          void this.logWorkflowStep(bot, event, `定时任务 ${task.name}`);
-        },
-        onSessionSaved: (sessionId, assistant) => this.sessionStore.set(bot, conversation, sessionId, messageId, { user: `[scheduled] ${task.name}`, assistant })
-      });
+      const started = Date.now();
+      try {
+        const response = await executeCapabilityTarget({
+          config: this.config,
+          bot,
+          conversationKey: conversation,
+          messageId,
+          originalUserText: `[scheduled] ${task.name}`,
+          baseMessage,
+          prompt: task.target.prompt,
+          binding,
+          resumeSessionId: this.sessionStore.get(bot, conversation),
+          onProgress: (text) => {
+            void this.logger.write("info", "Agent 工作过程", `定时任务 ${task.name} / ${text}`, bot.id);
+          },
+          onWorkflowStep: (event) => {
+            workflowSteps.push(event);
+            void this.logWorkflowStep(bot, event, `定时任务 ${task.name}`);
+          },
+          onSessionSaved: (sessionId, assistant) => this.sessionStore.set(bot, conversation, sessionId, messageId, { user: `[scheduled] ${task.name}`, assistant })
+        });
+        await this.auditCapabilityUse(bot, {
+          trigger: "scheduled",
+          source: `定时任务 ${task.name}`,
+          capability: auditCapability(binding.capability.kind, binding.capability.id, binding.capability.name),
+          status: "success",
+          durationMs: Date.now() - started
+        });
+        return response;
+      } catch (error) {
+        await this.auditCapabilityUse(bot, {
+          trigger: "scheduled",
+          source: `定时任务 ${task.name}`,
+          capability: auditCapability(binding.capability.kind, binding.capability.id, binding.capability.name),
+          status: "failed",
+          detail: String(error instanceof Error ? error.message : error),
+          durationMs: Date.now() - started
+        });
+        throw error;
+      }
     }
     const result = await runClaude(this.config, bot, baseMessage, botSkills, conversation, this.sessionStore.get(bot, conversation), (progress) => {
       void this.logger.write("info", "Agent 工作过程", `定时任务 ${task.name} / ${progress.text}`, bot.id);
@@ -797,6 +845,21 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     await this.logger.write(status === "success" ? "success" : status === "failed" ? "error" : "warn", "定时任务运行完成", `${task.name} / ${status}${trigger === "manual" ? " / 手动触发" : ""}`, bot.id);
   }
 
+  private async notifyScheduledTaskFailure(bot: BotConfig, task: ScheduledTask, detail: string, trigger: "scheduled" | "manual"): Promise<void> {
+    const text = [
+      `定时任务失败：${task.name}`,
+      `Bot：${bot.name}`,
+      `触发：${trigger === "manual" ? "手动执行" : "计划执行"}`,
+      `详情：${trimForLog(detail, 600)}`
+    ].join("\n");
+    try {
+      await imProviderForBot(bot).sendTextToChat(bot, task.delivery.chatId, text);
+      await this.logger.write("warn", "已发送定时任务失败告警", `${task.name} / ${task.delivery.chatId}`, bot.id);
+    } catch (error) {
+      await this.logger.write("warn", "定时任务失败告警发送失败", `${task.name} / ${String(error)}`, bot.id);
+    }
+  }
+
   private updateScheduledTaskRetryState(task: ScheduledTask, startedAt: Date, status: "success" | "failed" | "skipped", detail: string, trigger: "scheduled" | "manual"): string {
     if (status === "success") {
       task.failureCount = 0;
@@ -817,7 +880,6 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       task.retryAt = new Date(startedAt.getTime() + delayMinutes * 60_000).toISOString();
       return `${detail}\n重试：第 ${task.failureCount}/${maxRetries} 次将在 ${task.retryAt} 执行`;
     }
-    task.enabled = false;
     task.retryAt = undefined;
     task.pausedReason = `连续失败 ${task.failureCount} 次，已超过最大重试次数 ${maxRetries}`;
     return `${detail}\n暂停原因：${task.pausedReason}`;
@@ -834,10 +896,17 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     botCapabilities: ReturnType<typeof resolveBotCapabilities>;
     botCapabilityPolicies: Map<string, ReturnType<typeof botCapabilityRefs>[number]["policy"]>;
     replyMode: "reply" | "capture";
+    trigger?: "command" | "scheduled";
     suiteContexts: ClaudeSuiteContext[];
     sessionEvents?: SessionTranscriptEvent[];
     onWorkflowStep?: (event: WorkflowStepExecutionEvent) => void;
   }): Promise<{ handled: boolean; response?: string }> {
+    const auditTrigger = options.trigger ?? "command";
+    if (options.commandName === "help") {
+      const response = commandHelpText(bot.commandBindings);
+      if (options.replyMode === "reply") await this.replyToMessage(bot, options.messageId, response);
+      return { handled: true, response };
+    }
     const binding = findCommandBinding(bot.commandBindings, options.commandName);
     if (!binding) {
       if (options.replyMode === "reply") {
@@ -852,6 +921,25 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       return { handled: true };
     }
+    const approvalReason = capabilityOwnerApprovalReason(binding.target.capability, options.botCapabilityPolicies, this.customApps);
+    if (approvalReason) {
+      await this.auditCapabilityUse(bot, {
+        trigger: auditTrigger,
+        source: auditTrigger === "scheduled" ? `定时命令 /${options.commandName}` : `命令 /${options.commandName}`,
+        capability: auditCapability(binding.target.capability.kind, binding.target.capability.id, capability.name),
+        status: "approval-required",
+        detail: approvalReason
+      });
+      if (options.replyMode === "capture") throw new Error(`命令 /${options.commandName} 指向的能力需要 Owner 审批：${approvalReason}`);
+      const response = await this.requestCapabilityOwnerApproval(bot, options.baseMessage, {
+        label: `命令 /${options.commandName}`,
+        capability: binding.target.capability,
+        reason: approvalReason,
+        userInput: options.originalUserText
+      });
+      await this.replyToMessage(bot, options.messageId, response);
+      return { handled: true, response };
+    }
     let executableBinding;
     try {
       executableBinding = resolveExecutableCapabilityBinding({
@@ -860,6 +948,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         trigger: "command",
         botSkills: options.botSkills,
         customApps: this.customApps,
+        mcpServers: this.config.mcpServers,
         suites: this.suites,
         suiteContexts: options.suiteContexts,
         capabilityPolicies: options.botCapabilityPolicies,
@@ -871,6 +960,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       }
       return { handled: true };
     }
+    const started = Date.now();
     const response = await executeCapabilityTarget({
       config: this.config,
       bot,
@@ -896,7 +986,24 @@ export class QuarkfanToolsRuntime extends EventEmitter {
           ? [...options.sessionEvents, { time: new Date().toISOString(), type: "reply", title: "最终回复", body: assistant }]
           : undefined
       })
+    }).then(async (value) => {
+      await this.auditCapabilityUse(bot, {
+        trigger: auditTrigger,
+        source: auditTrigger === "scheduled" ? `定时命令 /${options.commandName}` : `命令 /${options.commandName}`,
+        capability: auditCapability(executableBinding.capability.kind, executableBinding.capability.id, executableBinding.capability.name),
+        status: "success",
+        durationMs: Date.now() - started
+      });
+      return value;
     }).catch(async (error) => {
+      await this.auditCapabilityUse(bot, {
+        trigger: auditTrigger,
+        source: auditTrigger === "scheduled" ? `定时命令 /${options.commandName}` : `命令 /${options.commandName}`,
+        capability: auditCapability(executableBinding.capability.kind, executableBinding.capability.id, executableBinding.capability.name),
+        status: "failed",
+        detail: String(error instanceof Error ? error.message : error),
+        durationMs: Date.now() - started
+      });
       if (options.replyMode === "reply") await this.replyToMessage(bot, options.messageId, String(error instanceof Error ? error.message : error));
       return "";
     });
@@ -910,10 +1017,46 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     const statusText = event.status === "started" ? "开始" : event.status === "success" ? "完成" : "失败";
     const detail = [
       `${label} / ${event.workflowName} / ${event.stepName} / ${statusText}`,
+      event.attempt && event.maxAttempts && event.maxAttempts > 1 ? `尝试: ${event.attempt}/${event.maxAttempts}` : "",
       event.output ? `输出摘要: ${trimForLog(event.output)}` : "",
       event.error ? `错误: ${trimForLog(event.error)}` : ""
     ].filter(Boolean).join("\n");
     await this.logger.write(event.status === "failed" ? "error" : "info", "Workflow 步骤", detail, bot.id);
+  }
+
+  private async auditCapabilityUse(bot: BotConfig, record: Omit<Parameters<typeof appendCapabilityAudit>[0], "at" | "botId">): Promise<void> {
+    await appendCapabilityAudit({
+      at: new Date().toISOString(),
+      botId: bot.id,
+      ...record
+    }).catch((error) => this.logger.write("warn", "能力使用审计写入失败", String(error), bot.id));
+  }
+
+  private async requestCapabilityOwnerApproval(bot: BotConfig, message: ChatMessage, options: {
+    label: string;
+    capability: { kind: "skill" | "mcp" | "app" | "suite" | "workflow"; id: string };
+    reason: string;
+    userInput: string;
+  }): Promise<string> {
+    if (!bot.ownerOpenId) return `${options.label} 指向的能力需要 Owner 审批，但该 Bot 未配置 Owner open_id。`;
+    const pending = await addEscalation(bot, {
+      id: randomUUID().slice(0, 8),
+      type: "approval",
+      summary: [
+        `${options.label} 请求执行能力 ${options.capability.kind}:${options.capability.id}`,
+        `原因：${options.reason}`,
+        `用户输入：${options.userInput}`
+      ].join("\n")
+    }, message);
+    try {
+      await this.sendCardToUser(bot, bot.ownerOpenId, escalationCard(bot, pending), `owner-${bot.id}-${pending.id}`);
+      await this.logger.write("info", "已向 Owner 发送能力审批请求", `${pending.id} / ${options.capability.kind}:${options.capability.id}`, bot.id);
+      return `${options.label} 需要 Owner 审批，我已私聊 Owner 跟进（请求 ${pending.id}）。`;
+    } catch (error) {
+      await completeEscalation(bot, pending.id);
+      await this.logger.write("error", "向 Owner 发送能力审批请求失败", String(error), bot.id);
+      return `${options.label} 需要 Owner 审批，但目前无法联系配置的 Owner。请管理员确认 Owner open_id 正确，并且该用户有应用使用权限。`;
+    }
   }
 
   private authorizedSuiteContexts(bot: BotConfig, botSkills: SkillSummary[]): ClaudeSuiteContext[] {
@@ -984,10 +1127,11 @@ function scheduledRunDetail(response: string, workflowSteps: WorkflowStepExecuti
     "Workflow steps:",
     ...workflowSteps.map((step) => {
       const status = step.status === "started" ? "started" : step.status === "success" ? "success" : "failed";
+      const attempt = step.attempt && step.maxAttempts && step.maxAttempts > 1 ? ` attempt=${step.attempt}/${step.maxAttempts}` : "";
       const tail = step.error
         ? ` error=${trimForLog(step.error)}`
         : step.output ? ` output=${trimForLog(step.output)}` : "";
-      return `- ${step.workflowName} / ${step.stepName}: ${status}${tail}`;
+      return `- ${step.workflowName} / ${step.stepName}: ${status}${attempt}${tail}`;
     })
   ].join("\n");
 }
