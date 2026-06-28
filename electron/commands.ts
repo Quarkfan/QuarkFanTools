@@ -7,8 +7,17 @@ export interface ParsedCommandInvocation {
   args: string;
 }
 
-export function parseSlashCommand(text: string): ParsedCommandInvocation | null {
+function commandTextAfterLeadingMention(text: string): string {
   const trimmed = text.trim();
+  const slashIndex = trimmed.indexOf("/");
+  if (slashIndex <= 0) return trimmed;
+  const leadingText = trimmed.slice(0, slashIndex).trim();
+  if (!leadingText.startsWith("@")) return trimmed;
+  return trimmed.slice(slashIndex).trimStart();
+}
+
+export function parseSlashCommand(text: string): ParsedCommandInvocation | null {
+  const trimmed = commandTextAfterLeadingMention(text);
   const match = trimmed.match(/^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i);
   if (!match) return null;
   const name = match[1].toLowerCase();

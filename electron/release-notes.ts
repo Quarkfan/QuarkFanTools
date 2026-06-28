@@ -2,6 +2,16 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "2.2.3",
+    date: "2026-06-28",
+    highlights: [
+      "微信未读读取模板新增内置兜底命令 /wechat-read。",
+      "Bot 只要授权微信未读草稿助手模板，即使没有手工配置命令映射，也会执行该自定义应用。",
+      "飞书群聊里 @机器人 /wechat-read 现在会正确识别为命令，不会误进普通 Agent 对话。",
+      "未授权时会提示授权该能力，不再误导用户安装 Skill。"
+    ]
+  },
+  {
     version: "2.2.2",
     date: "2026-06-28",
     highlights: [

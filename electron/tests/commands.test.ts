@@ -40,6 +40,15 @@ test("parses configured slash commands but ignores reserved commands", () => {
   assert.equal(parseSlashCommand("普通文本"), null);
 });
 
+test("parses slash commands after group mention prefixes only", () => {
+  assert.deepEqual(parseSlashCommand("@_user_1 /wechat-read"), { name: "wechat-read", args: "" });
+  assert.deepEqual(parseSlashCommand("@牛马的人生导师 /wechat-read 联系人：文件传输助手"), {
+    name: "wechat-read",
+    args: "联系人：文件传输助手"
+  });
+  assert.equal(parseSlashCommand("普通文本 /wechat-read"), null);
+});
+
 test("finds enabled command bindings and builds prompt text", () => {
   const binding = findCommandBinding(bindings, "report");
   assert.ok(binding);

@@ -907,7 +907,22 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       if (options.replyMode === "reply") await this.replyToMessage(bot, options.messageId, response);
       return { handled: true, response };
     }
-    const binding = findCommandBinding(bot.commandBindings, options.commandName);
+    let binding = findCommandBinding(bot.commandBindings, options.commandName);
+    if (!binding && options.commandName === "wechat-read") {
+      binding = {
+        name: "wechat-read",
+        aliases: ["wechat-unread"],
+        enabled: true,
+        description: "读取当前微信窗口可见未读",
+        target: {
+          type: "capability",
+          capability: {
+            kind: "app",
+            id: "template.wechat-draft-assistant"
+          }
+        }
+      };
+    }
     if (!binding) {
       if (options.replyMode === "reply") {
         await this.replyToMessage(bot, options.messageId, `未找到命令 /${options.commandName}，请联系管理员确认该 Bot 是否已配置此命令。`);
