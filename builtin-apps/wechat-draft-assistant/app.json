@@ -1,7 +1,7 @@
 {
   "id": "template.wechat-draft-assistant",
   "name": "微信草稿助手模板",
-  "description": "非侵入式 macOS 桌面辅助 PoC：为指定微信联系人生成并粘贴回复草稿，默认不自动发送。",
+  "description": "非侵入式 macOS 桌面辅助 PoC：尝试激活微信并把指定回复草稿写入剪贴板，默认不自动粘贴或发送。",
   "version": "0.1.0",
   "entry": {
     "type": "node",
@@ -21,7 +21,7 @@
     "filesystem": [
       "workspace"
     ],
-    "requiresOwnerApproval": true,
+    "requiresOwnerApproval": false,
     "desktopAutomation": {
       "screenCapture": true,
       "accessibility": true,

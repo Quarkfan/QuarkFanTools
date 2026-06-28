@@ -2,6 +2,16 @@ import type { AppInfo } from "./types.js";
 
 const releases: AppInfo["releases"] = [
   {
+    version: "2.2.1",
+    date: "2026-06-28",
+    highlights: [
+      "新增微信草稿助手内置模板，可尝试激活微信并把回复草稿写入系统剪贴板。",
+      "微信桌面辅助能力以自定义应用 PoC 形式接入，不读取微信数据库、不调用协议、不 Hook 进程。",
+      "能力治理会把屏幕录制、辅助功能、剪贴板和键盘输入标记为高风险，并阻断自动发送配置。",
+      "飞书 CLI 运行时支持优先使用 Bot 显式路径或本机已安装 lark-cli，内嵌版本继续作为兜底。"
+    ]
+  },
+  {
     version: "2.2.0",
     date: "2026-06-27",
     highlights: [

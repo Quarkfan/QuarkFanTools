@@ -68,7 +68,7 @@ Skill、本地自定义应用和套件卡片都提供“打开目录”操作，
 
 `app.json` 至少需要声明 `id`、`name` 和 `entry`。`id` 只能包含小写字母、数字、短横线、下划线和点。导入自定义应用不会自动授权给任何 Bot；需要在 Bot 编辑弹窗中勾选“允许访问的自定义应用”。当前 `node` 和受控 `executable` 入口可执行；`webview`、`mcp-adapter` 和 `workflow` 会在能力页和 Bot 授权区显示建设中，不会出现在命令或定时任务目标中。能力页会展示自定义应用生命周期状态、manifest 诊断和权限提示；同 ID 新版本可通过“升级”替换本机受管目录并保留首次安装时间。卸载前必须确认没有 Bot 授权引用，也没有套件依赖该应用。
 
-微信桌面辅助 Agent 仅作为自定义应用 PoC 存在，内置模板位于 `builtin-apps/wechat-draft-assistant/`。该模板只返回动作计划，不会真实控制微信。后续若接入真实执行器，需要用户在 macOS 系统设置中授予 QuarkfanTools 屏幕录制和辅助功能权限；首版仍应只把草稿写入输入框并停止，不点击发送。
+微信桌面辅助 Agent 仅作为自定义应用 PoC 存在，内置模板位于 `builtin-apps/wechat-draft-assistant/`。该模板会尝试激活微信并把草稿写入系统剪贴板，但不会搜索联系人、粘贴输入框或点击发送。后续若接入真实执行器，需要用户在 macOS 系统设置中授予 QuarkfanTools 屏幕录制和辅助功能权限；首版仍应停在草稿模式，由用户手动粘贴和发送。
 
 安装包内置模板位于 `builtin-apps/` 和 `builtin-suites/`，打包后放在 `resources/builtin-apps` 与 `resources/builtin-suites`。能力页会把这些资源标记为“内置模板”，展示在自定义应用和套件列表中，但不会提供卸载或升级入口。用户需要改造模板时，应复制目录后再作为本地自定义应用或本地套件导入；内置模板本身用于学习 manifest、Workflow 和命令/定时调用结构。
 

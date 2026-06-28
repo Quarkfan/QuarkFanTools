@@ -16,7 +16,7 @@
 - 搜索并打开指定联系人。
 - 截图并识别当前会话。
 - 生成或接收回复草稿。
-- 把草稿粘贴到微信输入框。
+- 把草稿写入系统剪贴板，用户手动粘贴到微信输入框。
 - 默认停止，等待用户手动发送。
 
 PoC 不做：
@@ -35,7 +35,7 @@ PoC 不做：
 Custom App template
   -> Bot capability ref
   -> command target
-  -> Owner approval
+  -> capability governance
   -> desktop action plan
   -> user manually sends in WeChat
 ```
@@ -55,7 +55,7 @@ builtin-apps/wechat-draft-assistant/
 ```json
 {
   "permissions": {
-    "requiresOwnerApproval": true,
+    "requiresOwnerApproval": false,
     "desktopAutomation": {
       "screenCapture": true,
       "accessibility": true,
@@ -71,7 +71,7 @@ builtin-apps/wechat-draft-assistant/
 
 - `screenCapture` / `accessibility` / `clipboard` / `keyboardInput` 都会标记高风险。
 - `autoSend=true` 在当前 PoC 中直接阻断导入或升级。
-- 默认要求 Owner 审批。
+- 内置 PoC 模板默认允许命令调用，便于本机验证；能力治理仍会把屏幕录制、辅助功能、剪贴板和键盘输入标记为高风险。
 - 真实执行前必须由用户在 macOS 系统设置中授予屏幕录制和辅助功能权限。
 
 ## 4. 当前 PoC 能力
@@ -89,14 +89,14 @@ electron/desktop-agent.ts
 - `isHighRiskDraft`：识别金额、合同、报价、承诺等高风险草稿。
 - `appleScriptActivateWeChat`：最小 AppleScript 激活命令示例。
 
-当前没有真实执行 AppleScript、Accessibility API、ScreenCaptureKit、OCR 或 Quartz 事件。
+当前内置模板只真实执行 AppleScript 激活微信和 `pbcopy` 写入剪贴板；没有真实执行 Accessibility API、ScreenCaptureKit、OCR 或 Quartz 事件，也不会搜索联系人、自动粘贴或发送。
 
 ## 5. 下一步验证
 
 1. 先在本机独立原型中验证微信窗口激活和窗口截图，不接入主运行时。
 2. 固定微信窗口大小、浅色模式和字体大小，验证最近 10 条纯文本单聊 OCR。
 3. 加入会话标题校验，确保“张三”和“张三丰”这类误点能被拦截。
-4. 只把草稿粘贴到输入框，不点击发送。
+4. 先只把草稿写入剪贴板，由用户手动粘贴到输入框，不点击发送。
 5. 形成可审计日志：截图路径、识别结果、动作计划、校验结果和用户确认状态。
 
 自动发送只能在后续单独评审后开放，并且必须满足白名单联系人、低风险内容、会话标题一致、置信度足够高和发送前截图存档。
