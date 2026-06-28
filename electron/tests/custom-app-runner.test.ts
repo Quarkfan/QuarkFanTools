@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { normalizeCustomAppDeliveries } from "../custom-app-protocol.js";
 import { normalizeNodeArgs } from "../custom-app-entry.js";
 import type { CustomAppSummary } from "../types.js";
 
@@ -32,5 +33,19 @@ test("normalizes node custom app script args relative to app path", () => {
     "/tmp/daily-report/dist/index.js",
     "--mode",
     "summary"
+  ]);
+});
+
+test("normalizes custom app delivery requests", () => {
+  const deliveries = normalizeCustomAppDeliveries([
+    { routeId: "ops", text: "投递内容", label: "运维群" },
+    { routeId: "ops", text: "重复忽略" },
+    { routeId: "summary", useReply: true },
+    { routeId: "" },
+    "bad"
+  ]);
+  assert.deepEqual(deliveries, [
+    { routeId: "ops", text: "投递内容", useReply: true, label: "运维群" },
+    { routeId: "summary", text: undefined, useReply: true, label: undefined }
   ]);
 });

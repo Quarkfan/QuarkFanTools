@@ -21,6 +21,13 @@ export interface BotDeliveryRoute {
   name?: string;
 }
 
+export interface CustomAppDeliveryRequest {
+  routeId: string;
+  text?: string;
+  useReply?: boolean;
+  label?: string;
+}
+
 export interface BotConfig {
   id: string;
   name: string;

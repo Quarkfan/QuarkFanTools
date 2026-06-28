@@ -5,11 +5,13 @@ import path from "node:path";
 import { runTextModel, runVisionModel } from "./claude.js";
 import { workspaceSessionId } from "./conversation.js";
 import { normalizeNodeArgs } from "./custom-app-entry.js";
+import { normalizeCustomAppDeliveries, resolveReplyDeliveries } from "./custom-app-protocol.js";
 import { workspaceRoot } from "./paths.js";
-import type { AppConfig, BotConfig, CustomAppSummary, LarkMessage } from "./types.js";
+import type { AppConfig, BotConfig, CustomAppDeliveryRequest, CustomAppSummary, LarkMessage } from "./types.js";
 
 export interface CustomAppRunResult {
   reply: string;
+  deliveries: CustomAppDeliveryRequest[];
 }
 
 export async function runCustomApp(
@@ -30,7 +32,15 @@ export async function runCustomApp(
     context: {
       messageId: message.messageId,
       chatId: message.chatId,
-      workspace
+      workspace,
+      deliveryRoutes: (bot.deliveryRoutes ?? [])
+        .filter((route) => route.enabled)
+        .map((route) => ({
+          id: route.id,
+          name: route.name ?? route.id,
+          provider: route.provider,
+          mode: route.mode
+        }))
     }
   };
 
@@ -63,10 +73,11 @@ async function runProcess(
 ): Promise<CustomAppRunResult> {
   let currentPayload = payload;
   let fallbackReply = "";
+  let fallbackDeliveries: CustomAppDeliveryRequest[] = [];
   const maxPasses = 12;
   for (let pass = 0; pass < maxPasses; pass += 1) {
     const output = await runProcessOnce(customApp, cwd, currentPayload, command, args, env);
-    if (!output) return { reply: `${customApp.name} 执行完成，但没有返回可回复内容。` };
+    if (!output) return { reply: `${customApp.name} 执行完成，但没有返回可回复内容。`, deliveries: [] };
     try {
       const parsed = JSON.parse(output) as {
         ok?: boolean;
@@ -74,10 +85,13 @@ async function runProcess(
         error?: string;
         visionRequest?: { imagePath?: string; prompt?: string };
         visionContinuation?: { input?: string; stage?: string; state?: unknown };
+        deliveries?: unknown;
       };
       if (parsed.ok === false) throw new Error(parsed.error || `${customApp.name} 执行失败`);
       const reply = parsed.reply?.trim() || `${customApp.name} 执行完成，但没有返回可回复内容。`;
+      const deliveries = normalizeCustomAppDeliveries(parsed.deliveries);
       fallbackReply = reply;
+      fallbackDeliveries = deliveries;
       const vision = await maybeRunVisionRequest(config, cwd, parsed.visionRequest);
       if (parsed.visionContinuation && vision) {
         const context = typeof currentPayload.context === "object" && currentPayload.context
@@ -95,12 +109,14 @@ async function runProcess(
         };
         continue;
       }
-      return { reply: await postProcessCustomAppReply(config, customApp, vision ? `${reply}\n\n多模态识别结果：\n${vision}` : reply) };
+      const processedReply = await postProcessCustomAppReply(config, customApp, vision ? `${reply}\n\n多模态识别结果：\n${vision}` : reply);
+      return { reply: processedReply, deliveries: resolveReplyDeliveries(deliveries, processedReply) };
     } catch {
-      return { reply: await postProcessCustomAppReply(config, customApp, output) };
+      return { reply: await postProcessCustomAppReply(config, customApp, output), deliveries: [] };
     }
   }
-  return { reply: await postProcessCustomAppReply(config, customApp, fallbackReply || `${customApp.name} 执行完成，但多模态连续处理超过 ${maxPasses} 轮。`) };
+  const reply = await postProcessCustomAppReply(config, customApp, fallbackReply || `${customApp.name} 执行完成，但多模态连续处理超过 ${maxPasses} 轮。`);
+  return { reply, deliveries: resolveReplyDeliveries(fallbackDeliveries, reply) };
 }
 
 async function postProcessCustomAppReply(config: AppConfig, customApp: CustomAppSummary, reply: string): Promise<string> {

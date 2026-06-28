@@ -1,6 +1,6 @@
 import { runClaude } from "./claude.js";
 import { runCustomApp } from "./custom-app-runner.js";
-import type { AppConfig, BotConfig, LarkMessage } from "./types.js";
+import type { AppConfig, BotConfig, CustomAppDeliveryRequest, LarkMessage } from "./types.js";
 import type { ExecutableCapabilityBinding } from "./executable-capability-bindings.js";
 import { buildWorkflowStepPrompt } from "./workflow-steps.js";
 import { evaluateWorkflowCondition } from "./workflow-control.js";
@@ -17,6 +17,7 @@ export interface CapabilityExecutionRequest {
   resumeSessionId?: string;
   onProgress?: (text: string) => void;
   onWorkflowStep?: (event: WorkflowStepExecutionEvent) => void;
+  onCustomAppDeliveries?: (deliveries: CustomAppDeliveryRequest[], response: string, source: string) => Promise<void>;
   onSessionSaved?: (sessionId: string, assistant: string) => Promise<void>;
 }
 
@@ -110,7 +111,7 @@ export async function executeCapabilityTarget(request: CapabilityExecutionReques
     }
     return previous || `${workflowBinding.capability.name} 执行完成，但没有生成可回复内容。`;
   }
-  return (await runCustomApp(
+  const result = await runCustomApp(
     request.config,
     request.bot,
     request.binding.customApp,
@@ -118,7 +119,11 @@ export async function executeCapabilityTarget(request: CapabilityExecutionReques
     request.conversationKey,
     request.prompt,
     request.binding.trigger
-  )).reply;
+  );
+  if (result.deliveries.length > 0) {
+    await request.onCustomAppDeliveries?.(result.deliveries, result.reply, request.binding.customApp.name);
+  }
+  return result.reply;
 }
 
 function emitWorkflowStep(

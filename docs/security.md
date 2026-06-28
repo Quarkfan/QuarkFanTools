@@ -28,6 +28,7 @@
 - 受控飞书文件 helper 只按当前 Bot 和当前会话物化缓存文件。全局 `state/file-cache` 仍由主进程管理，Agent 不获得直接读取全局缓存目录的权限。
 - 企业微信 Provider 因官方能力限制暂时封闭。历史 Bot ID / Secret、轮询 Chat ID、事件桥命令等配置会保留，但当前版本不会启动监听、轮询、聊天列表获取、CLI 缓存初始化或企业微信投递路由。
 - 结果投递路由会把最终回复复制到另一个平台 chat，属于显式跨平台数据流；当前企业微信投递目标被封闭，避免错误配置把结果发送到不可控或不稳定的企业微信会话。
+- 自定义应用的受控投递请求只能引用当前 Bot 已启用的 `deliveryRoutes[].id`。自定义应用输入上下文只包含路由摘要，不包含 `chat_id`、App Secret、OAuth 状态或任意发送接口；Runtime 必须在主进程内二次校验 routeId、provider 和文本内容后再发送。
 - Agent workspace 中的 `qft-cli` wrapper 只按 `.quarkfan/cli-channels.json` 中的授权 channel 路由，并拒绝登录、初始化和 keychain 降级等凭据命令。企业微信相关初始化和轮询能力当前不允许由聊天消息、Agent 或 UI 动态触发；后续若重新开放，仍必须由管理员在应用配置页显式启用并保持 Bot 隔离。
 - Runtime 会检测 Claude Bash tool use 中裸调 `lark-cli drive +download` 或 `drive +export` 的行为并中止，避免绕过受控 helper、Bot 缓存索引和下载前命中治理。
 - macOS Claude sandbox 允许访问系统 trustd，使内置 Go CLI 能校验受控网络代理的 TLS 证书；仍禁止 Agent 执行 unsandboxed 命令。
@@ -59,6 +60,7 @@ macOS 上启用 `enableWeakerNetworkIsolation` 会开放对 `com.apple.trustd.ag
 - 只有已授权给当前 Bot、且 manifest 声明 `commandCallable=true` 的应用才能被 `/xxx` 调用。
 - 当前只有 `node` 和受控 `executable` 自定义应用入口可执行；`webview`、`mcp-adapter` 和 `workflow` 入口只作为建设中能力展示，即使旧配置引用也必须给出明确不可执行错误。
 - 自定义应用运行目录限定在当前 Bot 当前会话的 app workspace，下游不应默认获得其他 Bot 状态、其他会话 workspace 或全局缓存访问权。
+- 自定义应用输出的 `deliveries` 只能作为投递请求，不是发送权限。不得把协议扩展为脚本可直接传入任意 `chat_id`、临时 webhook、平台 Token 或凭据环境变量。
 - Manifest 中的入口路径必须是导入目录内可控文件；不得把命令映射扩展为任意 shell。
 - 升级和卸载自定义应用只能作用于应用受管目录；卸载前必须确认没有 Bot 授权引用或套件依赖，避免破坏仍被授权的能力。
 - 升级和卸载套件只能作用于套件受管目录；卸载前必须确认没有 Bot 授权、命令或定时任务引用，避免删除仍在执行链上的能力包或 Workflow。

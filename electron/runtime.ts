@@ -31,7 +31,7 @@ import { appendScheduledTaskRun, dueScheduledTasks, hydrateBotScheduledTasks, ne
 import { larkConnectorBot, primaryProvider } from "./platform-connectors.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
 import { selectLarkMessageTarget } from "./lark-message-router.js";
-import type { AppConfig, BotConfig, ChatMessage, CustomAppSummary, LarkBotIdentity, RuntimeSnapshot, ScheduledTask, SessionTranscriptEvent, SkillSummary, SuiteSummary } from "./types.js";
+import type { AppConfig, BotConfig, ChatMessage, CustomAppDeliveryRequest, CustomAppSummary, LarkBotIdentity, RuntimeSnapshot, ScheduledTask, SessionTranscriptEvent, SkillSummary, SuiteSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
   readonly logger = new Logger();
@@ -633,6 +633,32 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     }
   }
 
+  private async deliverCustomAppRequests(bot: BotConfig, deliveries: CustomAppDeliveryRequest[], source: string): Promise<void> {
+    for (const delivery of deliveries) {
+      const route = (bot.deliveryRoutes ?? []).find((item) => item.id === delivery.routeId && item.enabled);
+      if (!route) {
+        await this.logger.write("warn", "自定义应用投递跳过", `${source} / routeId ${delivery.routeId} 未配置或未启用`, bot.id);
+        continue;
+      }
+      const routeBot = this.deliveryRouteBot(bot, route.provider);
+      if (!routeBot) {
+        await this.logger.write("warn", "自定义应用投递跳过", `${source} / ${route.provider} connector 不可用: ${route.name || route.id}`, bot.id);
+        continue;
+      }
+      const text = String(delivery.text ?? "").trim();
+      if (!text) {
+        await this.logger.write("warn", "自定义应用投递跳过", `${source} / ${route.name || route.id} 内容为空`, bot.id);
+        continue;
+      }
+      try {
+        await imProvider(route.provider).sendTextToChat(routeBot, route.chatId, text);
+        await this.logger.write("info", "自定义应用投递完成", `${source} / ${route.name || route.id} / ${route.provider} / ${route.chatId}`, bot.id);
+      } catch (error) {
+        await this.logger.write("warn", "自定义应用投递失败", `${source} / ${route.name || route.id} / ${String(error)}`, bot.id);
+      }
+    }
+  }
+
   private deliveryRouteBot(bot: BotConfig, provider: BotConfig["provider"]): BotConfig | null {
     if ((provider ?? "lark") === primaryProvider(bot)) return bot;
     if (provider === "lark") return larkConnectorBot(bot);
@@ -794,6 +820,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
             workflowSteps.push(event);
             void this.logWorkflowStep(bot, event, `定时任务 ${task.name}`);
           },
+          onCustomAppDeliveries: (deliveries, _response, source) => this.deliverCustomAppRequests(bot, deliveries, `定时任务 ${task.name} / ${source}`),
           onSessionSaved: (sessionId, assistant) => this.sessionStore.set(bot, conversation, sessionId, messageId, { user: `[scheduled] ${task.name}`, assistant })
         });
         await this.auditCapabilityUse(bot, {
@@ -994,6 +1021,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         options.onWorkflowStep?.(event);
         void this.logWorkflowStep(bot, event, `命令 /${options.commandName}`);
       },
+      onCustomAppDeliveries: (deliveries, _response, source) => this.deliverCustomAppRequests(bot, deliveries, `命令 /${options.commandName} / ${source}`),
       onSessionSaved: (sessionId, assistant) => this.sessionStore.set(bot, options.conversationKey, sessionId, options.messageId, {
         user: options.originalUserText,
         assistant,
