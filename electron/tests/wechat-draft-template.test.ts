@@ -111,6 +111,57 @@ test("wechat assistant template aggregates multiple visible unread conversations
   assert.match(output.reply, /你几点起床的/);
 });
 
+test("wechat assistant template opens the second unread candidate during queue continuation", () => {
+  const script = path.resolve("builtin-apps/wechat-draft-assistant/index.js");
+  const workspace = mkdtempSync(path.join(tmpdir(), "qft-wechat-test-"));
+  writeFileSync(path.join(workspace, "wechat-list.png"), pngHeader(1600, 1200));
+  const result = spawnSync(process.execPath, [script], {
+    input: JSON.stringify({
+      input: "",
+      context: {
+        workspace,
+        visionStage: "read-opened-conversation",
+        visionResult: "会话标题：第一个\n消息：已读取第一条",
+        visionState: {
+          index: 0,
+          items: [
+            {
+              conversationName: "第一个",
+              badgeText: "1",
+              preview: "第一条",
+              clickTarget: { x: 260, y: 180 },
+              confidence: 0.96
+            },
+            {
+              conversationName: "第二个",
+              badgeText: "1",
+              preview: "第二条",
+              clickTarget: { x: 260, y: 360 },
+              confidence: 0.95
+            }
+          ],
+          results: []
+        }
+      }
+    }),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      QFT_WECHAT_DRAFT_DRY_RUN: "1"
+    }
+  });
+  rmSync(workspace, { recursive: true, force: true });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout) as { ok: boolean; reply: string; visionContinuation?: { state?: { index?: number; clicks?: Array<{ screenshotY?: number; windowY?: number }> } } };
+  assert.equal(output.ok, true);
+  assert.match(output.reply, /正在打开第 2 个/);
+  assert.match(output.reply, /下一个未读：第二个/);
+  assert.match(output.reply, /截图像素 \(260, 360\) \/ 窗口点 \(130, 180\)/);
+  assert.equal(output.visionContinuation?.state?.index, 1);
+  assert.equal(output.visionContinuation?.state?.clicks?.at(-1)?.screenshotY, 360);
+  assert.equal(output.visionContinuation?.state?.clicks?.at(-1)?.windowY, 180);
+});
+
 test("wechat assistant template reports failed click strategies", () => {
   const script = path.resolve("builtin-apps/wechat-draft-assistant/index.js");
   const result = spawnSync(process.execPath, [script], {

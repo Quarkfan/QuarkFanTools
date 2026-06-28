@@ -262,7 +262,7 @@ function handleUnreadVisionResult(visionResult, parsed, workspace, dryRun) {
     `连续读取：已点击第 1/${items.length} 个可见未读会话`,
     "注意：点击会话可能会让微信把该会话标记为已读。",
     `识别到未读：${formatUnreadItem(item)}`,
-    `点击位置：截图像素 (${Math.round(item.clickTarget.x)}, ${Math.round(item.clickTarget.y)})${click.windowPoint ? ` / 窗口点 (${click.windowPoint.x}, ${click.windowPoint.y})` : ""}`,
+    `点击位置：截图像素 (${Math.round(item.clickTarget.x)}, ${Math.round(item.clickTarget.y)})${click.windowPoint ? ` / 窗口点 (${click.windowPoint.x}, ${click.windowPoint.y})` : ""}${click.strategy ? ` / 策略 ${click.strategy}` : ""}`,
     `打开后辅助功能读取：${scan.status === 0 ? "成功" : `失败：${scan.stderr || scan.error || "未知错误"}`}`,
     `打开后截图 OCR：${ocr.ok ? "成功" : `失败：${ocr.error}`}`,
     "",
@@ -350,7 +350,7 @@ function handleOpenedConversationVisionResult(visionResult, state, parsed, works
         "",
         `连续读取：已读取 ${results.length}/${currentState.items.length} 个会话，正在打开第 ${nextIndex + 1} 个。`,
         `下一个未读：${formatUnreadItem(nextItem)}`,
-        `点击位置：截图像素 (${Math.round(nextItem.clickTarget.x)}, ${Math.round(nextItem.clickTarget.y)})${click.windowPoint ? ` / 窗口点 (${click.windowPoint.x}, ${click.windowPoint.y})` : ""}`
+        `点击位置：截图像素 (${Math.round(nextItem.clickTarget.x)}, ${Math.round(nextItem.clickTarget.y)})${click.windowPoint ? ` / 窗口点 (${click.windowPoint.x}, ${click.windowPoint.y})` : ""}${click.strategy ? ` / 策略 ${click.strategy}` : ""}`
       ].join("\n"),
       visionRequest: {
         imagePath: path.relative(workspace, ocr.imagePath),
@@ -500,6 +500,7 @@ function clickUnreadConversation(boundsText, clickTarget, dryRun, workspace = ""
     };
   }
   const attempts = [
+    runJxaClick(absoluteX, absoluteY),
     runAppleScriptClick("wechat-process", [
       `tell application "WeChat" to activate`,
       "delay 0.2",
@@ -518,8 +519,7 @@ function clickUnreadConversation(boundsText, clickTarget, dryRun, workspace = ""
       `  click at {${absoluteX}, ${absoluteY}}`,
       `end tell`,
       "delay 0.6"
-    ].join("\n")),
-    runJxaClick(absoluteX, absoluteY)
+    ].join("\n"))
   ];
   const success = attempts.find((attempt) => attempt.ok);
   if (success) return { ok: true, x: absoluteX, y: absoluteY, windowPoint: { x, y }, strategy: success.strategy };
