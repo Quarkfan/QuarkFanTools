@@ -120,7 +120,8 @@ async function runProcess(
 }
 
 async function postProcessCustomAppReply(config: AppConfig, customApp: CustomAppSummary, reply: string): Promise<string> {
-  const processing = config.runtime.customAppReplyProcessing;
+  const processing = config.runtime.customAppReplyProcessingByApp?.[customApp.id]
+    ?? config.runtime.customAppReplyProcessing;
   if (!processing || processing.mode !== "summarize") return reply;
   const maxInputChars = Math.max(1000, Math.min(60000, processing.maxInputChars));
   const source = reply.length > maxInputChars ? `${reply.slice(0, maxInputChars)}\n\n[已按配置截断，原始长度 ${reply.length} 字符]` : reply;

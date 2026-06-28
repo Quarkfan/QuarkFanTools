@@ -71,7 +71,10 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
       ...override.runtime,
       maxAgentTurns: Math.max(10, Math.min(100, override.runtime?.maxAgentTurns ?? base.runtime.maxAgentTurns ?? 60)),
       customAppArtifacts: normalizeCustomAppArtifacts(override.runtime?.customAppArtifacts ?? base.runtime.customAppArtifacts),
-      customAppReplyProcessing: normalizeCustomAppReplyProcessing(override.runtime?.customAppReplyProcessing ?? base.runtime.customAppReplyProcessing)
+      customAppReplyProcessing: normalizeCustomAppReplyProcessing(override.runtime?.customAppReplyProcessing ?? base.runtime.customAppReplyProcessing),
+      customAppReplyProcessingByApp: normalizeCustomAppReplyProcessingByApp(
+        override.runtime?.customAppReplyProcessingByApp ?? base.runtime.customAppReplyProcessingByApp
+      )
     }
   };
 }
@@ -94,6 +97,17 @@ function normalizeCustomAppReplyProcessing(value: unknown): NonNullable<AppConfi
     prompt: prompt || "请把下面自定义应用返回的运行结果总结成适合直接回复用户的中文内容。保留关键事实、风险提示和下一步建议；不要编造未出现的信息。",
     maxInputChars: Number.isFinite(maxInputChars) ? Math.max(1000, Math.min(60000, maxInputChars)) : 12000
   };
+}
+
+function normalizeCustomAppReplyProcessingByApp(value: unknown): NonNullable<AppConfig["runtime"]["customAppReplyProcessingByApp"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: NonNullable<AppConfig["runtime"]["customAppReplyProcessingByApp"]> = {};
+  for (const [appId, processing] of Object.entries(value as Record<string, unknown>)) {
+    const id = appId.trim();
+    if (!/^[a-z0-9._-]+$/.test(id)) continue;
+    result[id] = normalizeCustomAppReplyProcessing(processing);
+  }
+  return result;
 }
 
 function defaultLongTaskNoticeText(): string {

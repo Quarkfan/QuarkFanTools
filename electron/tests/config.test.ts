@@ -113,6 +113,18 @@ test("normalizes custom app artifact and reply processing config", () => {
         mode: "summarize",
         prompt: "总结自定义应用返回",
         maxInputChars: 10
+      },
+      customAppReplyProcessingByApp: {
+        "wechat-unread": {
+          mode: "summarize",
+          prompt: "总结微信未读",
+          maxInputChars: 999999
+        },
+        "Bad App": {
+          mode: "summarize",
+          prompt: "bad",
+          maxInputChars: 12000
+        }
       }
     }
   });
@@ -121,6 +133,10 @@ test("normalizes custom app artifact and reply processing config", () => {
   assert.equal(config.runtime.customAppReplyProcessing?.mode, "summarize");
   assert.equal(config.runtime.customAppReplyProcessing?.prompt, "总结自定义应用返回");
   assert.equal(config.runtime.customAppReplyProcessing?.maxInputChars, 1000);
+  assert.equal(config.runtime.customAppReplyProcessingByApp?.["wechat-unread"]?.mode, "summarize");
+  assert.equal(config.runtime.customAppReplyProcessingByApp?.["wechat-unread"]?.prompt, "总结微信未读");
+  assert.equal(config.runtime.customAppReplyProcessingByApp?.["wechat-unread"]?.maxInputChars, 60000);
+  assert.equal(config.runtime.customAppReplyProcessingByApp?.["Bad App"], undefined);
 });
 
 test("disables user-visible work progress for older bot configs", () => {

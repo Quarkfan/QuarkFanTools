@@ -315,6 +315,11 @@ export interface AppConfig {
       prompt: string;
       maxInputChars: number;
     };
+    customAppReplyProcessingByApp?: Record<string, {
+      mode: "raw" | "summarize";
+      prompt: string;
+      maxInputChars: number;
+    }>;
   };
 }
 
