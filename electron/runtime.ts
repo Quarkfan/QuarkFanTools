@@ -238,7 +238,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
 
   private routeLarkBotMessage(sourceBot: BotConfig, message: ChatMessage): void {
     const bots = this.runningLarkBots();
-    const route = selectLarkMessageTarget(bots, message, this.botIdentities, bots.length > 1);
+    const route = selectLarkMessageTarget(bots, message, this.botIdentities, true);
     if (!route.bot) {
       void this.logger.write("info", "已忽略无法确定目标机器人的飞书消息", JSON.stringify({
         reason: route.reason,

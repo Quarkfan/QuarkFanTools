@@ -307,7 +307,7 @@ test("does not route ambiguous group messages in strict multi-bot mode", () => {
   assert.equal(messageTargetsBot(bot, message, { openId: "ou_target_bot" }, false), true);
 });
 
-test("routes legacy messages by event source app id when mention metadata is absent", () => {
+test("ignores group messages without mention metadata even when source app id matches", () => {
   const message = normalizeLarkEvent({
     header: { event_type: "im.message.receive_v1", app_id: "cli_test" },
     event: {
@@ -323,8 +323,28 @@ test("routes legacy messages by event source app id when mention metadata is abs
   const anotherBot: BotConfig = { ...bot, id: "finance", name: "财务助手", appId: "cli_finance" };
 
   assert.ok(message);
-  assert.equal(messageTargetsBot(bot, message, undefined, true), true);
+  assert.equal(messageTargetsBot(bot, message, undefined, true), false);
   assert.equal(messageTargetsBot(anotherBot, message, undefined, true), false);
+});
+
+test("single lark bot still ignores unmentioned group messages under strict routing", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1", app_id: "cli_test" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_unmentioned_group",
+        chat_id: "oc_1",
+        chat_type: "group",
+        content: JSON.stringify({ text: "没有艾特机器人" })
+      }
+    }
+  });
+
+  assert.ok(message);
+  const route = selectLarkMessageTarget([bot], message, new Map([["default", { openId: "ou_target_bot", appName: "测试助手" }]]), true);
+  assert.equal(route.bot, null);
+  assert.equal(route.reason, "missing-group-mention-metadata");
 });
 
 test("keeps private or legacy messages without mention metadata routable", () => {

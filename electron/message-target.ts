@@ -57,6 +57,16 @@ export function messageTargetDecision(bot: BotConfig, message: ChatMessage, iden
       botMatchers
     };
   }
+  if (strictGroupTargeting && message.chatType === "group") {
+    return {
+      targeted: false,
+      reason: "missing-group-mention-metadata",
+      botOpenId: identity?.openId,
+      sourceAppId: message.sourceAppId,
+      mentionValues: values,
+      botMatchers
+    };
+  }
   const sourceAppId = normalize(message.sourceAppId);
   if (sourceAppId) {
     const matched = sourceAppId === normalize(bot.appId);
@@ -68,10 +78,10 @@ export function messageTargetDecision(bot: BotConfig, message: ChatMessage, iden
       botMatchers
     };
   }
-  const targeted = !(strictGroupTargeting && message.chatType === "group");
+  const targeted = true;
   return {
     targeted,
-    reason: targeted ? "no-mention-metadata" : "missing-group-mention-metadata",
+    reason: "no-mention-metadata",
     botOpenId: identity?.openId,
     mentionValues: [],
     botMatchers
