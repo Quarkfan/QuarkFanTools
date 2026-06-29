@@ -31,6 +31,7 @@ import { appendScheduledTaskRun, dueScheduledTasks, hydrateBotScheduledTasks, ne
 import { larkConnectorBot, primaryProvider } from "./platform-connectors.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
 import { selectLarkMessageTarget } from "./lark-message-router.js";
+import { hasProcessedMessage, markProcessedMessage } from "./runtime-dedupe.js";
 import type { AppConfig, BotConfig, ChatMessage, CustomAppDeliveryRequest, CustomAppSummary, LarkBotIdentity, RuntimeSnapshot, ScheduledTask, SessionTranscriptEvent, SkillSummary, SuiteSummary } from "./types.js";
 
 export class QuarkfanToolsRuntime extends EventEmitter {
@@ -330,7 +331,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   }
 
   private async runWithTaskSlot(bot: BotConfig, message: ChatMessage): Promise<void> {
-    if (this.processed.get(bot.id)?.has(message.eventId)) return;
+    if (hasProcessedMessage(this.processed.get(bot.id), message)) return;
     const limit = Math.max(1, Math.floor(this.config.runtime.maxConcurrentTasks || 1));
     const wasQueued = this.taskLimiter.active >= limit;
     const pendingRelease = this.taskLimiter.acquire(limit);
@@ -352,8 +353,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   private async handleMessage(bot: BotConfig, message: ChatMessage, existingReaction?: Promise<string>): Promise<void> {
     const originalUserText = message.text;
     const processed = this.processed.get(bot.id) ?? new Set<string>();
-    if (processed.has(message.eventId)) return;
-    processed.add(message.eventId);
+    if (hasProcessedMessage(processed, message)) return;
+    markProcessedMessage(processed, message);
     this.processed.set(bot.id, processed);
 
     const delay = eventDelayMs(message);
@@ -1148,7 +1149,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
   }
 
   private async saveProcessed(botId: string): Promise<void> {
-    const values = [...(this.processed.get(botId) ?? [])].slice(-5000);
+    const values = [...(this.processed.get(botId) ?? [])].slice(-10000);
     await mkdir(path.dirname(processedPath(botId)), { recursive: true });
     await writeFile(processedPath(botId), `${JSON.stringify(values, null, 2)}\n`, "utf8");
   }
