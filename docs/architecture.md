@@ -24,7 +24,7 @@ flowchart LR
 
 ## 2. 消息处理流程
 
-每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 IM Provider 事件流。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话通过全局 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。飞书主消息入口启动监听前会调用 `/open-apis/bot/v3/info` 获取当前飞书机器人的 `open_id` 和应用名，所有 lark-cli 调用使用每个 Bot 的独立 named profile。飞书群聊消息会在入队前做目标 Bot 判定：有 `mentions` 元数据时，只用 mention 目标值匹配当前 Bot 的配置 App ID、Bot 名、bot info 应用名和可用 open_id；`mentions.id.open_id` 只作为命中的正向信号，不作为排他条件，因为飞书群聊 mention 事件里的 open_id 可能不是 `/open-apis/bot/v3/info` 返回的 Bot open_id。事件头 `sourceAppId` 表示当前监听连接所属应用，有 mention 时不参与目标路由；仅在缺少 mention 元数据的旧事件中作为兜底。未命中的消息只记录诊断日志，不添加处理中表情、不占用队列，也不写入该 Bot 的去重集合。多飞书 Bot 同时运行时，群聊消息缺少可判定 mention 元数据会被忽略，以避免多个机器人同时回复；私聊或单飞书 Bot 旧版事件继续按原路径处理。企业微信 Provider 当前因官方能力限制暂时封闭，运行时会拒绝启动企业微信监听、轮询和投递。
+每个启用且配置完整的机器人可被独立启动和停止，并维护自己的 IM Provider 事件流。应用以单实例运行，并为每个机器人记录订阅进程 PID；启动前会验证并清理已记录的旧订阅，应用退出时会等待监听真正停止。事件断开后等待 5 秒重连，且每个机器人最多只有一个待执行的重连定时器。同一连续对话内任务串行，不同对话通过全局 `TaskLimiter` 按 `runtime.maxConcurrentTasks` 并发，超出上限后排队。飞书主消息入口启动监听前会调用 `/open-apis/bot/v3/info` 获取当前飞书机器人的 `open_id` 和应用名，所有 lark-cli 调用使用每个 Bot 的独立 named profile。飞书群聊消息会在入队前做目标 Bot 判定：群聊必须带有 `mentions` 元数据并命中目标 Bot 才会入队；有 `mentions` 元数据时，只用 mention 目标值匹配当前 Bot 的配置 App ID、Bot 名、bot info 应用名和可用 open_id；`mentions.id.open_id` 只作为命中的正向信号，不作为排他条件，因为飞书群聊 mention 事件里的 open_id 可能不是 `/open-apis/bot/v3/info` 返回的 Bot open_id。事件头 `sourceAppId` 表示当前监听连接所属应用，有 mention 时不参与目标路由；群聊缺少 mention 元数据时也不再作为兜底命中依据，只能用于私聊或非群聊旧事件的兼容兜底。未命中的消息只记录诊断日志，不添加处理中表情、不占用队列，也不写入该 Bot 的去重集合。这样即使只有一个飞书 Bot 在运行，群聊未 @ 机器人也不会触发回答；私聊或非群聊旧版事件继续按原路径处理。企业微信 Provider 当前因官方能力限制暂时封闭，运行时会拒绝启动企业微信监听、轮询和投递。
 
 ```mermaid
 sequenceDiagram
