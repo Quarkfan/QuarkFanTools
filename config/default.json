@@ -17,7 +17,23 @@
     "model": "",
     "apiKeyEnv": "ANTHROPIC_AUTH_TOKEN",
     "apiKey": "",
-    "multimodalEnabled": true
+    "multimodalEnabled": true,
+    "providers": [
+      {
+        "id": "anthropic",
+        "name": "Claude Compatible",
+        "baseUrl": "",
+        "model": "",
+        "apiKeyEnv": "ANTHROPIC_AUTH_TOKEN",
+        "apiKey": "",
+        "multimodalEnabled": true,
+        "enabled": true
+      }
+    ],
+    "strategy": {
+      "mode": "round-robin",
+      "failoverOnFailure": false
+    }
   },
   "runtime": {
     "sandbox": "workspace-write",

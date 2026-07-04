@@ -382,9 +382,7 @@ export async function sendTextToChat(bot: BotConfig, chatId: string, text: strin
     replyIdentity ?? bot.replyIdentity,
     "--chat-id",
     chatId,
-    "--msg-type",
-    text.length > 100 ? "markdown" : "text",
-    "--content",
+    text.length > 100 ? "--markdown" : "--text",
     text,
     "--format",
     "json"
@@ -399,8 +397,8 @@ export async function addMessageReaction(bot: BotConfig, messageId: string, emoj
     "create",
     "--as",
     bot.replyIdentity,
-    "--params",
-    JSON.stringify({ message_id: messageId }),
+    "--message-id",
+    messageId,
     "--data",
     JSON.stringify({ reaction_type: { emoji_type: emojiType } }),
     "--format",
@@ -420,8 +418,10 @@ export async function removeMessageReaction(bot: BotConfig, messageId: string, r
     "delete",
     "--as",
     bot.replyIdentity,
-    "--params",
-    JSON.stringify({ message_id: messageId, reaction_id: reactionId }),
+    "--message-id",
+    messageId,
+    "--reaction-id",
+    reactionId,
     "--format",
     "json"
   ]);
@@ -437,13 +437,64 @@ export async function getLarkBotIdentity(bot: BotConfig): Promise<LarkBotIdentit
     "--format",
     "json"
   ]);
-  const result = JSON.parse(output) as any;
-  const openId = typeof result?.bot?.open_id === "string" ? result.bot.open_id : "";
-  if (!openId) throw new Error(`飞书未返回 Bot open_id: ${output}`);
+  const result = JSON.parse(output) as unknown;
+  const identity = parseLarkBotIdentity(result);
+  if (!identity.openId && !larkApiSucceeded(result)) throw new Error(`飞书未返回 Bot open_id: ${output}`);
+  if (!identity.openId && larkApiSucceeded(result)) {
+    const directIdentity = await getLarkBotIdentityFromOpenApi(bot).catch((): LarkBotIdentity => ({}));
+    if (directIdentity.openId) {
+      return {
+        appName: directIdentity.appName ?? bot.name,
+        openId: directIdentity.openId
+      };
+    }
+  }
   return {
-    openId,
-    appName: typeof result?.bot?.app_name === "string" ? result.bot.app_name : undefined
+    appName: identity.appName ?? bot.name,
+    openId: identity.openId
   };
+}
+
+export function parseLarkBotIdentity(result: unknown): LarkBotIdentity {
+  const openId = findString(result, (key) => /^open_?id$/i.test(key));
+  const appName = findString(result, (key) => /^app_?name$/i.test(key) || /^name$/i.test(key));
+  const identity: LarkBotIdentity = {};
+  if (appName) identity.appName = appName;
+  if (openId) identity.openId = openId;
+  return identity;
+}
+
+function larkApiSucceeded(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false;
+  const ok = (result as { ok?: unknown }).ok;
+  const code = (result as { code?: unknown }).code;
+  return ok === true || code === 0;
+}
+
+export async function getLarkBotIdentityFromOpenApi(bot: BotConfig): Promise<LarkBotIdentity> {
+  const tokenResponse = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({
+      app_id: bot.appId,
+      app_secret: bot.appSecret
+    })
+  });
+  const tokenResult = await tokenResponse.json() as unknown;
+  const tenantAccessToken = findString(tokenResult, (key) => key === "tenant_access_token");
+  if (!tenantAccessToken) throw new Error("飞书未返回 tenant_access_token");
+
+  const botResponse = await fetch("https://open.feishu.cn/open-apis/bot/v3/info", {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${tenantAccessToken}`,
+      "content-type": "application/json; charset=utf-8"
+    }
+  });
+  const botResult = await botResponse.json() as unknown;
+  const identity = parseLarkBotIdentity(botResult);
+  if (!identity.openId) throw new Error("飞书原始 Bot info 未返回 open_id");
+  return identity;
 }
 
 export async function downloadMessageResources(bot: BotConfig, message: LarkMessage, outputDir: string): Promise<LarkMessage> {
@@ -481,6 +532,122 @@ export async function downloadMessageResources(bot: BotConfig, message: LarkMess
   return { ...message, resources };
 }
 
+export async function listLarkChatMessages(bot: BotConfig, chatId: string, startIso: string, limit: number): Promise<LarkMessage[]> {
+  const messages: LarkMessage[] = [];
+  let pageToken = "";
+  const seenPageTokens = new Set<string>();
+  while (messages.length < limit) {
+    const args = [
+      "im",
+      "+chat-messages-list",
+      "--as",
+      bot.receiveIdentity,
+      "--chat-id",
+      chatId,
+      "--start",
+      startIso,
+      "--order",
+      "asc",
+      "--page-size",
+      String(Math.max(1, Math.min(50, limit - messages.length))),
+      "--no-reactions",
+      "--format",
+      "json"
+    ];
+    if (pageToken) args.push("--page-token", pageToken);
+    const output = await runLarkCapture(bot, args);
+    const parsed = JSON.parse(output) as unknown;
+    const pageMessages = extractHistoryMessageRecords(parsed, chatId)
+      .map((record) => historyRecordToMessage(record, chatId))
+      .filter((message): message is LarkMessage => Boolean(message));
+    messages.push(...pageMessages);
+    pageToken = findNextPageToken(parsed);
+    if (pageToken && seenPageTokens.has(pageToken)) break;
+    if (pageToken) seenPageTokens.add(pageToken);
+    if (!pageToken || pageMessages.length === 0) break;
+  }
+  return messages.slice(0, limit);
+}
+
+function extractHistoryMessageRecords(value: unknown, chatId: string): Record<string, unknown>[] {
+  const result: Record<string, unknown>[] = [];
+  const visit = (item: unknown): void => {
+    if (!item || typeof item !== "object") return;
+    if (Array.isArray(item)) {
+      item.forEach(visit);
+      return;
+    }
+    const record = item as Record<string, unknown>;
+    if (typeof (record.message_id ?? record.messageId) === "string") {
+      const recordChatId = firstString(record.chat_id, record.chatId);
+      if (!recordChatId || recordChatId === chatId) result.push(record);
+      return;
+    }
+    for (const child of Object.values(record)) visit(child);
+  };
+  visit(value);
+  return result;
+}
+
+function historyRecordToMessage(record: Record<string, unknown>, chatId: string): LarkMessage | null {
+  const messageId = firstString(record.message_id, record.messageId);
+  if (!messageId) return null;
+  const sender = record.sender && typeof record.sender === "object" ? record.sender as Record<string, unknown> : {};
+  const senderIdRecord = sender.sender_id && typeof sender.sender_id === "object" ? sender.sender_id as Record<string, unknown> : sender;
+  const messageType = firstString(record.message_type, record.messageType, record.msg_type, record.msgType) ?? "text";
+  const content = typeof record.content === "string" ? record.content : JSON.stringify(record.content ?? {});
+  return normalizeLarkEvent({
+    header: {
+      event_id: firstString(record.event_id, record.eventId) ?? `history:${messageId}`,
+      create_time: firstScalar(record.create_time, record.createTime, record.created_at, record.createdAt, record.update_time, record.updateTime)
+    },
+    event: {
+      sender: { sender_id: senderIdRecord },
+      message: {
+        message_id: messageId,
+        chat_id: firstString(record.chat_id, record.chatId) ?? chatId,
+        chat_type: firstString(record.chat_type, record.chatType) ?? inferChatTypeFromChatId(chatId),
+        message_type: messageType,
+        content,
+        mentions: Array.isArray(record.mentions) ? record.mentions : undefined
+      }
+    }
+  });
+}
+
+function firstScalar(...values: unknown[]): string | undefined {
+  const value = values.find((item) => (typeof item === "string" && item.length > 0) || typeof item === "number");
+  return value === undefined ? undefined : String(value);
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+function findNextPageToken(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = findNextPageToken(item);
+      if (nested) return nested;
+    }
+    return "";
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of ["page_token", "pageToken", "next_page_token", "nextPageToken"]) {
+    if (typeof record[key] === "string" && record[key]) return record[key];
+  }
+  for (const child of Object.values(record)) {
+    const nested = findNextPageToken(child);
+    if (nested) return nested;
+  }
+  return "";
+}
+
+function inferChatTypeFromChatId(chatId: string): string {
+  return chatId.startsWith("oc_") ? "group" : "p2p";
+}
+
 export async function materializeLarkCachedFile(bot: BotConfig, request: LarkCachedFileRequest, outputDir: string): Promise<{ localPath: string; cacheHit: boolean }> {
   await mkdir(outputDir, { recursive: true });
   const cacheRequest = larkFileCacheRequest(request);
@@ -494,14 +661,16 @@ export async function materializeLarkCachedFile(bot: BotConfig, request: LarkCac
       "+export",
       "--as",
       "user",
-      "--file-token",
+      "--token",
       request.fileToken,
       "--doc-type",
       request.docType!,
       "--file-extension",
       request.fileExtension!,
-      "--output",
+      "--file-name",
       outputName,
+      "--output-dir",
+      ".",
       "--format",
       "json"
     ], outputDir);

@@ -82,6 +82,31 @@ test("refreshes bot task nextRunAt and finds due tasks", () => {
   assert.equal(dueScheduledTasks({ ...bot, scheduledTasks: refreshed }, new Date(refreshed[0].nextRunAt!)).length, 1);
 });
 
+test("keeps overdue scheduled task nextRunAt so startup can catch up", () => {
+  const bot = testBot([{
+    ...baseTask,
+    schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "0 8 * * 1-5" },
+    nextRunAt: "2026-06-26T00:00:00.000Z"
+  }]);
+
+  const refreshed = refreshBotScheduledTasks(bot, new Date("2026-06-26T01:30:00.000Z"));
+
+  assert.equal(refreshed[0]?.nextRunAt, "2026-06-26T00:00:00.000Z");
+  assert.equal(dueScheduledTasks({ ...bot, scheduledTasks: refreshed }, new Date("2026-06-26T01:30:00.000Z")).length, 1);
+});
+
+test("recomputes future scheduled task nextRunAt during refresh", () => {
+  const bot = testBot([{
+    ...baseTask,
+    schedule: { type: "cron", timezone: "Asia/Shanghai", cronExpression: "0 8 * * 1-5" },
+    nextRunAt: "2026-06-30T00:00:00.000Z"
+  }]);
+
+  const refreshed = refreshBotScheduledTasks(bot, new Date("2026-06-26T01:30:00.000Z"));
+
+  assert.equal(refreshed[0]?.nextRunAt, "2026-06-29T00:00:00.000Z");
+});
+
 test("hydrates runtime state from legacy scheduled task state file", async () => {
   await withTempProject(async () => {
     const bot = testBot([

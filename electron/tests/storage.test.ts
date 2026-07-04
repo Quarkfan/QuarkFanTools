@@ -3,7 +3,7 @@ import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { workspaceSessionId } from "../conversation.js";
-import { clearExpiredCustomAppArtifactStorage, storageStats } from "../storage.js";
+import { clearExpiredCustomAppArtifactStorage, clearMessageCursorStorage, storageStats } from "../storage.js";
 import type { AppConfig } from "../types.js";
 
 test("storage tracks and clears expired custom app artifacts", async () => {
@@ -35,6 +35,26 @@ test("storage tracks and clears expired custom app artifacts", async () => {
   stats = await storageStats(config);
   assert.equal(stats.customAppArtifacts.some((item) => item.botId === botId && item.appId === appId), false);
   await rm(path.resolve("bots", botId), { recursive: true, force: true });
+  await rm(path.resolve("state", "bots", botId), { recursive: true, force: true });
+});
+
+test("storage tracks and clears message backfill cursors", async () => {
+  const botId = `storage-cursor-${Date.now()}`;
+  const stateRoot = path.resolve("state", "bots", botId);
+  await mkdir(stateRoot, { recursive: true });
+  await writeFile(path.join(stateRoot, "message-cursors.json"), JSON.stringify({
+    oc_1: {
+      chatId: "oc_1",
+      chatType: "group",
+      lastSeenAt: new Date().toISOString(),
+      lastMessageId: "om_1"
+    }
+  }));
+  let stats = await storageStats(testConfig(7));
+  assert.ok(stats.messageCursorBytes > 0);
+  await clearMessageCursorStorage();
+  stats = await storageStats(testConfig(7));
+  assert.equal(stats.messageCursorBytes, 0);
   await rm(path.resolve("state", "bots", botId), { recursive: true, force: true });
 });
 

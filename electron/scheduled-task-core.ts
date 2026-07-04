@@ -24,7 +24,7 @@ export function refreshBotScheduledTasks(bot: BotConfig, from = new Date()): Sch
   return (bot.scheduledTasks ?? []).map((task) => ({
     ...task,
     botId: bot.id,
-    nextRunAt: task.enabled ? nextTaskRun(task, from) : undefined
+    nextRunAt: task.enabled ? refreshedNextRunAt(task, from) : undefined
   }));
 }
 
@@ -34,6 +34,17 @@ export function dueScheduledTasks(bot: BotConfig, now = new Date()): ScheduledTa
 
 export function isValidCronExpression(expression: string): boolean {
   return parseCronExpression(expression) !== null;
+}
+
+function refreshedNextRunAt(task: ScheduledTask, from: Date): string | undefined {
+  if (task.pausedReason) return undefined;
+  const currentNextRunAt = task.nextRunAt && Number.isFinite(Date.parse(task.nextRunAt))
+    ? task.nextRunAt
+    : undefined;
+  if (currentNextRunAt && Date.parse(currentNextRunAt) <= from.getTime()) {
+    return currentNextRunAt;
+  }
+  return nextTaskRun(task, from);
 }
 
 function matchesWallClock(task: ScheduledTask, when: Date): boolean {

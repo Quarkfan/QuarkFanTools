@@ -23,6 +23,7 @@ export async function storageStats(config?: AppConfig): Promise<StorageStats> {
   let sessionCount = 0;
   let expiredSessionCount = 0;
   let conversationBytes = 0;
+  let messageCursorBytes = 0;
   const sessionEntries: StorageSession[] = [];
   const customAppArtifacts: CustomAppArtifactSummary[] = [];
   const cutoff = Date.now() - SESSION_IDLE_MS;
@@ -31,6 +32,7 @@ export async function storageStats(config?: AppConfig): Promise<StorageStats> {
     conversationBytes += await directorySize(path.join(stateRoot(), "bots", botId, "messages"));
     conversationBytes += await directorySize(path.join(stateRoot(), "bots", botId, "claude-home"));
     conversationBytes += await fileSize(path.join(stateRoot(), "bots", botId, "sessions.json"));
+    messageCursorBytes += await fileSize(path.join(stateRoot(), "bots", botId, "message-cursors.json"));
     conversationBytes += await directorySize(path.join(workspaceRoot(), "bots", botId));
     for (const [key, record] of Object.entries(await readSessions(botId))) {
       sessionCount += 1;
@@ -50,9 +52,10 @@ export async function storageStats(config?: AppConfig): Promise<StorageStats> {
   const cacheBytes = await directorySize(path.join(stateRoot(), "file-cache"));
   const customAppArtifactBytes = customAppArtifacts.reduce((sum, item) => sum + item.bytes, 0);
   return {
-    totalBytes: conversationBytes + cacheBytes,
+    totalBytes: conversationBytes + cacheBytes + messageCursorBytes,
     conversationBytes,
     cacheBytes,
+    messageCursorBytes,
     customAppArtifactBytes,
     customAppArtifactCount: customAppArtifacts.length,
     expiredCustomAppArtifactCount: customAppArtifacts.filter((item) => item.expired).length,
@@ -149,6 +152,12 @@ export async function clearAllSessionStorage(): Promise<void> {
 
 export async function clearFileCacheStorage(): Promise<void> {
   await rm(path.join(stateRoot(), "file-cache"), { recursive: true, force: true });
+}
+
+export async function clearMessageCursorStorage(): Promise<void> {
+  for (const botId of await botIds()) {
+    await rm(path.join(stateRoot(), "bots", botId, "message-cursors.json"), { force: true });
+  }
 }
 
 export async function clearFileCacheEntryStorage(cacheKey: string): Promise<boolean> {

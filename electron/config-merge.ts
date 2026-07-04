@@ -1,4 +1,4 @@
-import type { AppConfig, BotConfig } from "./types.js";
+import type { AppConfig, BotConfig, ModelProviderConfig } from "./types.js";
 import { isValidCronExpression } from "./scheduled-task-core.js";
 
 export type LegacyConfig = Partial<AppConfig> & {
@@ -30,6 +30,8 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
         pendingReaction: "OnIt",
         ownerOpenId: "",
         showProgress: false,
+        contextualReplyBetaEnabled: false,
+        maxBackfillMessages: 50,
         longTaskNoticeSeconds: 0,
         longTaskNoticeText: defaultLongTaskNoticeText()
       } satisfies BotConfig]
@@ -49,6 +51,8 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
     pendingReaction: bot.pendingReaction || "OnIt",
     ownerOpenId: bot.ownerOpenId || "",
     showProgress: bot.showProgress ?? false,
+    contextualReplyBetaEnabled: bot.contextualReplyBetaEnabled ?? false,
+    maxBackfillMessages: normalizeMaxBackfillMessages(bot.maxBackfillMessages),
     longTaskNoticeSeconds: normalizeLongTaskNoticeSeconds(bot.longTaskNoticeSeconds),
     longTaskNoticeText: bot.longTaskNoticeText?.trim() || defaultLongTaskNoticeText()
   }));
@@ -65,7 +69,7 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
         : base.ui.theme
     },
     skillMarket: { ...base.skillMarket, ...override.skillMarket },
-    model: { ...base.model, ...override.model },
+    model: normalizeModelConfig(base.model, override.model),
     runtime: {
       ...base.runtime,
       ...override.runtime,
@@ -77,6 +81,83 @@ export function mergeConfig(base: AppConfig, override: LegacyConfig): AppConfig 
       )
     }
   };
+}
+
+function normalizeModelConfig(base: AppConfig["model"], override: LegacyConfig["model"]): AppConfig["model"] {
+  const merged = { ...base, ...override };
+  const providerSource = override?.providers ?? (hasLegacyModelFields(override) ? [legacyModelProvider(merged, "anthropic")] : undefined);
+  const providers = normalizeModelProviders(providerSource, merged, base.providers);
+  const primary = providers.find((provider) => provider.enabled) ?? providers[0] ?? legacyModelProvider(merged, "anthropic");
+  const mode = override?.strategy?.mode === "random" ? "random" : override?.strategy?.mode === "round-robin" ? "round-robin" : base.strategy?.mode ?? "round-robin";
+  return {
+    ...merged,
+    providerId: primary.id,
+    providerName: primary.name,
+    baseUrl: primary.baseUrl,
+    model: primary.model,
+    apiKeyEnv: primary.apiKeyEnv,
+    apiKey: primary.apiKey,
+    multimodalEnabled: primary.multimodalEnabled,
+    providers,
+    strategy: {
+      mode,
+      failoverOnFailure: override?.strategy?.failoverOnFailure ?? base.strategy?.failoverOnFailure ?? false
+    }
+  };
+}
+
+function hasLegacyModelFields(model: LegacyConfig["model"]): boolean {
+  if (!model || typeof model !== "object") return false;
+  return ["providerId", "providerName", "baseUrl", "model", "apiKeyEnv", "apiKey", "multimodalEnabled"].some((key) => key in model);
+}
+
+function normalizeModelProviders(providers: unknown, legacy: AppConfig["model"], baseProviders: AppConfig["model"]["providers"]): ModelProviderConfig[] {
+  const source = Array.isArray(providers) ? providers : Array.isArray(baseProviders) && baseProviders.length > 0 ? baseProviders : [legacyModelProvider(legacy, "anthropic")];
+  const seen = new Set<string>();
+  const result: ModelProviderConfig[] = [];
+  for (const item of source) {
+    const provider = normalizeModelProvider(item, result.length);
+    if (!provider || seen.has(provider.id)) continue;
+    seen.add(provider.id);
+    result.push(provider);
+  }
+  if (result.length === 0) result.push(legacyModelProvider(legacy, "anthropic"));
+  return result;
+}
+
+function normalizeModelProvider(item: unknown, index: number): ModelProviderConfig | null {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+  const value = item as Record<string, unknown>;
+  const id = sanitizeModelProviderId(value.id, index);
+  const name = String(value.name ?? value.providerName ?? id).trim() || id;
+  return {
+    id,
+    name,
+    baseUrl: String(value.baseUrl ?? "").trim(),
+    model: String(value.model ?? "").trim(),
+    apiKeyEnv: String(value.apiKeyEnv ?? "ANTHROPIC_AUTH_TOKEN").trim() || "ANTHROPIC_AUTH_TOKEN",
+    apiKey: String(value.apiKey ?? ""),
+    multimodalEnabled: value.multimodalEnabled !== false,
+    enabled: value.enabled !== false
+  };
+}
+
+function legacyModelProvider(model: AppConfig["model"], fallbackId: string): ModelProviderConfig {
+  return {
+    id: sanitizeModelProviderId(model.providerId || fallbackId, 0),
+    name: model.providerName || "Claude Compatible",
+    baseUrl: model.baseUrl || "",
+    model: model.model || "",
+    apiKeyEnv: model.apiKeyEnv || "ANTHROPIC_AUTH_TOKEN",
+    apiKey: model.apiKey || "",
+    multimodalEnabled: model.multimodalEnabled !== false,
+    enabled: true
+  };
+}
+
+function sanitizeModelProviderId(value: unknown, index: number): string {
+  const id = String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return id || `provider-${index + 1}`;
 }
 
 function normalizeCustomAppArtifacts(value: unknown): NonNullable<AppConfig["runtime"]["customAppArtifacts"]> {
@@ -118,6 +199,12 @@ function normalizeLongTaskNoticeSeconds(value: unknown): number {
   const seconds = Math.floor(Number(value ?? 0));
   if (!Number.isFinite(seconds) || seconds <= 0) return 0;
   return Math.max(5, Math.min(3600, seconds));
+}
+
+function normalizeMaxBackfillMessages(value: unknown): number {
+  const parsed = Math.floor(Number(value ?? 50));
+  if (!Number.isFinite(parsed)) return 50;
+  return Math.max(1, Math.min(500, parsed));
 }
 
 function normalizeScopes(scopes: unknown): string[] {

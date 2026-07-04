@@ -4,13 +4,13 @@
 
 ## 当前基线
 
-- 产品版本：`2.2.5`
+- 产品版本：`2.2.6`
 - Git 分支：当前工作分支 `codex/2.0.0-stabilize`，远端 `main` 已同步到同一提交
 - 远端：`git@github.com:Quarkfan/QuarkFanTools.git`
 - 远端分支：`main` 与 `codex/2.0.0-stabilize` 指向 2.0 最新接续提交；1.x 系列已封版，后续只作为历史兼容样本，不再作为同步目标
 - 运行平台：后续发布和验证默认只面向 macOS Apple Silicon / arm64；Intel x64 只作为历史版本兼容样本
 - Agent 内核：`@anthropic-ai/claude-agent-sdk`
-- 当前阶段：2.2.5 arm64 测试安装包已形成并校验；2.2.4 已将微信未读读取模板改为连续队列流程：先截取微信列表并用多模态模型识别红点/红色数字徽标，再按可见未读候选队列读取最多 5 个会话，重新读取每个打开后当前窗口的可见消息；同时新增自定义应用运行产物统计/清理策略、自定义应用回复后处理配置，以及自定义应用输出的受控投递请求，可把处理结果投递到当前 Bot 已启用的飞书等结果投递路由。2.2.5 聚焦长内容弹窗滚动边界修复、Bot 编辑弹窗新增定时任务草稿无反馈修复，以及运行台、配置、Skill 市场、能力治理、存储管理和定时任务中心的页内标签组织。每 Bot 隔离飞书事件订阅、Bot 专属 lark-cli HOME、启动可见日志、旧凭据 marker 迁移修复、定时任务版本合并治理、命令机制、定时任务、缓存、自定义应用、套件/Workflow、MCP 占位诊断、IM 连接器诊断、使用手册、建设中能力友好响应、浅色主题统一、MCP 新增草稿、应用图标恢复、内置模板、Bot Provider 动态配置、自定义应用/套件 Manifest 编辑器和能力页多层级导航已完成。接下来聚焦真实飞书端到端验证、签名公证和后续高级扩展，不再跟进 1.x 同步。
+- 当前阶段：2.2.6 arm64 测试安装包已形成并校验；本版补充远端授权门禁、Bot 级“上下文免艾特回复 Beta”开关、飞书历史消息补处理 Beta、Skill 导入冲突解决、Agent 内核与飞书 CLI 升级、默认 Playwright MCP、多 MODEL PROVIDER 与使用策略、一键导出排障包、飞书群聊类型保守归一化、定时任务可观测性与复杂弹窗文字对齐修复，以及更严格的受控飞书文件缓存拦截。2.2.5 arm64 测试安装包已形成并校验，聚焦长内容弹窗滚动边界修复、Bot 编辑弹窗新增定时任务草稿无反馈修复，以及运行台、配置、Skill 市场、能力治理、存储管理和定时任务中心的页内标签组织。每 Bot 隔离飞书事件订阅、Bot 专属 lark-cli HOME、启动可见日志、旧凭据 marker 迁移修复、定时任务版本合并治理、命令机制、定时任务、缓存、自定义应用、套件/Workflow、MCP 占位诊断、IM 连接器诊断、使用手册、建设中能力友好响应、浅色主题统一、MCP 新增草稿、应用图标恢复、内置模板、Bot Provider 动态配置、自定义应用/套件 Manifest 编辑器和能力页多层级导航已完成。接下来聚焦真实飞书端到端验证、签名公证和后续高级扩展，不再跟进 1.x 同步。
 - 微信桌面辅助 Agent PoC 当前可尝试截取微信当前窗口，并通过本地初筛和已配置多模态模型识别可见未读；识别到多个可见未读后会按队列点击并读取有限数量会话，该点击可能让微信把会话标记为已读。同一会话多条消息只读取当前窗口可见内容。可选草稿仍只写入系统剪贴板，同时阻断自动发送；不读取微信数据库、不调用协议、不 Hook 进程，也不自动搜索、粘贴或发送。
 - 自定义应用输出协议当前支持 `deliveries` 受控投递请求：应用只能引用当前 Bot 已启用的 `deliveryRoutes[].id`，Runtime 在主进程中校验并通过对应 IM Provider 投递；自定义应用拿不到 `chat_id`、平台凭据或任意发送接口。
 - Bot 编辑弹窗中的新增投递路由现在会保留空 `chat_id` 草稿，便于先创建再填写；运行时会跳过未填写 `chat_id` 的路由并写入日志。
@@ -25,9 +25,14 @@
 ## 已实现
 
 - 多飞书机器人配置、独立启停和权限隔离。
+- 配置页已拆分 MODEL PROVIDER 和系统设置；MODEL PROVIDER 支持多个 Claude Messages API 兼容服务，系统设置支持轮流或随机策略，以及失败后自动切换下一个完整 Provider。
+- 执行日志页支持一键导出排障包，主进程生成 ZIP，包含脱敏配置/快照、日志、存储统计、定时任务历史、MCP/平台诊断和能力审计摘要。
+- 应用启动时立即检查远端授权文本；`Auth=open` 继续初始化并重置网络不可达累计，`Auth=close`、格式异常或 HTTP 异常会停止 Runtime 并退出；网络不可达写入 `state/auth-gate.json`，连续 90 天以上且累计 200 次以上检测都不可达时才视为未授权。
 - 飞书 Provider 为每个运行中的 Bot 使用独立 HOME/profile 启动事件订阅；事件进入 Runtime 后统一按 mention 目标路由到唯一目标 Bot。这样每个飞书应用至少通过自己的订阅接收事件，如果服务端交叉投递也能路由到被艾特 Bot。
 - 飞书 Bot 启动时会调用 bot info 确认实际 `open_id` 和应用名；多飞书 Bot 群聊艾特消息按 mention 目标值路由到目标机器人，`mentions.id.open_id` 只作为正向命中信号，不作为排他条件。
 - 多飞书 Bot 同时运行时，群聊消息如果缺少可判定的 mention 元数据，会记录诊断并忽略，避免多个机器人同时回复。
+- Bot 可单独开启“上下文免艾特回复 Beta”：默认关闭；开启后无 mention 的飞书群聊消息会先让该 Bot 根据上下文和职责判断是否需要回复，不确定或不属于自身职责时输出 `QFT_NO_REPLY` 并由 Runtime 静默处理。
+- 飞书历史消息补处理 Beta 会记录每个已看到 chat 的最后消息游标；运行台可对正在运行的飞书 Bot 点击“补处理历史 Beta”，从游标后拉取历史消息并按 Bot 配置上限排队处理。存储管理可单独查看和清理补处理 Beta 游标。
 - 每个注册机器人可独立启停监听，并可查看和筛选其独立日志。
 - 应用内展示可点击版本号，并提供面向用户的更新记录弹窗。
 - 单实例运行、旧订阅接管和无重复定时器的自动重连。
@@ -57,7 +62,7 @@
 - 过滤处理中表情触发的 reaction created/deleted 未注册处理器日志，保留其他飞书连接错误。
 - 高匹配飞书文件可先回复基本答案并创建待确认任务，用户确认后沿用原会话继续下载和分析。
 - 已下载附件进入应用控制的内容哈希缓存，Bot 可配置展示安全的 Agent 工作进度。
-- Skill 市场和会话支持点击预览；Skill 导入冲突会明确报错，市场与 Bot 授权筛选已优化。
+- Skill 市场和会话支持点击预览；Skill 导入冲突可选择以新的为准、以旧的为准或打开新旧 `SKILL.md` 自己编辑，市场与 Bot 授权筛选已优化。
 - Skill、自定义应用和套件卡片支持打开已发现资源所在目录，便于复制和检查资源文件。
 - 左上角 Logo 可打开应用内使用手册，集中说明配置和主要功能用法。
 - 左下角全局状态按多 Bot 展示在线数量、监听数量和排队任务数。
@@ -96,6 +101,7 @@
 - 能力执行链已强制 Owner 审批策略：Bot capability policy 或自定义应用声明需要 Owner 审批时，命令会先创建 Owner 私聊审批请求，定时任务会失败并记录需要审批的原因。
 - Workflow 步骤执行已接入运行台日志；定时任务触发的 Workflow 会把步骤状态、跳过状态和短输出摘要写入 `scheduled-runs.jsonl`。
 - Bot 级定时任务已接入：支持 `interval/daily/weekly/cron` 计划、`agent/command/capability` 目标、本机调度、chat 投递和运行记录。
+- 定时任务启动/刷新会保留已到期的持久化 `nextRunAt` 并尽快追赶执行一次；投递字段兼容解析已启用投递路由 ID/名称到真实 `chat_id`，任务编辑弹窗已改为多行 Prompt 并补齐 `chat_id` 说明和内边距；任务行新增“状态/日志”入口，可查看上次执行、下次执行、失败计数、重试/暂停原因、Prompt 和最近运行详情；“立即执行已保存任务”入口已前移到任务编辑弹窗和状态/日志弹窗；复杂弹窗标题、表单标签、section 标题和列表操作按钮补齐换行与对齐兜底，避免浅色主题下文字贴边或被截断。
 - Bot 定时任务支持手动立即运行已保存且启用的任务，运行结果进入同一审计历史，且不扰动原本已计算的下一次计划时间。
 - Bot 定时任务支持失败重试治理：计划触发失败可按任务配置延迟重试，连续失败超过上限后暂停自动排期并展示暂停原因。
 - 定时任务定义和运行态字段已拆分：配置只保存 schedule、target、delivery、retry 等定义字段，Bot 状态目录的 `scheduled-tasks.json` 只保存 `lastRunAt`、`nextRunAt`、`lastStatus`、`failureCount`、`retryAt` 和 `pausedReason` 等运行态；升级时兼容旧版完整任务数组状态文件并只按任务 `id` 合并运行态。
@@ -106,11 +112,13 @@
 - Runtime Binding 已抽出统一 capability executor，Skill / 套件 / Workflow / 自定义应用的命令与定时任务执行分派不再散落在消息主流程。
 - Runtime Binding 进一步拆分为 executable binding resolver 与 capability executor，命令和定时任务现在先解析 binding，再执行能力。
 - MCP 已接入：支持全局 `stdio` 配置、能力目录展示、Bot 维度授权，并以严格 MCP 配置模式注入 Claude Agent SDK。
+- 默认 Playwright MCP 已接入：Agent 默认可使用隔离 headless Chrome 的 `browser_*` 工具访问网页、点击、填写表单、读取页面结构、查看网络请求和截图；产物写入当前会话 workspace 的 `.playwright/`。
 - MCP 配置诊断已接入能力页：静态检查启用状态、传输类型、命令解析或 URL 缺失、cwd 可读性、环境变量缺值和 Bot 授权情况，并展示 OK/WARN/ERROR；手动刷新会短暂启动 `stdio` MCP 执行协议握手和工具列表预览。
 - MCP 协议诊断会把每次探测摘要追加到 `state/mcp-diagnostics.jsonl`，能力页会展示最近一次探测结果，便于应用重启后继续排查启动失败、工具列表和 stderr 尾部。
 - MCP HTTP / SSE 传输已支持配置保存和占位诊断，但运行时注入、命令目标、定时任务目标和协议探测仍只开放给 `stdio` MCP。
 - 受控飞书文件缓存 helper 已接入：Agent 可通过 `LARK_CACHED_FILE` 请求主进程下载云盘文件或导出云文档，优先命中应用级文件缓存，再把当前会话本地路径回灌给 Agent 继续分析。
 - Runtime 会检测并拦截 Agent 通过 Bash 裸调 `lark-cli drive +download` 或 `drive +export`，引导走受控文件缓存 helper。
+- Runtime 也会拦截 Agent 通过 `./qft-cli lark drive +download/+export` 绕过受控文件缓存 helper 的尝试，提示词明确旧 Skill 或 knowledge 指令不能覆盖平台治理。
 - 存储管理定时任务运行历史支持按 Bot 和状态筛选；能力页 MCP 静态诊断支持手动刷新。
 - 存储管理已展示文件缓存索引，支持按 Bot 和来源类型筛选、单条删除缓存索引、90 天自动失效、新鲜度状态和索引校验修复；共享内容 hash 会保留到最后一个索引引用删除。
 - 应用内使用手册已补充场景化教程，覆盖飞书问答、企业微信暂时封闭说明、命令、定时任务、套件/Workflow、MCP 和升级恢复；配置页 MCP 相关 `?` 说明已扩展。
@@ -130,6 +138,7 @@
 - 2.2.0 已完成 arm64 打包验证并归档。能力治理、命令、套件、Workflow、定时任务、MCP、主题、升级备份、缓存拆分、使用手册、建设中能力反馈、浅色主题统一、MCP 新增草稿、应用图标恢复、内置模板、Bot Provider 动态配置、自定义应用/套件 Manifest 编辑器和能力页多层级导航均已有代码落地；企业微信 Provider 入口已暂时封闭，权威矩阵见 `docs/2.0-design.md` 的“当前完成度矩阵”。
 - 自定义应用本地首版已覆盖导入、预览、Bot 授权、`node` 入口、命令调用、定时调用、manifest 诊断、升级和卸载生命周期；`webview/ui`、`mcp-adapter`、应用市场和签名校验仍属于高级扩展。
 - MCP 当前支持 `stdio` 运行时、Claude Agent SDK 严格注入、静态配置诊断、手动协议探测、持久化探测日志，以及作为命令/定时任务目标聚焦调用；探测失败会展示退出码、signal 和 stderr 尾部。HTTP / SSE 只支持保存 URL 和占位诊断，运行时注入、协议探测和真实服务端到端专项验证未完成。
+- 默认 Playwright MCP 当前使用 Chrome channel 启动隔离 headless 浏览器；如果目标机器没有可用 Chrome，`browser_*` 工具会启动失败。若下个正式安装包要求完全自包含浏览器，需要额外捆绑 Playwright Chromium 并核对体积、路径和 arm64 运行结果。
 - Workflow 首版已覆盖 prompt workflow、顺序 steps、步骤级输入模板、步骤输出变量、条件跳过、循环、失败恢复、超时和重试；单步重跑、专门运行历史页和真实 IM 端到端专项验证未完成。
 - 定时任务当前是本机应用运行期间触发；应用启动后会按持久化 `nextRunAt` 尽快追赶已到期任务，但不提供系统级后台常驻调度。复杂日历定义为 5 段 cron 基础表达式，不支持秒级、`L/W/#` 等高级 cron 扩展。
 - 飞书消息附件、受控云盘下载和受控云文档导出已支持下载前缓存命中；裸调 `lark-cli drive +download/+export` 已有运行时拦截。缓存索引已支持单条删除、90 天自动失效、新鲜度状态、缺失文件命中保护和索引校验修复；其他未来下载入口仍需按同一治理模型接入。
@@ -149,7 +158,10 @@
 
 ## 最近验证
 
+- 2026-07-04：客户确认上一版无分区 `HFS+` DMG 可安装；在飞书 CLI 兼容修复后重新执行 `CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack:mac`，成功生成新的 `v2.2.6` arm64 未签名包，并重建 app ZIP 兜底包。当前产物位于 `release/arm64/` 并已同步归档到 `release/v2.2.6/`：`QuarkfanTools-2.2.6-arm64.dmg`、`QuarkfanTools-2.2.6-arm64.zip`、`QuarkfanTools-2.2.6-arm64.zip.blockmap`、`QuarkfanTools-2.2.6-arm64-app.zip`、`latest-mac.yml`。`hdiutil imageinfo` 确认 DMG 为 `partition-scheme: none`、`Apple_HFS` / `HFS+`、`UDZO`；`hdiutil verify` 通过；挂载后确认包含 `QuarkfanTools.app` 和 `/Applications` 快捷方式，挂载包内 app 版本 `2.2.6`、主程序 arm64；app ZIP 解压后 app 版本 `2.2.6`、主程序 arm64；`git diff --check` 通过。SHA-256：DMG `4844c90d300d1fc5f94e6663bee1e9a64a818d2cbf5c6407a035d66e4eb1e1fd`，electron-builder ZIP `87bc09e1c7f6ea845774b172de1869c01cc4fb44a7ad64b927be582619823127`，app ZIP `2908a6b6ec53bfb328310f74a5b29a8401adad33211a97c164ee0dac73781ce6`。安装包仍未签名和公证。
 - 2026-07-04：`v2.2.5` 重新完成 arm64 打包验证：DMG 生成脚本固定使用 HFS+ 文件系统和 UDZO 压缩格式，避免不同 macOS 默认 `hdiutil` 产物导致另一台机器提示“未能装载镜像 / 装载文件系统失败”；发布文档补充 `release/` 为本机忽略目录、跨机器需重新打包或使用外部分发归档，以及目标机器上的 `hdiutil verify` / `shasum -a 256` 排障命令。`git diff --check` 通过；`npm test` 通过，136 项测试全部通过；`npm run pack:mac` 通过并重新生成 `release/arm64/QuarkfanTools-2.2.5-arm64.dmg`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip.blockmap` 和 `latest-mac.yml`，已归档到 `release/v2.2.5/`；`hdiutil verify` 通过并显示 DMG 内部分区为 `Apple_HFS`；挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式，app 版本 `2.2.5`，主程序 arm64。归档产物 SHA-256：DMG `7674211f09c0c6dc643fa3168d413a7f3c35ac12822482ab2473217b9402ee9c`，ZIP `213d01e72eebdb9e18982598eb53ece798c63de4e11d851841cc0d238f94ecd4`。安装包仍未签名和公证。
+- 2026-07-04：`v2.2.6` 已完成 arm64 打包验证：版本号、根 `CHANGELOG.md`、应用内更新记录、`README.md`、`docs/AI.md`、`docs/PRD.md`、`docs/PRODUCT_HANDOFF.md`、`STATUS.md` 和产物名称已同步 2.2.6；应用内更新记录未写入远端授权门禁；`npm test` 通过，164 项测试全部通过；本轮完成新版飞书 CLI 调用面兼容审计：实测 `@larksuite/cli` 1.0.64 和 1.0.65 对 `/open-apis/bot/v3/info` 返回 `ok: true` 但 `data` 为空，而 1.0.53 可返回完整 `bot.open_id`，`whoami --as bot` 只返回 profile、App ID 和 token 状态，不能替代 Bot info；应用在遇到 CLI 空响应时会直接调用飞书原始 OpenAPI 补取 Bot `open_id`，原始接口也不可用时才降级按 App ID 和 Bot 名称继续严格 @ 路由并写入警告；同步 `drive +export` 新版参数 `--token`、`--file-name`、`--output-dir`，主动文本发送改用 `--text`/`--markdown`，表情删除改用 `--message-id/--reaction-id`；`npm run pack:mac` 首次命中本机签名流程长时间无进展后中断，随后使用 `CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack:mac` 成功生成未签名 arm64 测试包；用户反馈首版 DMG 在外部分发后出现“未能加载镜像”，改为显式无分区 `HFS+` 布局并重新生成 2.2.6 DMG，同时新增 app ZIP 兜底安装包；当前产物位于 `release/arm64/QuarkfanTools-2.2.6-arm64.dmg`、`release/arm64/QuarkfanTools-2.2.6-arm64.zip`、`release/arm64/QuarkfanTools-2.2.6-arm64.zip.blockmap`、`release/arm64/QuarkfanTools-2.2.6-arm64-app.zip` 和 `release/arm64/latest-mac.yml`，并已归档到 `release/v2.2.6/`；核对 app 版本 `2.2.6`、主程序 arm64，`latest-mac.yml` 版本为 `2.2.6`；新 DMG 已通过 `hdiutil imageinfo` 确认 `partition-scheme: none`，分区为 `Apple_HFS` / `HFS+`，`hdiutil verify` 通过，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式，挂载包内 app 版本为 `2.2.6`、主程序 arm64；app ZIP 已解压校验，解压后 app 版本为 `2.2.6`、主程序 arm64。安装包仍未签名和公证。
+- 2026-07-03：Unreleased 新增远端授权门禁，启动时立即检查授权文本，运行中按 10-30 分钟随机复检；`Auth=open` 继续运行并重置网络不可达累计，`Auth=close` 或格式/HTTP 异常会退出，网络不可达连续 90 天以上且累计 200 次以上才视为未授权；门禁地址已从过期签名 `raw.giteeusercontent.com` 改为开源后可直接读取的 `https://gitee.com/vdean/Auth/raw/master/QuarkfanTools`，实测 HTTP 200 且返回 `Auth=open`；新增 Bot 级“上下文免艾特回复 Beta”开关；新增飞书历史消息补处理 Beta，记录 chat 游标、运行台一键补处理并在存储管理中单独清理游标；Skill 导入冲突可选择以新的为准、以旧的为准或打开新旧 `SKILL.md` 自己编辑；`@anthropic-ai/claude-agent-sdk` 已从 `0.3.177` 升级到 `0.3.199`，`@larksuite/cli` 已从 `1.0.53` 升级到 `1.0.64`，`npm run pack:prepare` 已确认 arm64 飞书 CLI 为 `1.0.64`、Claude runtime 为 `2.1.199 (Claude Code)`；新增内置默认 Playwright MCP，默认用隔离 headless Chrome 提供 `browser_*` 网页访问和截图验证工具，CLI 版本已验证为 `@playwright/mcp 0.0.77`；配置页拆分 MODEL PROVIDER 与系统设置，支持多个模型 Provider、轮流/随机策略和失败自动切换；执行日志页新增一键导出排障包，ZIP 内包含脱敏配置/快照、运行日志、存储统计、定时任务历史、MCP/平台诊断和能力审计摘要；修复定时任务错过计划时间后刷新直接跳到未来计划的问题，已到期 `nextRunAt` 会追赶执行一次，并优化定时任务编辑 UI、投递路由 ID 兼容解析、任务级“状态/日志”可见性弹窗，以及更浅层的立即执行入口；复杂弹窗补齐长标题换行、表单标签最小宽度、按钮换行和调度任务 section 标题对齐兜底，使用 mock preload 在浅色主题下截图确认定时任务编辑弹窗的“计划/目标/投递/治理”不再贴边；同时将 `group_chat` 等群聊类型归一化为严格 @ 路由，并强化 `./qft-cli lark drive +download/+export` 绕过受控文件缓存 helper 的拦截。`git diff --check` 通过；`npm test` 通过，160 项测试全部通过。
 - 2026-06-29：`v2.2.5` 已完成 arm64 打包验证：全面检查长内容弹窗滚动边界，补齐发布说明、使用手册、帮助说明、预览/Manifest、自定义应用详情、会话详情、运行详情、定时任务编辑和 Bot 编辑等弹窗的固定头部 + 内容区滚动；修复 Bot 编辑弹窗新增定时任务草稿无反馈问题；运行台、配置、Skill 市场、能力治理、存储管理和定时任务中心改为页内标签组织；修复 Skill 市场标签筛选不生效问题；飞书消息去重扩展为同时记录事件 ID 和消息 ID，避免同一 `message_id` 携带不同 `event_id` 时重复回答；飞书群聊消息统一要求 `mentions` 元数据命中目标 Bot，事件头 `sourceAppId` 不再让无 @ 群聊消息触发回答。`git diff --check` 通过；`npm test` 通过，136 项测试全部通过；`npm run pack:mac` 通过并重新生成 `release/arm64/QuarkfanTools-2.2.5-arm64.dmg`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip.blockmap` 和 `latest-mac.yml`，已归档到 `release/v2.2.5/`；核对 app 版本 `2.2.5`、主程序 arm64，`latest-mac.yml` 版本为 `2.2.5`；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；误生成的下一版本号本地产物已清理。当前 2.x 本地归档只保留 `release/v2.2.4/` 和 `release/v2.2.5/`。安装包仍未签名和公证。
 - 2026-06-28：`v2.2.4` 已完成 arm64 打包验证：微信未读读取模板改为连续队列流程，先通过当前微信窗口截图和多模态模型识别红点/红色数字徽标，再按可见未读候选读取最多 5 个会话并重新读取打开后的当前会话可见消息；点击会话可能让微信将该会话标记为已读，但模板仍不读取微信数据库、不调用协议、不 Hook 进程、不自动搜索、不自动粘贴、不自动发送。点击动作会先把视觉模型给出的截图像素坐标按当前窗口尺寸换算为 macOS 窗口点坐标，再依次尝试 WeChat 进程内点击、System Events 全局点击和 JXA/Quartz CGEvent 三种策略，失败时会列出各策略错误。本轮还新增自定义应用运行产物统计/清理入口、产物保留天数和自动清理配置，以及自定义应用回复原样返回/大模型总结的后处理配置。`git diff --check` 通过；`npm test` 通过，130 项测试全部通过；`npm run pack:mac` 通过，最终归档到 `release/v2.2.4/`，包含 `QuarkfanTools-2.2.4-arm64.dmg`、`QuarkfanTools-2.2.4-arm64.zip`、`QuarkfanTools-2.2.4-arm64.zip.blockmap` 和 `latest-mac.yml`；核对 app 版本 `2.2.4`、内置 Vision OCR helper 为 arm64；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；当前 2.x 本地归档只保留 `release/v2.2.3/` 和 `release/v2.2.4/`，已清理 `release/v2.2.2/` 以及 `release/arm64/` 下 2.2.2 旧分发文件。安装包仍未签名和公证。
 - 2026-06-28：`v2.2.2` 已完成 arm64 打包验证：微信桌面辅助模板改为截取当前微信窗口，并通过本地初筛和主进程受控多模态模型识别可见未读；API Key 只留在主进程配置，不传给自定义应用脚本。当前本机已验证 WeChat 可以置前并截取窗口区域，macOS Accessibility 只暴露窗口外壳，窗口截图路径能看到“微信游戏”等可见列表项，因此后续真实未读抽取应依赖多模态模型。`git diff --check` 通过；`npm test` 通过，124 项测试全部通过；`npm run pack:mac` 通过，最终归档到 `release/v2.2.2/`，包含 `QuarkfanTools-2.2.2-arm64.dmg`、`QuarkfanTools-2.2.2-arm64.zip`、`QuarkfanTools-2.2.2-arm64.zip.blockmap` 和 `latest-mac.yml`，构建中间 app 收入 `release/v2.2.2/build-arm64/`；核对 app 版本 `2.2.2`、主程序 arm64、内置 `lark-cli` / `wecom-cli` / Claude runtime / Vision OCR helper 均为 arm64；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；当前 2.x 本地归档只保留 `release/v2.2.1/` 和 `release/v2.2.2/`，已清理 `release/v2.2.0/` 以及 `release/arm64/` 下 2.2.0 旧分发文件。安装包仍未签名和公证。

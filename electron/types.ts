@@ -55,6 +55,8 @@ export interface BotConfig {
   pendingReaction: string;
   ownerOpenId: string;
   showProgress?: boolean;
+  contextualReplyBetaEnabled?: boolean;
+  maxBackfillMessages?: number;
   longTaskNoticeSeconds?: number;
   longTaskNoticeText?: string;
 }
@@ -300,6 +302,11 @@ export interface AppConfig {
     apiKeyEnv: string;
     apiKey: string;
     multimodalEnabled: boolean;
+    providers?: ModelProviderConfig[];
+    strategy?: {
+      mode: "round-robin" | "random";
+      failoverOnFailure: boolean;
+    };
   };
   runtime: {
     sandbox: "read-only" | "workspace-write" | "danger-full-access";
@@ -321,6 +328,17 @@ export interface AppConfig {
       maxInputChars: number;
     }>;
   };
+}
+
+export interface ModelProviderConfig {
+  id: string;
+  name: string;
+  baseUrl: string;
+  model: string;
+  apiKeyEnv: string;
+  apiKey: string;
+  multimodalEnabled: boolean;
+  enabled: boolean;
 }
 
 export interface SkillSummary {
@@ -453,6 +471,7 @@ export interface ChatMessage {
   provider?: ImProviderId;
   sourceAppId?: string;
   mentions?: LarkMention[];
+  contextualReplyBeta?: boolean;
   raw: unknown;
 }
 
@@ -460,7 +479,7 @@ export type LarkMessage = ChatMessage;
 
 export interface LarkBotIdentity {
   appName?: string;
-  openId: string;
+  openId?: string;
 }
 
 export interface LarkMention {
@@ -502,6 +521,7 @@ export interface StorageStats {
   totalBytes: number;
   conversationBytes: number;
   cacheBytes: number;
+  messageCursorBytes: number;
   customAppArtifactBytes: number;
   customAppArtifactCount: number;
   expiredCustomAppArtifactCount: number;

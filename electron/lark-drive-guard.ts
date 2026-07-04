@@ -7,6 +7,8 @@ export function detectRawLarkDriveFileCommand(item: unknown): string | null {
   const input = tool?.input;
   if (!input || typeof input !== "object") return null;
   const command = String((input as Record<string, unknown>).command ?? "");
-  if (!/\blark-cli\b[\s\S]*\bdrive\s+\+(download|export)\b/.test(command)) return null;
+  const rawLarkCommand = /\blark-cli\b[\s\S]*\bdrive\s+\+(download|export)\b/.test(command);
+  const qftLarkCommand = /\bqft-cli\b\s+lark\s+drive\s+\+(download|export)\b/.test(command);
+  if (!rawLarkCommand && !qftLarkCommand) return null;
   return command.trim();
 }

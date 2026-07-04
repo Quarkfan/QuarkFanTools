@@ -2,7 +2,7 @@
 
 ## 1. 保护目标
 
-- 模型 API Key、飞书 App Secret、企业微信 Bot Secret、OAuth 状态、连接器凭据和 Skill 市场 Token。
+- MODEL PROVIDER API Key、飞书 App Secret、企业微信 Bot Secret、OAuth 状态、连接器凭据和 Skill 市场 Token。
 - 不同机器人之间的身份、消息、会话和 Skill 数据。
 - 用户导入的 Skills、知识文件和会话附件。
 - 主机文件系统免受非授权 Agent 访问。
@@ -10,6 +10,7 @@
 ## 2. 当前控制
 
 - 配置文件以本机权限 `0600` 保存。
+- 主进程启动和运行中会检查远端授权开关；`Auth=open` 继续运行并重置网络不可达累计，`Auth=close`、格式异常或 HTTP 异常会关闭应用，单次网络不可达只累计不立即关闭。
 - 凭据、状态、workspace 和发布产物均不应提交到 Git。
 - 每个机器人使用独立 IM CLI 配置、连接器配置、Claude home、会话状态和 workspace。
 - 每个机器人只映射明确授权的 Skills。
@@ -18,7 +19,9 @@
 - Bot 命令映射只能指向当前 Bot 已授权且 policy 允许命令调用的能力；系统保留命令 `/new`、`/continue`、`/owner`、`/help` 不允许被覆盖，命令名和别名冲突必须在配置 UI 中提示管理员处理。
 - 定时任务只能在当前 Bot 已授权且 policy 允许定时调用的范围内调用目标能力，不允许通过任务定义绕过命令或能力授权边界。失败运行会向任务投递 chat 发送告警，但告警发送失败不能改变原始运行状态。
 - MCP 服务只能来自本地配置，不允许通过聊天即时创建并执行；未授权 MCP 不进入当前 Bot 的 Agent 上下文。HTTP / SSE MCP 目前只允许保存 URL 和展示诊断，不会注入 Agent、命令或定时任务。
+- 内置默认 Playwright MCP 会随每次 Agent 会话注入，提供网页访问、点击、表单、网络请求查看和截图工具。它使用隔离 headless 浏览器会话，不复用用户日常浏览器 profile 或登录态；产物写入当前会话 workspace 的 `.playwright/`，受会话清理边界管理。
 - 删除本地导入 Skill 时同步撤销所有机器人对该名称的授权，避免同名市场或内置 Skill 自动继承权限。
+- Skill 导入冲突解决只在主进程分析受管本地 Skill 目录后执行；“自己编辑”仅打开用户选择的源目录 `SKILL.md` 和已发现的既有本地 `SKILL.md`，不接受渲染层传入任意文件路径。
 - GUI 打开资源所在目录只允许已发现的 Skill、自定义应用和套件。渲染层只传资源类型和 ID，主进程重新解析目录，不接受任意路径打开请求。
 - Owner 人工请求只接受配置的 Owner open_id 发出的处理指令；待处理请求按机器人隔离保存。
 - Claude sandbox 默认拒绝其他机器人和全局 Skill 路径，只放行当前执行所需目录。
@@ -26,17 +29,20 @@
 - lark-cli 子进程统一设置 `HOME=state/bots/<bot-id>/lark-home`，官方用户态 OAuth 加密材料和 `master.key.file` 因此位于当前 Bot 状态目录下。Agent sandbox 不再放行真实 macOS 用户全局 `~/Library/Application Support/lark-cli/`。
 - 飞书 CLI 二进制可由 Bot 显式路径或本机已安装 `lark-cli` 覆盖内嵌版本，但运行环境仍使用当前 Bot 的隔离 HOME 和配置目录。管理员只能使用可信官方 CLI；未知来源的本机 `lark-cli` 会获得当前 Bot 的隔离凭据环境。
 - 受控飞书文件 helper 只按当前 Bot 和当前会话物化缓存文件。全局 `state/file-cache` 仍由主进程管理，Agent 不获得直接读取全局缓存目录的权限。
+- “上下文免艾特回复 Beta”是 Bot 级显式开关，默认关闭。开启后只扩大该 Bot 对无 mention 飞书群聊消息的判断面，不扩大 Skill、MCP、自定义应用、连接器或文件系统权限；未判定为自身职责时 Runtime 静默，不应发送处理中表情、长任务提示或最终回复。
+- 历史消息补处理 Beta 只对正在运行的飞书 Bot 开放，使用该 Bot 自己的隔离 lark-cli 身份和已记录 chat 游标拉取消息，不扫描未知会话。补拉到的消息仍经过 mention 路由、Beta 职责判断、去重和 Bot 授权边界；游标只保存 chat、最后消息 ID 和时间，不保存消息正文，并可在存储管理中单独清理。该能力依赖飞书历史消息接口和现场权限，不应视作正式离线消息兜底。
 - 企业微信 Provider 因官方能力限制暂时封闭。历史 Bot ID / Secret、轮询 Chat ID、事件桥命令等配置会保留，但当前版本不会启动监听、轮询、聊天列表获取、CLI 缓存初始化或企业微信投递路由。
 - 结果投递路由会把最终回复复制到另一个平台 chat，属于显式跨平台数据流；当前企业微信投递目标被封闭，避免错误配置把结果发送到不可控或不稳定的企业微信会话。
 - 自定义应用的受控投递请求只能引用当前 Bot 已启用的 `deliveryRoutes[].id`。自定义应用输入上下文只包含路由摘要，不包含 `chat_id`、App Secret、OAuth 状态或任意发送接口；Runtime 必须在主进程内二次校验 routeId、provider 和文本内容后再发送。
 - Agent workspace 中的 `qft-cli` wrapper 只按 `.quarkfan/cli-channels.json` 中的授权 channel 路由，并拒绝登录、初始化和 keychain 降级等凭据命令。企业微信相关初始化和轮询能力当前不允许由聊天消息、Agent 或 UI 动态触发；后续若重新开放，仍必须由管理员在应用配置页显式启用并保持 Bot 隔离。
-- Runtime 会检测 Claude Bash tool use 中裸调 `lark-cli drive +download` 或 `drive +export` 的行为并中止，避免绕过受控 helper、Bot 缓存索引和下载前命中治理。
+- Runtime 会检测 Claude Bash tool use 中裸调 `lark-cli drive +download`、`drive +export` 或经 `./qft-cli lark drive +download/+export` 绕行的行为并中止，避免绕过受控 helper、Bot 缓存索引和下载前命中治理。
 - macOS Claude sandbox 允许访问系统 trustd，使内置 Go CLI 能校验受控网络代理的 TLS 证书；仍禁止 Agent 执行 unsandboxed 命令。
 - Skill 市场限制为 HTTPS，避免依赖系统 SSH/Git 配置。
 - Office ZIP 预处理限制为最多 5,000 个条目和 200 MB 解压体积。
 - 会话清理默认保留配置、飞书授权和用户 Skills。
 - 全局文件缓存由主进程管理并记录获准 Bot；Agent sandbox 不直接开放全局缓存目录。
 - 存储管理将会话数据和全局文件缓存分开清理，避免用户清理上下文时误删长期复用缓存，或清理缓存时误删会话记录。
+- 一键排障包由主进程生成，包含脱敏配置、运行快照、日志和诊断摘要。字段名包含 Secret、Token、API Key、Password、Authorization 等的值会递归脱敏；但日志仍可能包含用户消息正文、文件名、chat id 或错误详情，高敏环境中应先由客户审阅后再外发。
 - 用户可见工作进度只展示工具类别和状态，不输出模型私有推理、原始工具参数或凭据。
 
 ## 3. 重要风险
@@ -48,6 +54,10 @@ Claude Agent 允许 `Read`、`Write`、`Edit`、`Glob`、`Grep`、`Bash`、`Skil
 macOS 上启用 `enableWeakerNetworkIsolation` 会开放对 `com.apple.trustd.agent` 的访问，以支持 lark-cli 等 Go CLI 在 sandbox 网络代理下验证 TLS。该能力比默认网络隔离更弱，存在额外数据外传面；不得同时允许 unsandboxed 命令，且应继续限制可访问目录和外部能力。
 
 `state/bots/<bot-id>/lark-home/Library/Application Support/lark-cli/` 是当前 Bot 的 lark-cli 安全存储目录，包含该 Bot 的用户态 OAuth 加密凭据和 `master.key.file`。该目录随 Bot 状态隔离，不能授权给其他 Bot 或全局 workspace。
+
+### 远端授权可用性
+
+远端授权门禁对明确拒绝保持 fail-closed：`Auth=close`、格式异常或 HTTP 异常会退出应用。网络不可达采用持久累计宽限，状态写入 `state/auth-gate.json`；从第一次不可达开始，连续 90 天以上且累计 200 次以上检测都不可达时，才视为未授权并退出。这样可以容忍短期离线，但长期无法验证授权仍会导致不可用。授权地址、远端文件内容和不可达累计状态都属于发布运行依赖，变更前需要同步运维文档并做启动验证。
 
 ### Skill 供应链
 
@@ -99,6 +109,8 @@ MCP 服务等价于本机工具能力扩展。当前版本只有显式配置的 
 - 未授权 Bot 不应因为全局配置存在而自动获得 MCP 能力；即使已授权，仍应通过 Bot capability policy 控制是否开放给 Agent、命令和定时任务。
 - MCP 诊断只做静态配置检查和短生命周期 stdio 协议探测，不应被视为服务安全审计或工具权限审计；诊断 OK 只表示命令或 URL、cwd、env 和授权关系基本可用。
 
+内置 Playwright MCP 是例外：它不是用户配置的 MCP，也不经过 Bot 授权开关。它扩大的是 Agent 默认可访问的公网网页面，而不是本机文件或 Bot 凭据边界；任何继续增加默认 Playwright 工具、改为非隔离 profile、或允许持久登录态复用的变更，都必须按外部数据访问能力重新审查。
+
 ### 本机明文凭据
 
 配置以受限文件权限保存在本机，但尚未使用 macOS Keychain。拥有用户账户或磁盘读取能力的攻击者仍可能取得凭据。
@@ -113,7 +125,9 @@ MCP 服务等价于本机工具能力扩展。当前版本只有显式配置的 
 
 ### 第三方模型
 
-消息、附件内容和 Agent 上下文会发送到用户配置的模型服务。使用方必须确认该服务的数据处理与合规要求。
+消息、附件内容和 Agent 上下文会发送到用户配置的 MODEL PROVIDER。使用方必须确认每个 Provider 的数据处理与合规要求。
+
+多个 MODEL PROVIDER 的轮流、随机和失败切换都在主进程内执行；只会选择已启用且配置完整的 Provider。API Key 仍只保存在本机配置中，不会下放给自定义应用脚本、Skill 目录或 Agent workspace。视觉识别只会选择声明启用多模态的 Provider，避免把截图误发给文本专用服务。
 
 ### 未签名应用
 

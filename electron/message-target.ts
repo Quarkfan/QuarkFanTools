@@ -24,6 +24,11 @@ function mentionValues(mention: LarkMention): string[] {
   ].filter((value): value is string => Boolean(value));
 }
 
+export function isLarkGroupChat(chatType: string | undefined): boolean {
+  const normalized = normalize(chatType).replace(/[-\s]/g, "_");
+  return normalized === "group" || normalized === "group_chat" || normalized === "chat_group" || normalized.endsWith("_group");
+}
+
 export function messageTargetsBot(bot: BotConfig, message: ChatMessage, identity?: LarkBotIdentity, strictGroupTargeting = false): boolean {
   return messageTargetDecision(bot, message, identity, strictGroupTargeting).targeted;
 }
@@ -57,7 +62,7 @@ export function messageTargetDecision(bot: BotConfig, message: ChatMessage, iden
       botMatchers
     };
   }
-  if (strictGroupTargeting && message.chatType === "group") {
+  if (strictGroupTargeting && isLarkGroupChat(message.chatType)) {
     return {
       targeted: false,
       reason: "missing-group-mention-metadata",

@@ -24,7 +24,7 @@ let marketSource: MarketSource = "all";
 let marketSearch = "";
 let activeCapabilitySection: "overview" | "diagnostics" | "mcp" | "suites" | "apps" | "audit" = "overview";
 let activeConsoleSection: "bots" | "logs" = "bots";
-let activeConfigSection: "model" | "customApps" | "market" | "mcp" | "bots" = "model";
+let activeConfigSection: "model" | "system" | "customApps" | "market" | "mcp" | "bots" = "model";
 let activeStorageSection: "cleanup" | "sessions" | "cache" | "artifacts" | "runs" = "cleanup";
 let activeScheduledSection: "tasks" | "runs" = "tasks";
 type BotEditorSection = "basic" | "platform" | "delivery" | "skills" | "capabilities" | "commands" | "scheduled";
@@ -54,7 +54,7 @@ function appendLocalLog(level: LogEntry["level"], message: string, detail?: stri
 }
 
 const helpTopics: Record<string, { title: string; body: string }> = {
-  providerName: { title: "Provider 名称", body: "仅用于界面展示，方便区分当前配置的模型服务商。" },
+  providerName: { title: "Provider 名称", body: "仅用于界面展示，方便区分当前配置的模型服务商。可以配置多个 Provider，由系统设置里的策略决定使用顺序。" },
   baseUrl: { title: "Claude Base URL", body: "兼容 Claude Messages API 的服务地址。当前 Agent SDK 需要 Claude/Anthropic 兼容接口和工具调用能力。" },
   model: { title: "模型", body: "发送给模型服务的模型名。复杂 Skill、飞书资料检索和多模态任务需要选择支持工具调用的模型。" },
   apiKey: { title: "API Key", body: "模型服务认证密钥，仅保存在本机配置文件，不提交到 Git。" },
@@ -63,6 +63,7 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   customAppArtifacts: { title: "自定义应用运行产物", body: "自定义应用执行时写入当前会话 workspace 的截图、临时 JSON 和调试文件。清理只删除运行产物，不删除自定义应用本体、Bot 配置或授权。" },
   customAppReplyProcessing: { title: "自定义应用回复后处理", body: "每个自定义应用可以分别配置原样返回或总结后返回。启用总结后，主进程会用当前模型配置对该应用输出做一次无工具文本总结，API Key 不会下放给自定义应用。" },
   multimodalEnabled: { title: "多模态视觉能力", body: "开启后图片消息和 PowerPoint 预览可作为视觉输入交给模型；关闭后只处理文本内容。" },
+  modelProviderStrategy: { title: "MODEL PROVIDER 使用策略", body: "轮流会在多个完整 Provider 间按顺序切换；随机会每次随机选择一个完整 Provider。勾选失败切换后，当前 Provider 调用失败会继续尝试下一个候选。" },
   uiTheme: { title: "界面主题", body: "支持跟随系统、浅色和深色。跟随系统时会根据 macOS 当前外观自动切换。" },
   marketEnabled: { title: "启用技能市场", body: "启用后可从 HTTPS Git 仓库同步 Skill。同步后的 Skill 默认不授权给任何 Bot。" },
   marketRepositoryUrl: { title: "HTTPS Git 仓库", body: "Skill 市场仓库地址。当前只支持 HTTPS，不依赖系统 Git 或 SSH Key。" },
@@ -93,6 +94,8 @@ const helpTopics: Record<string, { title: string; body: string }> = {
   deliveryRoutes: { title: "结果投递路由", body: "最终回复先回到原消息平台；投递路由会把同一份最终结果复制发送到配置的目标平台 chat。跨平台投递需要对应 connector 可用。" },
   capabilityPolicy: { title: "能力运行策略", body: "控制已授权能力能否被 Agent 自主使用、命令调用、定时任务调用，或是否需要 Owner 审批。授权和运行策略是两层边界：勾选只表示可见，策略决定怎么用。" },
   showProgress: { title: "向用户展示工作过程", body: "开启后向用户展示工具调用、检索和重试等可观察进度，不展示模型隐藏推理或敏感参数。" },
+  contextualReplyBetaEnabled: { title: "上下文免艾特回复 Beta", body: "关闭时群聊必须 @ 机器人。开启后，未 @ 的群消息会先让该机器人根据上下文和自身职责判断是否需要回复；不确定时应静默。该能力仍为 beta，建议只给确实需要主动承接上下文的单个机器人开启。" },
+  maxBackfillMessages: { title: "历史补处理 Beta 上限", body: "运行台点击“补处理历史 Beta”时，该 Bot 最多从已记录游标后的历史消息中排队处理多少条。用于断网或长连接中断恢复后补处理漏掉的消息，范围 1-500；该能力依赖飞书历史消息接口和已记录游标，仍为 Beta。" },
   skillAccess: { title: "允许访问的 Skills", body: "Bot 只能看到明确勾选的 Skills。新增或导入的 Skill 默认不授权，避免能力范围意外扩大。" },
   mcpAccess: { title: "允许访问的 MCP", body: "MCP 服务是全局定义、Bot 局部授权的工具能力。未授权的 MCP 不会进入当前 Bot 的 Claude Agent 上下文。" },
   customAppAccess: { title: "允许访问的自定义应用", body: "自定义应用通过 app.json 导入，并作为 Bot 可治理能力授权。导入不等于授权；只有勾选后，后续命令或定时任务才能调用。当前 node 和受控 executable 可执行；webview、mcp-adapter、workflow 入口会显示建设中，不进入命令或定时目标。" },
@@ -123,11 +126,32 @@ function parseScopes(value: string): string[] {
   return [...new Set(value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean))];
 }
 
+function modelProviders(config: AppConfig): NonNullable<AppConfig["model"]["providers"]> {
+  if (Array.isArray(config.model.providers) && config.model.providers.length > 0) return config.model.providers;
+  return [{
+    id: config.model.providerId || "anthropic",
+    name: config.model.providerName || "Claude Compatible",
+    baseUrl: config.model.baseUrl,
+    model: config.model.model,
+    apiKeyEnv: config.model.apiKeyEnv || "ANTHROPIC_AUTH_TOKEN",
+    apiKey: config.model.apiKey,
+    multimodalEnabled: config.model.multimodalEnabled,
+    enabled: true
+  }];
+}
+
+function completeModelProviders(config: AppConfig): NonNullable<AppConfig["model"]["providers"]> {
+  return modelProviders(config).filter((provider) => provider.enabled && provider.baseUrl && provider.model && provider.apiKey);
+}
+
+function sanitizeModelProviderId(value: string, index: number): string {
+  const id = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return id || `provider-${index + 1}`;
+}
+
 function configured(config: AppConfig): boolean {
   return Boolean(
-    config.model.baseUrl &&
-    config.model.model &&
-    config.model.apiKey &&
+    completeModelProviders(config).length > 0 &&
     config.bots.some((bot) => bot.enabled && (bot.provider ?? "lark") !== "dingtalk" && bot.appId && bot.appSecret)
   );
 }
@@ -141,9 +165,7 @@ function botStartBlockReason(bot: BotConfig): string {
   if ((bot.provider ?? "lark") === "dingtalk") return "钉钉 Provider 建设中，当前不能启动监听";
   if (!bot.appId.trim()) return (bot.provider ?? "lark") === "wecom" ? "未配置企业微信 Bot ID" : "未配置 App ID";
   if (!bot.appSecret.trim()) return (bot.provider ?? "lark") === "wecom" ? "未配置企业微信 Bot Secret" : "未配置 App Secret";
-  if (!snapshot.config.model.baseUrl) return "未配置 Claude Base URL";
-  if (!snapshot.config.model.model) return "未配置模型名称";
-  if (!snapshot.config.model.apiKey) return "未配置 API Key";
+  if (completeModelProviders(snapshot.config).length === 0) return "未配置完整 MODEL PROVIDER";
   return "";
 }
 
@@ -1032,6 +1054,58 @@ function renderScheduledRunDetail(run: ScheduledTaskRunSummary): string {
   </div>`;
 }
 
+function renderScheduledTaskVisibility(bot: BotConfig, task: ScheduledTask): string {
+  const runs = scheduledTaskRuns(bot.id, task.id, 6);
+  const lastRun = runs[0];
+  const nextRunAt = task.nextRunAt ? Date.parse(task.nextRunAt) : NaN;
+  const nextText = !task.enabled
+    ? "任务已停用"
+    : task.pausedReason
+      ? "已暂停自动排期"
+      : task.nextRunAt
+        ? Number.isFinite(nextRunAt) && nextRunAt <= Date.now()
+          ? `${new Date(task.nextRunAt).toLocaleString()}（已到期，等待调度器追赶）`
+          : new Date(task.nextRunAt).toLocaleString()
+        : "未计划";
+  const lastText = task.lastRunAt
+    ? `${new Date(task.lastRunAt).toLocaleString()} / ${task.lastStatus ? runStatusLabel(task.lastStatus) : "未知"}`
+    : lastRun
+      ? `${new Date(lastRun.startedAt).toLocaleString()} / ${runStatusLabel(lastRun.status)}`
+      : "未运行";
+  const retryText = task.retryAt ? new Date(task.retryAt).toLocaleString() : "无";
+  return `<div class="run-detail-content">
+    <div class="task-quick-actions">
+      <button type="button" class="primary compact run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled ? "" : "disabled"}>立即执行已保存任务</button>
+      <small>${task.enabled ? "执行当前已保存配置；未保存的编辑内容不会参与本次运行。" : "任务停用时不能立即执行。"}</small>
+    </div>
+    <div class="session-meta task-visibility-meta">
+      <span><strong>任务</strong>${escapeHtml(task.name)}</span>
+      <span><strong>Bot</strong>${escapeHtml(bot.name || bot.id)}</span>
+      <span><strong>启用</strong>${task.enabled ? "启用" : "停用"}</span>
+      <span><strong>计划</strong>${escapeHtml(scheduledTaskScheduleText(task))}</span>
+      <span><strong>目标</strong>${escapeHtml(scheduledTaskTargetText(task))}</span>
+      <span><strong>投递</strong>${escapeHtml(scheduledTaskDeliveryLabel(bot, task))}</span>
+      <span><strong>下次执行</strong>${escapeHtml(nextText)}</span>
+      <span><strong>上次执行</strong>${escapeHtml(lastText)}</span>
+      <span><strong>失败计数</strong>${escapeHtml(String(task.failureCount ?? 0))}</span>
+      <span><strong>重试时间</strong>${escapeHtml(retryText)}</span>
+      <span><strong>暂停原因</strong>${escapeHtml(task.pausedReason || "无")}</span>
+    </div>
+    <h3 class="detail-subtitle">Prompt</h3>
+    <pre class="run-detail-body">${escapeHtml(task.target.prompt || "无 Prompt。")}</pre>
+    <h3 class="detail-subtitle">最近运行日志</h3>
+    <div class="task-run-log-list">
+      ${runs.map((run) => `<article class="task-run-log-row ${escapeHtml(run.status)}">
+        <div class="run-status ${escapeHtml(run.status)}">${runStatusLabel(run.status)}</div>
+        <div>
+          <strong>${escapeHtml(new Date(run.startedAt).toLocaleString())} / ${escapeHtml(formatDuration(runDurationMs(run)))}</strong>
+          <pre>${escapeHtml(run.detail || "无运行详情。")}</pre>
+        </div>
+      </article>`).join("") || `<div class="empty">当前任务还没有运行记录。保存并启用后，可等计划触发或点击“立即执行”。</div>`}
+    </div>
+  </div>`;
+}
+
 function renderHelpModal(): string {
   const topic = helpTopics[helpTopicKey];
   if (!topic) return "";
@@ -1260,6 +1334,20 @@ function runDurationMs(run: ScheduledTaskRunSummary): number {
   return Number.isFinite(started) && Number.isFinite(finished) ? Math.max(0, finished - started) : 0;
 }
 
+function scheduledTaskRuns(botId: string, taskId: string, limit = 6): ScheduledTaskRunSummary[] {
+  return scheduledRuns
+    .filter((run) => run.botId === botId && run.taskId === taskId)
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+    .slice(0, limit);
+}
+
+function scheduledTaskDeliveryLabel(bot: BotConfig, task: ScheduledTask): string {
+  const raw = task.delivery.chatId.trim();
+  const route = (bot.deliveryRoutes ?? []).find((item) => item.enabled && (item.id === raw || item.name === raw));
+  if (route?.chatId.trim()) return `${route.id} -> ${route.chatId.trim()}`;
+  return raw || "未配置";
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
@@ -1288,7 +1376,7 @@ function renderStorage(): string {
       <article><span>总存储占用</span><strong>${formatBytes(storage.totalBytes)}</strong></article>
       <article><span>会话数据</span><strong>${formatBytes(storage.conversationBytes)}</strong></article>
       <article><span>文件缓存</span><strong>${formatBytes(storage.cacheBytes)}</strong></article>
-      <article><span>自定义应用产物</span><strong>${formatBytes(storage.customAppArtifactBytes)}</strong></article>
+      <article><span>补处理 Beta 游标 / 应用产物</span><strong>${formatBytes(storage.messageCursorBytes)} / ${formatBytes(storage.customAppArtifactBytes)}</strong></article>
     </section>
     ${pageTabs([
       { id: "cleanup", label: "清理动作", meta: "会话/缓存/产物" },
@@ -1307,6 +1395,11 @@ function renderStorage(): string {
         <div class="panel-title"><span>FILE CACHE</span><small>${formatBytes(storage.cacheBytes)}</small></div>
         <p>清理应用级内容哈希缓存。缓存用于复用飞书下载的大文件和 Agent 生成文件；清理后不会删除会话记录，但后续需要时会重新下载或生成。</p>
         <div class="form-actions inline-actions"><button class="ghost" id="repair-file-cache" ${storage.cacheBytes === 0 ? "disabled" : ""}>校验缓存索引</button><button class="ghost" id="clear-file-cache" ${storage.cacheBytes === 0 ? "disabled" : ""}>清理文件缓存</button></div>
+      </div>
+      <div class="panel storage-card">
+        <div class="panel-title"><span>BACKFILL CURSORS</span><small>${formatBytes(storage.messageCursorBytes)}</small></div>
+        <p>历史补处理 Beta 游标记录每个 Bot 最后看到的飞书 chat 消息位置。清理后不会删除会话或缓存，但断网恢复补处理会失去起点，需要重新收到消息后再建立游标。</p>
+        <button class="ghost" id="clear-message-cursors" ${storage.messageCursorBytes === 0 ? "disabled" : ""}>清理补处理 Beta 游标</button>
       </div>
       <div class="panel storage-card">
         <div class="panel-title"><span>CUSTOM APP ARTIFACTS</span><small>${storage.customAppArtifactCount} workspaces</small></div>
@@ -1439,6 +1532,7 @@ function renderScheduledCenter(): string {
               ${(task.failureCount ?? 0) > 0 || task.retryAt || task.pausedReason ? `<small>治理：失败 ${escapeHtml(String(task.failureCount ?? 0))} 次${task.retryAt ? ` / 重试 ${escapeHtml(new Date(task.retryAt).toLocaleString())}` : ""}${task.pausedReason ? ` / 暂停：${escapeHtml(task.pausedReason)}` : ""}</small>` : ""}
             </div>
             <div class="scheduled-task-list-actions">
+              <button type="button" class="ghost compact scheduled-task-observability" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}">状态/日志</button>
               <button type="button" class="ghost compact run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled ? "" : "disabled"}>立即执行</button>
               <button type="button" class="ghost compact scheduled-edit-bot" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" data-task-index="${index}">编辑</button>
             </div>
@@ -1494,9 +1588,14 @@ function renderConsole(): string {
                 <strong>${statusDot(snapshot.connectedBotIds.includes(bot.id))}${escapeHtml(bot.name)}</strong>
                 <p>${bot.skillNames.length} 个 Skill / ${bot.capabilityRefs?.filter((ref) => ref.enabled).length ?? 0} 个能力引用 / ${snapshot.runningBotIds.includes(bot.id) ? "监听中" : botCanStart(bot) ? "未启动" : botStartBlockReason(bot)}</p>
               </div>
-              ${snapshot.runningBotIds.includes(bot.id)
-                ? `<button class="danger bot-stop" data-id="${escapeHtml(bot.id)}">停止</button>`
-                : `<button class="primary bot-start" data-id="${escapeHtml(bot.id)}" ${botCanStart(bot) ? "" : "disabled"} title="${escapeHtml(botCanStart(bot) ? "启动监听" : botStartBlockReason(bot))}">启动</button>`}
+              <div class="scheduled-task-list-actions">
+                ${snapshot.runningBotIds.includes(bot.id) && (bot.provider ?? "lark") === "lark"
+                  ? `<button class="ghost bot-backfill" data-id="${escapeHtml(bot.id)}">补处理历史 Beta</button>`
+                  : ""}
+                ${snapshot.runningBotIds.includes(bot.id)
+                  ? `<button class="danger bot-stop" data-id="${escapeHtml(bot.id)}">停止</button>`
+                  : `<button class="primary bot-start" data-id="${escapeHtml(bot.id)}" ${botCanStart(bot) ? "" : "disabled"} title="${escapeHtml(botCanStart(bot) ? "启动监听" : botStartBlockReason(bot))}">启动</button>`}
+              </div>
             </div>`).join("") || `<div class="empty">前往配置页添加机器人。</div>`}
         </div>
       </div>
@@ -1504,6 +1603,7 @@ function renderConsole(): string {
         <div class="panel-title log-title">
           <span>${selectedBot ? `${escapeHtml(selectedBot.name)} / EXECUTION LOG` : "EXECUTION LOG"}</span>
           <div class="log-controls">
+            <button type="button" class="ghost compact" id="export-diagnostics">导出排障包</button>
             <select id="log-level">
               <option value="all" ${logLevel === "all" ? "selected" : ""}>全部等级</option>
               <option value="info" ${logLevel === "info" ? "selected" : ""}>信息</option>
@@ -1585,6 +1685,8 @@ function renderBotEditor(): string {
         ${botField(bot, "长任务提示文案", "longTaskNoticeText", "text")}
       </div>
       <label><span>向用户展示工作过程${helpButton("showProgress")}</span><select data-edit-bot-field="showProgress"><option value="false" ${!bot.showProgress ? "selected" : ""}>关闭</option><option value="true" ${bot.showProgress ? "selected" : ""}>开启</option></select><small>展示工具调用和检索进度，不泄露模型私有推理。</small></label>
+      <label><span>上下文免艾特回复 Beta${helpButton("contextualReplyBetaEnabled")}</span><select data-edit-bot-field="contextualReplyBetaEnabled"><option value="false" ${!bot.contextualReplyBetaEnabled ? "selected" : ""}>关闭</option><option value="true" ${bot.contextualReplyBetaEnabled ? "selected" : ""}>开启 Beta</option></select><small>仅飞书群聊未 @ 消息生效。开启后该 Bot 会先判断职责，不确定则静默。</small></label>
+      ${botField(bot, "历史补处理 Beta 上限", "maxBackfillMessages", "number")}
       <small class="bot-note">Agent 无法解决或需要人工授权时，会私聊此用户发送卡片。Owner 必须在飞书中有该应用的使用权限。</small>
       </section>
       <section class="${sectionClass("platform")}" data-bot-editor-panel="platform">
@@ -1827,6 +1929,7 @@ function renderScheduledTaskSummary(bot: BotConfig, task: ScheduledTask, index: 
         ${(task.failureCount ?? 0) > 0 || task.retryAt || task.pausedReason ? `<small>治理：失败 ${escapeHtml(String(task.failureCount ?? 0))} 次${task.retryAt ? ` / 重试 ${escapeHtml(new Date(task.retryAt).toLocaleString())}` : ""}${task.pausedReason ? ` / 暂停：${escapeHtml(task.pausedReason)}` : ""}</small>` : ""}
       </div>
       <div class="scheduled-task-list-actions">
+        <button type="button" class="ghost compact scheduled-task-observability" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}">状态/日志</button>
         <button type="button" class="ghost compact run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled ? "" : "disabled"}>立即执行</button>
         <button type="button" class="ghost compact edit-scheduled-task" data-task-id="${escapeHtml(task.id)}">编辑</button>
         <button type="button" class="danger compact remove-scheduled-task" data-index="${index}">删除</button>
@@ -1878,13 +1981,13 @@ function renderScheduledTaskEditor(bot: BotConfig, task: ScheduledTask, index: n
               <label class="target-capability"><span>能力目标</span><select data-task-capability="${index}">
                 ${scheduledCapabilityOptions(bot).map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === `${task.target.capability?.kind ?? ""}:${task.target.capability?.id ?? ""}` ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
               </select></label>
-              <label class="command-wide"><span>Prompt</span><input data-task-prompt="${index}" value="${escapeHtml(task.target.prompt)}" placeholder="输入定时执行时使用的 prompt" /></label>
+              <label class="command-wide"><span>Prompt</span><textarea data-task-prompt="${index}" rows="5" placeholder="输入定时执行时使用的 prompt">${escapeHtml(task.target.prompt)}</textarea></label>
             </div>
           </div>
           <div class="scheduled-task-section">
             <strong>投递</strong>
             <div class="scheduled-task-grid">
-              <label class="command-wide"><span>投递 chat_id</span><input data-task-chat-id="${index}" value="${escapeHtml(task.delivery.chatId)}" placeholder="oc_xxx" /></label>
+              <label class="command-wide"><span>投递 chat_id</span><input data-task-chat-id="${index}" value="${escapeHtml(task.delivery.chatId)}" placeholder="oc_xxx 或已启用投递路由 ID" /><small>这里优先填写真实飞书 chat_id，例如 oc_xxx；兼容填写已启用的投递路由 ID，但不要填写空路由。</small></label>
             </div>
           </div>
           <div class="scheduled-task-section">
@@ -1897,8 +2000,10 @@ function renderScheduledTaskEditor(bot: BotConfig, task: ScheduledTask, index: n
           </div>
           <div class="form-actions">
             <button type="button" class="ghost" id="cancel-scheduled-task-editor">取消</button>
+            <button type="button" class="primary run-scheduled-task" data-bot-id="${escapeHtml(bot.id)}" data-task-id="${escapeHtml(task.id)}" ${task.enabled && !draftScheduledTaskIds.has(task.id) ? "" : "disabled"}>立即执行已保存任务</button>
             <button type="button" class="primary" id="save-scheduled-task-editor">保存任务</button>
           </div>
+          <small class="form-hint">立即执行只运行已保存且启用的任务；新增草稿或刚修改的内容需要先保存。</small>
         </div>
       </section>
     </div>
@@ -1909,8 +2014,9 @@ function readScheduledTaskFromEditor(bot: BotConfig, index: number): ScheduledTa
   const name = document.querySelector<HTMLInputElement>(`[data-task-name="${index}"]`)?.value.trim() ?? "";
   const scheduleType = (document.querySelector<HTMLSelectElement>(`[data-task-schedule-type="${index}"]`)?.value ?? "daily") as ScheduledTask["schedule"]["type"];
   const timezone = document.querySelector<HTMLInputElement>(`[data-task-timezone="${index}"]`)?.value.trim() || "Asia/Shanghai";
-  const prompt = document.querySelector<HTMLInputElement>(`[data-task-prompt="${index}"]`)?.value.trim() || "";
-  const chatId = document.querySelector<HTMLInputElement>(`[data-task-chat-id="${index}"]`)?.value.trim() || "";
+  const prompt = document.querySelector<HTMLTextAreaElement>(`[data-task-prompt="${index}"]`)?.value.trim() || "";
+  const rawChatId = document.querySelector<HTMLInputElement>(`[data-task-chat-id="${index}"]`)?.value.trim() || "";
+  const chatId = scheduledTaskDeliveryValue(bot, rawChatId);
   const targetType = (document.querySelector<HTMLSelectElement>(`[data-task-target-type="${index}"]`)?.value ?? "agent") as ScheduledTask["target"]["type"];
   const enabled = (document.querySelector<HTMLSelectElement>(`[data-task-enabled="${index}"]`)?.value ?? "true") === "true";
   if (!name || !prompt || !chatId) return null;
@@ -1960,12 +2066,46 @@ function readScheduledTaskFromEditor(bot: BotConfig, index: number): ScheduledTa
   return normalized;
 }
 
+function scheduledTaskDeliveryValue(bot: BotConfig, value: string): string {
+  const raw = value.trim();
+  if (!raw) return "";
+  const route = (bot.deliveryRoutes ?? []).find((item) => item.enabled && (item.id === raw || item.name === raw));
+  return route?.chatId.trim() || raw;
+}
+
+function renderModelProviderRows(c: AppConfig): string {
+  const providers = modelProviders(c);
+  return `<div class="model-provider-list">
+    ${providers.map((provider, index) => `
+      <article class="model-provider-row">
+        <div class="model-provider-row-head">
+          <strong>${escapeHtml(provider.name || `Provider ${index + 1}`)}</strong>
+          <button type="button" class="danger compact remove-model-provider" data-index="${index}" ${providers.length <= 1 ? "disabled" : ""}>删除</button>
+        </div>
+        <div class="model-provider-grid">
+          <label><span>Provider ID</span><input name="modelProviderId" value="${escapeHtml(provider.id)}" placeholder="provider-${index + 1}" /></label>
+          <label><span>Provider 名称${helpButton("providerName")}</span><input name="modelProviderName" value="${escapeHtml(provider.name)}" placeholder="Claude Compatible" /></label>
+          <label><span>启用</span><select name="modelProviderEnabled"><option value="true" ${provider.enabled ? "selected" : ""}>启用</option><option value="false" ${!provider.enabled ? "selected" : ""}>停用</option></select></label>
+          <label class="command-wide"><span>Claude Base URL${helpButton("baseUrl")}</span><input name="modelProviderBaseUrl" type="url" value="${escapeHtml(provider.baseUrl)}" placeholder="服务商提供的 Claude / Anthropic 兼容地址" /></label>
+          <label><span>模型${helpButton("model")}</span><input name="modelProviderModel" value="${escapeHtml(provider.model)}" /></label>
+          <label><span>API Key${helpButton("apiKey")}</span><input name="modelProviderApiKey" type="password" value="${escapeHtml(provider.apiKey)}" /></label>
+          <label><span>API Key 环境变量</span><input name="modelProviderApiKeyEnv" value="${escapeHtml(provider.apiKeyEnv || "ANTHROPIC_AUTH_TOKEN")}" /></label>
+          <label><span>多模态视觉能力${helpButton("multimodalEnabled")}</span><select name="modelProviderMultimodal"><option value="true" ${provider.multimodalEnabled ? "selected" : ""}>启用</option><option value="false" ${!provider.multimodalEnabled ? "selected" : ""}>禁用</option></select></label>
+        </div>
+      </article>
+    `).join("")}
+  </div>`;
+}
+
 function renderConfig(): string {
   const c = snapshot.config;
+  const providers = modelProviders(c);
+  const completeProviders = completeModelProviders(c);
   return `
     <form id="config-form">
       ${pageTabs([
-        { id: "model", label: "模型与运行", meta: c.model.model || "未配置模型" },
+        { id: "model", label: "MODEL PROVIDER", meta: `${completeProviders.length} / ${providers.length} 可用` },
+        { id: "system", label: "系统设置", meta: c.model.strategy?.mode === "random" ? "随机" : "轮流" },
         { id: "customApps", label: "自定义应用", meta: `${c.runtime.customAppArtifacts?.retentionDays ?? 7} 天产物` },
         { id: "market", label: "Skill 市场", meta: c.skillMarket.enabled ? "已启用" : "停用" },
         { id: "mcp", label: "MCP", meta: `${c.mcpServers.length} 个` },
@@ -1973,14 +2113,16 @@ function renderConfig(): string {
       ], activeConfigSection, "data-config-section")}
       <section class="config-grid">
         <div class="panel config-panel page-tab-panel ${activeConfigSection === "model" ? "active" : ""}">
-          <div class="panel-title"><span>MODEL PROVIDER</span><small>Claude Messages API compatible</small></div>
-          ${field("Provider 名称", "providerName", c.model.providerName)}
-          ${field("Claude Base URL", "baseUrl", c.model.baseUrl, "url", "服务商提供的 Claude / Anthropic 兼容地址")}
-          ${field("模型", "model", c.model.model)}
-          ${field("API Key", "apiKey", c.model.apiKey, "password")}
+          <div class="panel-title"><span>MODEL PROVIDER</span><small>${completeProviders.length} available / Claude Messages API compatible</small></div>
+          ${renderModelProviderRows(c)}
+          <div class="form-actions inline-actions"><button type="button" class="ghost" id="add-model-provider">新增 MODEL PROVIDER</button></div>
+        </div>
+        <div class="panel config-panel page-tab-panel ${activeConfigSection === "system" ? "active" : ""}">
+          <div class="panel-title"><span>SYSTEM SETTINGS</span><small>Runtime / Strategy</small></div>
+          <label><span>MODEL PROVIDER 使用策略${helpButton("modelProviderStrategy")}</span><select name="modelProviderStrategy"><option value="round-robin" ${c.model.strategy?.mode !== "random" ? "selected" : ""}>轮流</option><option value="random" ${c.model.strategy?.mode === "random" ? "selected" : ""}>随机</option></select><small>只会在已启用且 Base URL、模型、API Key 都完整的 Provider 中选择。</small></label>
+          <label><span>失败切换${helpButton("modelProviderStrategy")}</span><select name="modelProviderFailover"><option value="false" ${!c.model.strategy?.failoverOnFailure ? "selected" : ""}>关闭，失败直接报错</option><option value="true" ${c.model.strategy?.failoverOnFailure ? "selected" : ""}>开启，失败后尝试下一个 Provider</option></select></label>
           <label><span>最大并发任务数${helpButton("maxConcurrentTasks")}</span><input name="maxConcurrentTasks" type="number" min="1" max="20" value="${c.runtime.maxConcurrentTasks}" /><small>不同会话最多同时运行的 Agent 数量；同一会话仍按顺序处理。</small></label>
           <label><span>单次 Agent 最大步数${helpButton("maxAgentTurns")}</span><input name="maxAgentTurns" type="number" min="10" max="100" value="${c.runtime.maxAgentTurns ?? 60}" /><small>复杂 Skill 或飞书资料检索会消耗更多工具调用步数；默认 60。</small></label>
-          <label><span>多模态视觉能力${helpButton("multimodalEnabled")}</span><select name="multimodalEnabled"><option value="true" ${c.model.multimodalEnabled ? "selected" : ""}>启用，允许图片与 PPT 视觉解析</option><option value="false" ${!c.model.multimodalEnabled ? "selected" : ""}>禁用，仅文本模型</option></select><small>PPT Skill 要求启用此能力，否则会拒绝仅凭抽取文字完成解析。</small></label>
           <label><span>界面主题${helpButton("uiTheme")}</span><select name="uiTheme"><option value="system" ${c.ui.theme === "system" ? "selected" : ""}>跟随系统</option><option value="light" ${c.ui.theme === "light" ? "selected" : ""}>浅色</option><option value="dark" ${c.ui.theme === "dark" ? "selected" : ""}>深色</option></select><small>切换应用界面外观，不影响模型、Bot 或权限行为。</small></label>
         </div>
         <div class="panel config-panel page-tab-panel ${activeConfigSection === "customApps" ? "active" : ""}">
@@ -2059,6 +2201,8 @@ function newBot(): BotConfig {
     pendingReaction: "OnIt",
     ownerOpenId: "",
     showProgress: false,
+    contextualReplyBetaEnabled: false,
+    maxBackfillMessages: 50,
     longTaskNoticeSeconds: 0,
     longTaskNoticeText: "这个问题还在处理中，我会继续完成并在结果出来后回复。"
   };
@@ -2378,6 +2522,23 @@ function bindEvents(): void {
       render();
     };
   });
+  document.querySelectorAll<HTMLButtonElement>(".bot-backfill").forEach((button) => {
+    button.onclick = async (event) => {
+      event.stopPropagation();
+      const botId = String(button.dataset.id);
+      selectedBotId = botId;
+      appendLocalLog("info", "正在补处理历史消息 Beta", "应用会从已记录游标开始拉取历史消息并排队处理。", botId);
+      render();
+      try {
+        const result = await window.quarkfanTools.backfillBot(botId);
+        appendLocalLog("success", "历史消息补处理 Beta 已排队", `chat ${result.chats} 个 / 消息 ${result.queued} 条`, botId);
+      } catch (error) {
+        appendLocalLog("error", "历史消息补处理 Beta 失败", error instanceof Error ? error.message : String(error), botId);
+        window.alert(String(error instanceof Error ? error.message : error));
+      }
+      render();
+    };
+  });
   document.querySelectorAll<HTMLButtonElement>(".init-wecom-cli").forEach((button) => {
     button.onclick = async () => {
       const botId = String(button.dataset.id);
@@ -2470,6 +2631,21 @@ function bindEvents(): void {
     logLevel = (event.currentTarget as HTMLSelectElement).value as typeof logLevel;
     render();
   });
+  document.querySelector<HTMLButtonElement>("#export-diagnostics")?.addEventListener("click", async () => {
+    const button = document.querySelector<HTMLButtonElement>("#export-diagnostics");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "正在导出";
+    }
+    try {
+      const filePath = await window.quarkfanTools.exportDiagnostics();
+      if (filePath) appendLocalLog("success", "排障包已导出", filePath);
+    } catch (error) {
+      window.alert(`导出排障包失败：${String(error instanceof Error ? error.message : error)}`);
+    } finally {
+      render();
+    }
+  });
   document.querySelectorAll<HTMLInputElement>("[data-skill-filter]").forEach((input) => {
     input.addEventListener("input", () => filterBotSkills(String(input.dataset.skillFilter)));
   });
@@ -2489,6 +2665,17 @@ function bindEvents(): void {
       const run = filteredScheduledRuns()[Number(button.dataset.runIndex)];
       if (!run) return;
       preview = { title: `定时任务运行 / ${run.taskName}`, html: renderScheduledRunDetail(run) };
+      render();
+    };
+  });
+  document.querySelectorAll<HTMLButtonElement>(".scheduled-task-observability").forEach((button) => {
+    button.onclick = () => {
+      const botId = String(button.dataset.botId ?? "");
+      const taskId = String(button.dataset.taskId ?? "");
+      const bot = snapshot.config.bots.find((item) => item.id === botId);
+      const task = bot?.scheduledTasks?.find((item) => item.id === taskId);
+      if (!bot || !task) return;
+      preview = { title: `定时任务状态 / ${task.name}`, html: renderScheduledTaskVisibility(bot, task) };
       render();
     };
   });
@@ -2542,6 +2729,12 @@ function bindEvents(): void {
   });
   document.querySelector<HTMLButtonElement>("#repair-file-cache")?.addEventListener("click", async () => {
     storage = await window.quarkfanTools.repairFileCacheStorage();
+    scheduledRuns = await window.quarkfanTools.scheduledRuns();
+    render();
+  });
+  document.querySelector<HTMLButtonElement>("#clear-message-cursors")?.addEventListener("click", async () => {
+    if (!window.confirm("确认清理历史补处理 Beta 游标？清理后不会删除会话，但补处理会失去当前起点。")) return;
+    storage = await window.quarkfanTools.clearMessageCursorStorage();
     scheduledRuns = await window.quarkfanTools.scheduledRuns();
     render();
   });
@@ -2878,8 +3071,9 @@ function bindEvents(): void {
       const fieldName = input.dataset.editBotField as keyof BotConfig;
       (bot as unknown as Record<string, unknown>)[fieldName] = fieldName === "oauthScopes"
         ? parseScopes(input.value)
-        : ["enabled", "showProgress"].includes(fieldName) ? input.value === "true"
+        : ["enabled", "showProgress", "contextualReplyBetaEnabled"].includes(fieldName) ? input.value === "true"
           : fieldName === "longTaskNoticeSeconds" ? Math.max(0, Math.floor(Number(input.value) || 0))
+            : fieldName === "maxBackfillMessages" ? Math.max(1, Math.min(500, Math.floor(Number(input.value) || 50)))
             : input.value;
     });
     const wecomEventCommand = document.querySelector<HTMLTextAreaElement>("#wecom-event-command")?.value.trim() ?? "";
@@ -3011,15 +3205,81 @@ function bindEvents(): void {
     editingBotId = "";
     render();
   });
+  document.querySelector<HTMLButtonElement>("#add-model-provider")?.addEventListener("click", () => {
+    const next = structuredClone(snapshot.config);
+    const providers = modelProviders(next);
+    next.model.providers = [...providers, {
+      id: `provider-${providers.length + 1}`,
+      name: `Provider ${providers.length + 1}`,
+      enabled: true,
+      baseUrl: "",
+      model: "",
+      apiKey: "",
+      apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
+      multimodalEnabled: true
+    }];
+    snapshot = { ...snapshot, config: next };
+    activeConfigSection = "model";
+    render();
+  });
+  document.querySelectorAll<HTMLButtonElement>(".remove-model-provider").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.index ?? -1);
+      const next = structuredClone(snapshot.config);
+      const providers = modelProviders(next);
+      next.model.providers = providers.filter((_, itemIndex) => itemIndex !== index);
+      if (next.model.providers.length === 0) next.model.providers = providers.slice(0, 1);
+      snapshot = { ...snapshot, config: next };
+      activeConfigSection = "model";
+      render();
+    });
+  });
   document.querySelector<HTMLFormElement>("#config-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const next = structuredClone(snapshot.config);
-    next.model.providerName = String(form.get("providerName") ?? "");
-    next.model.baseUrl = String(form.get("baseUrl") ?? "");
-    next.model.model = String(form.get("model") ?? "");
-    next.model.apiKey = String(form.get("apiKey") ?? "");
-    next.model.multimodalEnabled = String(form.get("multimodalEnabled") ?? "true") === "true";
+    const providerIds = form.getAll("modelProviderId").map(String);
+    const providerNames = form.getAll("modelProviderName").map(String);
+    const providerEnabled = form.getAll("modelProviderEnabled").map(String);
+    const providerBaseUrls = form.getAll("modelProviderBaseUrl").map(String);
+    const providerModels = form.getAll("modelProviderModel").map(String);
+    const providerApiKeys = form.getAll("modelProviderApiKey").map(String);
+    const providerApiKeyEnvs = form.getAll("modelProviderApiKeyEnv").map(String);
+    const providerMultimodal = form.getAll("modelProviderMultimodal").map(String);
+    next.model.providers = providerIds.map((id, index) => ({
+      id: sanitizeModelProviderId(id, index),
+      name: providerNames[index]?.trim() || `Provider ${index + 1}`,
+      enabled: providerEnabled[index] !== "false",
+      baseUrl: providerBaseUrls[index]?.trim() ?? "",
+      model: providerModels[index]?.trim() ?? "",
+      apiKey: providerApiKeys[index] ?? "",
+      apiKeyEnv: providerApiKeyEnvs[index]?.trim() || "ANTHROPIC_AUTH_TOKEN",
+      multimodalEnabled: providerMultimodal[index] !== "false"
+    }));
+    if (next.model.providers.length === 0) {
+      next.model.providers = [{
+        id: "provider-1",
+        name: "Provider 1",
+        enabled: true,
+        baseUrl: "",
+        model: "",
+        apiKey: "",
+        apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
+        multimodalEnabled: true
+      }];
+    }
+    const primaryProvider = next.model.providers.find((provider) => provider.enabled) ?? next.model.providers[0];
+    next.model.providerId = primaryProvider?.id ?? "";
+    next.model.providerName = primaryProvider?.name ?? "";
+    next.model.baseUrl = primaryProvider?.baseUrl ?? "";
+    next.model.model = primaryProvider?.model ?? "";
+    next.model.apiKey = primaryProvider?.apiKey ?? "";
+    next.model.apiKeyEnv = primaryProvider?.apiKeyEnv ?? "ANTHROPIC_AUTH_TOKEN";
+    next.model.multimodalEnabled = primaryProvider?.multimodalEnabled ?? true;
+    next.model.strategy = {
+      mode: String(form.get("modelProviderStrategy") ?? "round-robin") === "random" ? "random" : "round-robin",
+      failoverOnFailure: String(form.get("modelProviderFailover") ?? "false") === "true"
+    };
     next.ui.theme = String(form.get("uiTheme") ?? "system") as AppConfig["ui"]["theme"];
     next.runtime.maxConcurrentTasks = Math.max(1, Math.min(20, Number(form.get("maxConcurrentTasks") ?? 2) || 2));
     next.runtime.maxAgentTurns = Math.max(10, Math.min(100, Number(form.get("maxAgentTurns") ?? 60) || 60));

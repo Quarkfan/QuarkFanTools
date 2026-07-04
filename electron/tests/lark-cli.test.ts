@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { normalizeLarkEvent } from "../lark-event.js";
 import { filterLarkEventStderr, isLarkEventSubscribeCommand, larkEventSubscribeArgs, larkUserLoginArgs } from "../lark-commands.js";
-import { larkRuntimeEnvironment, normalizeLarkConfigProfilesContent, resolveLarkCommand } from "../lark-cli.js";
+import { getLarkBotIdentityFromOpenApi, larkRuntimeEnvironment, materializeLarkCachedFile, normalizeLarkConfigProfilesContent, parseLarkBotIdentity, removeMessageReaction, resolveLarkCommand, sendTextToChat } from "../lark-cli.js";
 import { selectLarkMessageTarget } from "../lark-message-router.js";
 import { messageTargetsBot } from "../message-target.js";
 import type { BotConfig, LarkBotIdentity } from "../types.js";
@@ -145,6 +145,133 @@ test("normalizes legacy duplicate lark-cli app profiles", () => {
     ["cli_other", "qft-other"],
     ["cli_test", "qft-mentor"]
   ]);
+});
+
+test("parses bot identity from common lark api response shapes", () => {
+  assert.deepEqual(parseLarkBotIdentity({
+    bot: { open_id: "ou_bot", app_name: "客服助手" }
+  }), {
+    appName: "客服助手",
+    openId: "ou_bot"
+  });
+  assert.deepEqual(parseLarkBotIdentity({
+    data: { bot: { open_id: "ou_nested", app_name: "嵌套助手" } }
+  }), {
+    appName: "嵌套助手",
+    openId: "ou_nested"
+  });
+  assert.deepEqual(parseLarkBotIdentity({
+    ok: true,
+    identity: "bot",
+    data: {}
+  }), {});
+});
+
+test("fetches bot identity directly from OpenAPI when lark api envelope is empty", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "t-token" });
+    }
+    return Response.json({
+      code: 0,
+      msg: "ok",
+      bot: {
+        app_name: "客服助手",
+        open_id: "ou_direct"
+      }
+    });
+  }) as typeof fetch;
+
+  try {
+    assert.deepEqual(await getLarkBotIdentityFromOpenApi(bot), {
+      appName: "客服助手",
+      openId: "ou_direct"
+    });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url, "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal");
+    assert.equal(calls[1].url, "https://open.feishu.cn/open-apis/bot/v3/info");
+    assert.equal((calls[1].init?.headers as Record<string, string>).authorization, "Bearer t-token");
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("uses current drive export flags for controlled file cache materialization", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "qft-lark-export-flags-"));
+  const binary = path.join(dir, "lark-cli");
+  const logPath = path.join(dir, "calls.jsonl");
+  const outputDir = path.join(dir, "out");
+  await writeFile(binary, [
+    "#!/usr/bin/env node",
+    "const fs = require('fs');",
+    "const path = require('path');",
+    `fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");`,
+    "if (process.argv.includes('+export')) {",
+    "  const name = process.argv[process.argv.indexOf('--file-name') + 1];",
+    "  fs.writeFileSync(path.join(process.cwd(), name), 'exported');",
+    "}",
+    "process.stdout.write(JSON.stringify({ ok: true }));",
+    ""
+  ].join("\n"));
+  await chmod(binary, 0o755);
+
+  try {
+    await materializeLarkCachedFile({ ...bot, id: "export-flags", cliPath: binary }, {
+      action: "drive-export",
+      fileToken: `tok-export-flags-${process.pid}`,
+      docType: "slides",
+      fileExtension: "pptx",
+      fileName: "deck.pptx",
+      prompt: "inspect"
+    }, outputDir);
+
+    const calls = (await readFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as string[]);
+    const exportCall = calls.find((args) => args.includes("+export"));
+    assert.ok(exportCall);
+    assert.ok(exportCall.includes("--token"));
+    assert.ok(!exportCall.includes("--file-token"));
+    assert.deepEqual(exportCall.slice(exportCall.indexOf("--file-name"), exportCall.indexOf("--file-name") + 2), ["--file-name", "deck.pptx"]);
+    assert.deepEqual(exportCall.slice(exportCall.indexOf("--output-dir"), exportCall.indexOf("--output-dir") + 2), ["--output-dir", "."]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("uses typed shortcut flags for sending text and deleting reactions", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "qft-lark-shortcut-flags-"));
+  const binary = path.join(dir, "lark-cli");
+  const logPath = path.join(dir, "calls.jsonl");
+  await writeFile(binary, [
+    "#!/usr/bin/env node",
+    "const fs = require('fs');",
+    `fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");`,
+    "process.stdout.write(JSON.stringify({ ok: true }));",
+    ""
+  ].join("\n"));
+  await chmod(binary, 0o755);
+
+  try {
+    const fakeBot = { ...bot, id: "shortcut-flags", cliPath: binary };
+    await sendTextToChat(fakeBot, "oc_chat", "hello");
+    await removeMessageReaction(fakeBot, "om_message", "reaction_1");
+
+    const calls = (await readFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as string[]);
+    const sendCall = calls.find((args) => args.includes("+messages-send"));
+    assert.ok(sendCall);
+    assert.deepEqual(sendCall.slice(sendCall.indexOf("--text"), sendCall.indexOf("--text") + 2), ["--text", "hello"]);
+    assert.ok(!sendCall.includes("--content"));
+
+    const deleteCall = calls.find((args) => args.includes("delete"));
+    assert.ok(deleteCall);
+    assert.deepEqual(deleteCall.slice(deleteCall.indexOf("--message-id"), deleteCall.indexOf("--message-id") + 2), ["--message-id", "om_message"]);
+    assert.deepEqual(deleteCall.slice(deleteCall.indexOf("--reaction-id"), deleteCall.indexOf("--reaction-id") + 2), ["--reaction-id", "reaction_1"]);
+    assert.ok(!deleteCall.includes("--params"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("filters benign reaction event handler noise but preserves real connection errors", () => {
@@ -343,6 +470,27 @@ test("single lark bot still ignores unmentioned group messages under strict rout
 
   assert.ok(message);
   const route = selectLarkMessageTarget([bot], message, new Map([["default", { openId: "ou_target_bot", appName: "测试助手" }]]), true);
+  assert.equal(route.bot, null);
+  assert.equal(route.reason, "missing-group-mention-metadata");
+});
+
+test("normalizes group-like chat types before strict mention routing", () => {
+  const message = normalizeLarkEvent({
+    header: { event_type: "im.message.receive_v1", app_id: "cli_test" },
+    event: {
+      sender: { sender_id: { open_id: "ou_1" } },
+      message: {
+        message_id: "om_unmentioned_group_chat",
+        chat_id: "oc_1",
+        chat_type: "group_chat",
+        content: JSON.stringify({ text: "这个群聊类型也不能免艾特插嘴" })
+      }
+    }
+  });
+
+  assert.ok(message);
+  assert.equal(message.chatType, "group");
+  const route = selectLarkMessageTarget([bot], message, new Map([["mentor", { openId: "ou_target_bot", appName: "人生导师" }]]), true);
   assert.equal(route.bot, null);
   assert.equal(route.reason, "missing-group-mention-metadata");
 });

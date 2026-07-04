@@ -92,9 +92,9 @@ nav button.active { color: var(--text); border-color: var(--primary); background
 main { min-width: 0; overflow: auto; padding: 62px 44px 42px; }
 header { -webkit-app-region: drag; display: flex; align-items: flex-end; justify-content: space-between; min-height: 62px; margin-bottom: 30px; user-select: none; }
 h1 { margin: 6px 0 0; font-size: 31px; letter-spacing: -.8px; color: var(--text); }
-.actions, .form-actions { display: flex; gap: 10px; }
+.actions, .form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 button, input, select, textarea, label, nav, .actions, .form-actions, .panel, .notice { -webkit-app-region: no-drag; }
-button.primary, button.ghost, button.danger { border-radius: 4px; padding: 10px 16px; border: 1px solid var(--panel-border); color: var(--text); background: color-mix(in srgb, var(--panel) 78%, transparent); }
+button.primary, button.ghost, button.danger { max-width: 100%; border-radius: 4px; padding: 10px 16px; border: 1px solid var(--panel-border); color: var(--text); background: color-mix(in srgb, var(--panel) 78%, transparent); overflow-wrap: anywhere; }
 button.primary { color: #f7fffb; border-color: var(--primary); background: var(--primary); font-weight: 700; }
 button.danger { border-color: var(--danger); color: var(--danger); }
 button.compact { padding: 6px 9px; font-size: 10px; white-space: nowrap; }
@@ -149,7 +149,8 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .modal-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; overflow: auto; padding: 42px; background: rgba(2, 6, 4, .78); backdrop-filter: blur(8px); -webkit-app-region: no-drag; }
 .release-modal { display: flex; flex-direction: column; width: min(720px, 100%); max-height: min(720px, calc(100vh - 84px)); min-height: 0; overflow: hidden; border: 1px solid #3b5145; background: #0d1511; box-shadow: 0 30px 120px rgba(0, 0, 0, .65); }
 .release-modal-header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 24px; border-bottom: 1px solid #27332d; }
-.release-modal-header h2 { margin: 7px 0 0; color: #f0f5f2; font-size: 26px; }
+.release-modal-header > div { min-width: 0; }
+.release-modal-header h2 { margin: 7px 0 0; color: #f0f5f2; font-size: 26px; overflow-wrap: anywhere; }
 .release-close { padding: 7px 11px !important; }
 .release-list { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .release-entry { display: grid; grid-template-columns: 135px 1fr; gap: 24px; padding: 22px 24px; border-bottom: 1px solid #202a25; }
@@ -174,14 +175,15 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .bot-card .panel-title > div { display: flex; gap: 6px; }
 .bot-card .panel-title button { padding: 5px 8px; font-size: 9px; }
 .bot-note { display: block; margin: -2px 17px 8px; color: #627269; font-size: 10px; line-height: 1.5; }
-label { display: grid; gap: 7px; padding: 8px 17px; color: #8ea097; font-size: 11px; }
-label > span, .skill-access-heading > span { display: flex; align-items: center; gap: 2px; }
+label { display: grid; min-width: 0; gap: 7px; padding: 8px 17px; color: #8ea097; font-size: 11px; }
+label > span, .skill-access-heading > span { display: flex; min-width: 0; align-items: center; gap: 2px; overflow-wrap: anywhere; }
 input, select, textarea { width: 100%; border: 1px solid #304039; border-radius: 3px; padding: 10px; outline: none; color: #dce6e1; background: #0c1210; }
 textarea { resize: vertical; line-height: 1.5; }
 input:focus, select:focus, textarea:focus { border-color: #77f2a1; box-shadow: 0 0 0 2px rgba(119,242,161,.08); }
 label small { color: #536159; line-height: 1.5; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; }
 .form-actions { justify-content: flex-end; margin-top: 18px; }
+.form-hint { display: block; margin-top: 8px; color: var(--muted); font-size: 11px; text-align: right; }
 .skill-access { margin: 10px 17px 0; padding: 12px; border: 1px solid #27332d; color: #8ea097; font-size: 11px; }
 .skill-access > small { display: block; margin-bottom: 8px; color: #627269; line-height: 1.5; }
 .skill-access-heading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
@@ -220,6 +222,12 @@ label small { color: #536159; line-height: 1.5; }
 .config-callout.is-disabled { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-text); }
 .config-callout.is-disabled strong,
 .config-callout.is-disabled small { color: var(--warning-text); }
+.model-provider-list { display: grid; gap: 12px; padding: 8px 17px 0; }
+.model-provider-row { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 76%, transparent); }
+.model-provider-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.model-provider-row-head strong { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.model-provider-grid { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 8px 10px; }
+.model-provider-grid label { padding: 0; }
 .inline-status { display: block; padding: 7px 9px; border-radius: 6px; background: color-mix(in srgb, var(--panel-strong) 78%, transparent); border: 1px solid var(--panel-border); }
 .inline-status.info { color: var(--muted); }
 .inline-status.success { color: var(--success); border-color: color-mix(in srgb, var(--success) 38%, var(--panel-border)); }
@@ -375,6 +383,14 @@ label small { color: #536159; line-height: 1.5; }
 .cache-entry-row small { display: block; margin-top: 5px; color: #617168; font-size: 10px; word-break: break-all; }
 .run-detail-content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 18px; }
 .run-detail-body { margin: 0; padding: 14px; border: 1px solid #27332d; background: #101a15; color: #c6d2ca; white-space: pre-wrap; word-break: break-word; font: 11px/1.65 "Menlo", monospace; }
+.detail-subtitle { margin: 18px 0 8px; color: var(--text); font-size: 12px; }
+.task-quick-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; padding: 10px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 76%, transparent); }
+.task-quick-actions small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.task-visibility-meta span { min-width: 190px; }
+.task-run-log-list { display: grid; gap: 10px; }
+.task-run-log-row { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid #27332d; background: #101a15; }
+.task-run-log-row strong { color: var(--text); font-size: 12px; }
+.task-run-log-row pre { max-height: 180px; margin: 6px 0 0; overflow: auto; color: #c6d2ca; white-space: pre-wrap; word-break: break-word; font: 11px/1.55 "Menlo", monospace; }
 .command-binding-list { display: grid; gap: 10px; }
 .command-binding-row { display: grid; grid-template-columns: 160px minmax(180px, 1fr) 112px; gap: 8px 10px; padding: 10px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 76%, transparent); }
 .command-binding-row .danger { align-self: end; justify-self: end; }
@@ -382,13 +398,15 @@ label small { color: #536159; line-height: 1.5; }
 .scheduled-task-list-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--panel) 76%, transparent); }
 .scheduled-task-list-row strong { color: var(--text); font-size: 13px; }
 .scheduled-task-list-row small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.5; }
-.scheduled-task-list-actions { display: flex; gap: 7px; }
+.scheduled-task-list-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .scheduled-task-modal { width: min(860px, calc(100vw - 80px)); }
-.scheduled-task-editor-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 0 20px; }
+.scheduled-task-editor-body { flex: 1 1 auto; display: grid; gap: 0; min-height: 0; overflow: auto; padding: 18px 24px 20px; }
 .scheduled-task-header { display: grid; grid-template-columns: minmax(240px, 1fr) 120px; gap: 10px; }
-.scheduled-task-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--panel-border); }
-.scheduled-task-section strong { color: var(--text); font-size: 12px; }
+.scheduled-task-modal label { padding: 0; }
+.scheduled-task-section { display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--panel-border); }
+.scheduled-task-section strong { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
 .scheduled-task-grid { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 8px 10px; }
+.scheduled-task-grid textarea[data-task-prompt] { min-height: 132px; }
 .scheduled-task-modal[data-schedule-type="interval"] .schedule-daily,
 .scheduled-task-modal[data-schedule-type="interval"] .schedule-weekly,
 .scheduled-task-modal[data-schedule-type="interval"] .schedule-cron,
@@ -405,7 +423,7 @@ label small { color: #536159; line-height: 1.5; }
 .scheduled-task-modal[data-target-type="agent"] .target-capability,
 .scheduled-task-modal[data-target-type="command"] .target-capability,
 .scheduled-task-modal[data-target-type="capability"] .target-command { display: none; }
-.scheduled-task-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.scheduled-task-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .command-wide { grid-column: 1 / -1; }
 .inline-actions { justify-content: flex-start; }
 
@@ -420,6 +438,7 @@ label small { color: #536159; line-height: 1.5; }
 :root[data-theme="light"] .session-event,
 :root[data-theme="light"] .run-detail-body,
 :root[data-theme="light"] .command-binding-row,
+:root[data-theme="light"] .model-provider-row,
 :root[data-theme="light"] .scheduled-task-list-row,
 :root[data-theme="light"] .config-bot-row,
 :root[data-theme="light"] .provider-section,
@@ -517,6 +536,8 @@ label small { color: #536159; line-height: 1.5; }
 :root[data-theme="light"] .market-skill-row p,
 :root[data-theme="light"] .market-skill-row small,
 :root[data-theme="light"] .storage-card p,
+:root[data-theme="light"] .form-hint,
+:root[data-theme="light"] .task-quick-actions small,
 :root[data-theme="light"] .session-meta strong,
 :root[data-theme="light"] .session-turn-head time,
 :root[data-theme="light"] .session-event-head time,
@@ -548,9 +569,13 @@ label small { color: #536159; line-height: 1.5; }
 :root[data-theme="light"] .session-files li,
 :root[data-theme="light"] .run-history-row strong,
 :root[data-theme="light"] .run-detail-body,
+:root[data-theme="light"] .detail-subtitle,
+:root[data-theme="light"] .task-run-log-row strong,
+:root[data-theme="light"] .task-run-log-row pre,
 :root[data-theme="light"] .scheduled-task-list-row strong,
 :root[data-theme="light"] .config-bot-row,
 :root[data-theme="light"] .config-bot-row strong,
+:root[data-theme="light"] .model-provider-row-head strong,
 :root[data-theme="light"] .market-skill-row strong,
 :root[data-theme="light"] .governance-bot-head strong,
 :root[data-theme="light"] .governance-ref-row strong,
@@ -630,6 +655,8 @@ label small { color: #536159; line-height: 1.5; }
 }
 
 :root[data-theme="light"] .run-detail-body,
+:root[data-theme="light"] .task-run-log-row,
+:root[data-theme="light"] .task-quick-actions,
 :root[data-theme="light"] .preview-content,
 :root[data-theme="light"] .manifest-editor-panel textarea,
 :root[data-theme="light"] .session-event pre {
@@ -652,8 +679,11 @@ label small { color: #536159; line-height: 1.5; }
   .skill-list, .logs { max-height: 300px; }
   .skill-access-controls { grid-template-columns: 1fr 1fr; }
   .skill-access-controls input { grid-column: 1 / -1; }
-  .command-binding-row { grid-template-columns: 1fr; }
+  .command-binding-row, .model-provider-grid { grid-template-columns: 1fr; }
   .scheduled-task-header, .scheduled-task-grid { grid-template-columns: 1fr; }
+  .task-quick-actions { align-items: stretch; flex-direction: column; }
+  .scheduled-task-list-row { grid-template-columns: 1fr; }
+  .scheduled-task-list-actions { justify-content: flex-start; }
   .command-wide { grid-column: auto; }
   .scheduled-task-actions { grid-column: auto; flex-direction: column; }
   .command-binding-row .danger { justify-self: stretch; }

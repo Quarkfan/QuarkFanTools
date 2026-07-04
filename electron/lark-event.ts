@@ -98,7 +98,7 @@ export function normalizeLarkEvent(payload: any): LarkMessage | null {
     eventId: String(payload?.header?.event_id ?? payload?.event_id ?? messageId),
     messageId,
     chatId: String(message?.chat_id ?? message?.chatId ?? ""),
-    chatType: String(message?.chat_type ?? message?.chatType ?? ""),
+    chatType: normalizeLarkChatType(message?.chat_type ?? message?.chatType),
     senderId: String(sender?.open_id ?? sender?.user_id ?? sender?.union_id ?? ""),
     messageType,
     text,
@@ -110,4 +110,12 @@ export function normalizeLarkEvent(payload: any): LarkMessage | null {
     mentions: extractMentions(message?.mentions),
     raw: payload
   };
+}
+
+function normalizeLarkChatType(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  const normalized = raw.toLowerCase().replace(/[-\s]/g, "_");
+  if (["group", "group_chat", "chat_group"].includes(normalized) || normalized.endsWith("_group")) return "group";
+  if (["p2p", "private", "private_chat", "single", "direct"].includes(normalized)) return "p2p";
+  return raw;
 }

@@ -23,7 +23,21 @@ const base: AppConfig = {
     model: "",
     apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
     apiKey: "",
-    multimodalEnabled: true
+    multimodalEnabled: true,
+    providers: [{
+      id: "anthropic",
+      name: "Claude Compatible",
+      baseUrl: "",
+      model: "",
+      apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
+      apiKey: "",
+      multimodalEnabled: true,
+      enabled: true
+    }],
+    strategy: {
+      mode: "round-robin",
+      failoverOnFailure: false
+    }
   },
   runtime: {
     sandbox: "workspace-write",
@@ -54,6 +68,53 @@ test("migrates a legacy single bot config", () => {
   assert.deepEqual(config.bots[0]?.oauthScopes, []);
   assert.equal(config.bots[0]?.pendingReaction, "OnIt");
   assert.equal(config.model.multimodalEnabled, true);
+});
+
+test("migrates legacy model fields into model provider list", () => {
+  const config = mergeConfig(base, {
+    model: {
+      providerId: "legacy",
+      providerName: "Legacy Provider",
+      baseUrl: "https://legacy.example",
+      model: "claude-legacy",
+      apiKeyEnv: "LEGACY_KEY",
+      apiKey: "secret",
+      multimodalEnabled: false
+    } as never
+  });
+
+  assert.equal(config.model.providers?.length, 1);
+  assert.equal(config.model.providers?.[0]?.id, "legacy");
+  assert.equal(config.model.providers?.[0]?.name, "Legacy Provider");
+  assert.equal(config.model.providers?.[0]?.baseUrl, "https://legacy.example");
+  assert.equal(config.model.providers?.[0]?.model, "claude-legacy");
+  assert.equal(config.model.providers?.[0]?.multimodalEnabled, false);
+  assert.equal(config.model.providerId, "legacy");
+  assert.equal(config.model.model, "claude-legacy");
+});
+
+test("normalizes multiple model providers and strategy", () => {
+  const config = mergeConfig(base, {
+    model: {
+      providers: [
+        { id: "p1", name: "P1", baseUrl: "https://p1.example", model: "claude-1", apiKey: "k1", apiKeyEnv: "", multimodalEnabled: true, enabled: true },
+        { id: "p1", name: "Duplicate", baseUrl: "https://dup.example", model: "dup", apiKey: "dup", enabled: true },
+        { id: "Bad Provider!", name: "", baseUrl: "https://p2.example", model: "claude-2", apiKey: "k2", multimodalEnabled: false, enabled: false }
+      ],
+      strategy: {
+        mode: "random",
+        failoverOnFailure: true
+      }
+    } as never
+  });
+
+  assert.equal(config.model.providers?.length, 2);
+  assert.equal(config.model.providers?.[0]?.id, "p1");
+  assert.equal(config.model.providers?.[1]?.id, "bad-provider");
+  assert.equal(config.model.providers?.[1]?.enabled, false);
+  assert.equal(config.model.providers?.[0]?.apiKeyEnv, "ANTHROPIC_AUTH_TOKEN");
+  assert.deepEqual(config.model.strategy, { mode: "random", failoverOnFailure: true });
+  assert.equal(config.model.providerId, "p1");
 });
 
 test("removes wildcard skill access so new skills require explicit authorization", () => {
@@ -158,6 +219,67 @@ test("disables user-visible work progress for older bot configs", () => {
     } as never]
   });
   assert.equal(config.bots[0].showProgress, false);
+  assert.equal(config.bots[0].contextualReplyBetaEnabled, false);
+});
+
+test("preserves contextual reply beta setting on bot configs", () => {
+  const config = mergeConfig(base, {
+    bots: [{
+      id: "bot-1",
+      name: "Bot 1",
+      enabled: true,
+      cliPath: "",
+      profile: "",
+      appId: "cli_test",
+      appSecret: "secret",
+      receiveIdentity: "bot",
+      replyIdentity: "bot",
+      eventTypes: ["im.message.receive_v1"],
+      skillNames: [],
+      pendingReaction: "OnIt",
+      ownerOpenId: "",
+      contextualReplyBetaEnabled: true
+    } as never]
+  });
+  assert.equal(config.bots[0].contextualReplyBetaEnabled, true);
+});
+
+test("normalizes message backfill limit on bot configs", () => {
+  const config = mergeConfig(base, {
+    bots: [{
+      id: "bot-1",
+      name: "Bot 1",
+      enabled: true,
+      cliPath: "",
+      profile: "",
+      appId: "cli_test",
+      appSecret: "secret",
+      receiveIdentity: "bot",
+      replyIdentity: "bot",
+      eventTypes: ["im.message.receive_v1"],
+      skillNames: [],
+      pendingReaction: "OnIt",
+      ownerOpenId: "",
+      maxBackfillMessages: 9999
+    } as never, {
+      id: "bot-2",
+      name: "Bot 2",
+      enabled: true,
+      cliPath: "",
+      profile: "",
+      appId: "cli_test",
+      appSecret: "secret",
+      receiveIdentity: "bot",
+      replyIdentity: "bot",
+      eventTypes: ["im.message.receive_v1"],
+      skillNames: [],
+      pendingReaction: "OnIt",
+      ownerOpenId: "",
+      maxBackfillMessages: 0
+    } as never]
+  });
+  assert.equal(config.bots[0].maxBackfillMessages, 500);
+  assert.equal(config.bots[1].maxBackfillMessages, 1);
 });
 
 test("normalizes long task notice settings on bot configs", () => {

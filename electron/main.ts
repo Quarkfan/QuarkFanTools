@@ -8,22 +8,52 @@ import { fetchWeComChatList, initializeWeComCli } from "./wecom-cli.js";
 import { mcpServerDiagnostics } from "./mcp-diagnostics.js";
 import { platformConnectorDiagnostics } from "./platform-diagnostics.js";
 import { capabilityAuditReport } from "./capability-audit.js";
-import { importSkillFolder, removeLocalSkill, skillPreview } from "./skills.js";
+import { analyzeSkillImport, importSkillFolderWithStrategy, removeLocalSkill, skillPreview } from "./skills.js";
 import { copyCustomAppTemplate, customAppPreview, importCustomAppFolder, removeCustomAppFolder, saveCustomAppManifest, upgradeCustomAppFolder } from "./apps.js";
 import { copySuiteTemplate, importSuiteFolder, removeSuiteFolder, saveSuiteManifest, suitePreview, upgradeSuiteFolder } from "./suites.js";
 import { syncSkillMarket } from "./skill-market.js";
 import { scheduledTaskRunHistory } from "./scheduled-tasks.js";
-import { clearAllCustomAppArtifactStorage, clearAllSessionStorage, clearExpiredCustomAppArtifactStorage, clearExpiredStorage, clearFileCacheEntryStorage, clearFileCacheStorage, clearSelectedSessionStorage, repairFileCacheStorage, storageSessionDetail, storageStats } from "./storage.js";
+import { clearAllCustomAppArtifactStorage, clearAllSessionStorage, clearExpiredCustomAppArtifactStorage, clearExpiredStorage, clearFileCacheEntryStorage, clearFileCacheStorage, clearMessageCursorStorage, clearSelectedSessionStorage, repairFileCacheStorage, storageSessionDetail, storageStats } from "./storage.js";
 import { appInfo } from "./release-notes.js";
 import { resourceDirectory, type ResourceLocationKind } from "./resource-locations.js";
+import { enforceRemoteAuthPolicy, nextRemoteAuthCheckDelayMs } from "./auth-gate.js";
+import { exportDiagnosticsBundle } from "./diagnostics-export.js";
 import type { AppConfig } from "./types.js";
 
 const runtime = new QuarkfanToolsRuntime();
 let mainWindow: BrowserWindow | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let quittingAfterRuntimeStop = false;
+let authCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
 if (!hasSingleInstanceLock) app.quit();
+
+async function quitAfterAuthDenied(detail: string): Promise<void> {
+  if (authCheckTimer) {
+    clearTimeout(authCheckTimer);
+    authCheckTimer = null;
+  }
+  dialog.showErrorBox("授权已关闭", `QuarkfanTools 授权未开放，应用将退出。\n\n${detail}`);
+  await runtime.stop().catch(() => undefined);
+  quittingAfterRuntimeStop = true;
+  app.quit();
+}
+
+async function enforceRemoteAuth(stage: "startup" | "runtime"): Promise<boolean> {
+  const result = await enforceRemoteAuthPolicy();
+  if (result.allowed) return true;
+  await quitAfterAuthDenied(`${stage}: ${result.detail}`);
+  return false;
+}
+
+function scheduleRemoteAuthChecks(): void {
+  if (authCheckTimer) clearTimeout(authCheckTimer);
+  authCheckTimer = setTimeout(() => {
+    void enforceRemoteAuth("runtime").then((allowed) => {
+      if (allowed) scheduleRemoteAuthChecks();
+    });
+  }, nextRemoteAuthCheckDelayMs());
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -51,6 +81,8 @@ function createWindow(): void {
 
 if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
+    if (!await enforceRemoteAuth("startup")) return;
+    scheduleRemoteAuthChecks();
     await migrateLegacyData();
     await runtime.initialize();
     createWindow();
@@ -73,6 +105,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
+  if (authCheckTimer) {
+    clearTimeout(authCheckTimer);
+    authCheckTimer = null;
+  }
   if (quittingAfterRuntimeStop) return;
   event.preventDefault();
   void runtime.stop().finally(() => {
@@ -110,6 +146,21 @@ runtime.on("log", (entry) => sendToRenderer("runtime:log", entry));
 
 ipcMain.handle("runtime:snapshot", () => runtime.snapshot());
 ipcMain.handle("runtime:logs", () => runtime.logger.list());
+ipcMain.handle("diagnostics:export", async () => {
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    title: "保存 QuarkfanTools 排障包",
+    defaultPath: `QuarkfanTools-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`,
+    filters: [{ name: "ZIP Archive", extensions: ["zip"] }]
+  });
+  if (result.canceled || !result.filePath) return null;
+  await exportDiagnosticsBundle({
+    snapshot: runtime.snapshot(),
+    logs: runtime.logger.list(),
+    appVersion: app.getVersion()
+  }, result.filePath);
+  await runtime.logger.write("success", "已导出排障包", result.filePath);
+  return result.filePath;
+});
 ipcMain.handle("scheduled:runs", () => scheduledTaskRunHistory(runtime.snapshot().config));
 ipcMain.handle("scheduled:run-now", async (_event, botId: string, taskId: string) => runtime.triggerScheduledTaskNow(botId, taskId));
 ipcMain.handle("mcp:diagnostics", (_event, probeProtocol?: boolean) => mcpServerDiagnostics(runtime.snapshot().config, { probeProtocol: Boolean(probeProtocol) }));
@@ -154,6 +205,11 @@ ipcMain.handle("storage:clear-cache", async () => {
   await runtime.logger.write("success", "已清理文件缓存", "会话上下文、机器人配置、飞书授权和用户 Skills 已保留");
   return storageStats(runtime.snapshot().config);
 });
+ipcMain.handle("storage:clear-message-cursors", async () => {
+  await clearMessageCursorStorage();
+  await runtime.logger.write("success", "已清理历史补处理 Beta 游标", "不影响会话、文件缓存、飞书授权或用户 Skills");
+  return storageStats(runtime.snapshot().config);
+});
 ipcMain.handle("storage:clear-cache-entry", async (_event, cacheKey: string) => {
   const removed = await clearFileCacheEntryStorage(String(cacheKey ?? ""));
   await runtime.logger.write(removed ? "success" : "warn", removed ? "已删除文件缓存条目" : "文件缓存条目不存在", String(cacheKey ?? ""));
@@ -186,6 +242,7 @@ ipcMain.handle("runtime:stop-bot", async (_event, botId: string) => {
   await runtime.stopBot(botId);
   return runtime.snapshot();
 });
+ipcMain.handle("runtime:backfill-bot", async (_event, botId: string) => runtime.backfillBotMessages(botId));
 ipcMain.handle("config:save", async (_event, config: AppConfig) => {
   await runtime.stop();
   await saveConfig(config);
@@ -198,9 +255,41 @@ ipcMain.handle("skills:import", async () => {
     properties: ["openDirectory"]
   });
   if (result.canceled || !result.filePaths[0]) return runtime.snapshot();
-  const imported = await importSkillFolder(result.filePaths[0]);
+  const sourcePath = result.filePaths[0];
+  const analysis = await analyzeSkillImport(sourcePath);
+  let strategy: "overwrite" | "keep" = "overwrite";
+  if (analysis.hasConflict) {
+    const choice = await dialog.showMessageBox(mainWindow!, {
+      type: "warning",
+      title: "Skill 已存在",
+      message: `本地技能市场已存在同名 Skill：${analysis.existingName ?? analysis.declaredName}`,
+      detail: [
+        `待导入：${analysis.sourcePath}`,
+        `已有：${analysis.existingPath ?? analysis.targetPath}`,
+        "",
+        "请选择如何处理该冲突。"
+      ].join("\n"),
+      buttons: ["以新的为准", "以旧的为准", "自己编辑", "取消"],
+      defaultId: 0,
+      cancelId: 3
+    });
+    if (choice.response === 3) return runtime.snapshot();
+    if (choice.response === 1) strategy = "keep";
+    if (choice.response === 2) {
+      const filesToEdit = [analysis.existingPath, analysis.sourcePath]
+        .filter((item): item is string => Boolean(item))
+        .map((directory) => path.join(directory, "SKILL.md"));
+      for (const file of filesToEdit) {
+        const error = await shell.openPath(file);
+        if (error) shell.showItemInFolder(file);
+      }
+      await runtime.logger.write("info", "已打开 Skill 冲突文件", `已有：${analysis.existingPath ?? analysis.targetPath}\n待导入：${analysis.sourcePath}`);
+      return runtime.snapshot();
+    }
+  }
+  const imported = await importSkillFolderWithStrategy(sourcePath, strategy);
   await runtime.initialize(false);
-  await runtime.logger.write("success", "Skill 已复制到本地技能市场", imported);
+  await runtime.logger.write(strategy === "keep" ? "info" : "success", strategy === "keep" ? "已保留旧 Skill" : "Skill 已复制到本地技能市场", imported);
   return runtime.snapshot();
 });
 ipcMain.handle("apps:import", async () => {

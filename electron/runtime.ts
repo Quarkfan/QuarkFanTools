@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { runClaude, type ClaudeSuiteContext } from "./claude.js";
-import { getLarkBotIdentity, materializeLarkCachedFile } from "./lark-cli.js";
+import { getLarkBotIdentity, listLarkChatMessages, materializeLarkCachedFile } from "./lark-cli.js";
 import { imProvider, imProviderForBot, type ImEventStream } from "./im-providers.js";
 import { Logger } from "./logger.js";
 import { preprocessOfficeResources } from "./office.js";
@@ -32,7 +32,19 @@ import { larkConnectorBot, primaryProvider } from "./platform-connectors.js";
 import { maskAppId, runningBotWithSameAppId } from "./bot-identity.js";
 import { selectLarkMessageTarget } from "./lark-message-router.js";
 import { hasProcessedMessage, markProcessedMessage } from "./runtime-dedupe.js";
-import type { AppConfig, BotConfig, ChatMessage, CustomAppDeliveryRequest, CustomAppSummary, LarkBotIdentity, RuntimeSnapshot, ScheduledTask, SessionTranscriptEvent, SkillSummary, SuiteSummary } from "./types.js";
+import { hasCompleteModelProvider, hasMultimodalModelProvider } from "./model-providers.js";
+import type { AppConfig, BotConfig, ChatMessage, CustomAppDeliveryRequest, CustomAppSummary, ImProviderId, LarkBotIdentity, RuntimeSnapshot, ScheduledTask, SessionTranscriptEvent, SkillSummary, SuiteSummary } from "./types.js";
+
+function isContextualNoReply(text: string): boolean {
+  return /^QFT_NO_REPLY\b/i.test(text.trim());
+}
+
+interface MessageCursorRecord {
+  chatId: string;
+  chatType: string;
+  lastSeenAt: string;
+  lastMessageId: string;
+}
 
 export class QuarkfanToolsRuntime extends EventEmitter {
   readonly logger = new Logger();
@@ -106,7 +118,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       throw new Error(message);
     }
     if (!bot.appId || !bot.appSecret) throw new Error("机器人 App ID 或 App Secret 未配置");
-    if (!this.config.model.baseUrl || !this.config.model.model || !this.config.model.apiKey) {
+    if (!hasCompleteModelProvider(this.config)) {
       throw new Error("Claude 兼容模型连接未完整配置");
     }
     if (primaryProvider(bot) === "lark") {
@@ -117,7 +129,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       await this.logger.write("info", "正在确认飞书 Bot 身份", maskAppId(bot.appId), bot.id);
       const identity = await getLarkBotIdentity(bot);
       this.botIdentities.set(bot.id, identity);
-      await this.logger.write("info", "飞书 Bot 身份已确认", `${maskAppId(bot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId}`, bot.id);
+      const identitySummary = `${maskAppId(bot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId ?? "open_id 未返回，将按 App ID 和名称路由"}`;
+      await this.logger.write(identity.openId ? "info" : "warn", identity.openId ? "飞书 Bot 身份已确认" : "飞书 Bot 身份缺少 open_id，已降级启动", identitySummary, bot.id);
     }
     this.runningBotIds.add(bot.id);
     try {
@@ -173,6 +186,31 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       this.scheduledTaskTimers.delete(key);
     }
     this.emitSnapshot();
+  }
+
+  async backfillBotMessages(botId: string): Promise<{ queued: number; chats: number }> {
+    const bot = this.config.bots.find((item) => item.id === botId);
+    if (!bot) throw new Error("机器人不存在");
+    if (primaryProvider(bot) !== "lark") throw new Error("当前只支持飞书 Bot 补处理历史消息 Beta");
+    if (!this.runningBotIds.has(bot.id)) throw new Error("请先启动该机器人监听，再补处理历史消息 Beta");
+    const cursors = await this.readMessageCursors(bot.id);
+    const records = Object.values(cursors).sort((a, b) => Date.parse(a.lastSeenAt) - Date.parse(b.lastSeenAt));
+    const max = Math.max(1, Math.min(500, Math.floor(bot.maxBackfillMessages ?? 50)));
+    let queued = 0;
+    for (const record of records) {
+      if (queued >= max) break;
+      const messages = await listLarkChatMessages(bot, record.chatId, record.lastSeenAt, max - queued);
+      const identity = this.botIdentities.get(bot.id);
+      for (const message of messages) {
+        if (queued >= max) break;
+        if (message.messageId === record.lastMessageId) continue;
+        if (identity?.openId && message.senderId === identity.openId) continue;
+        this.routeLarkBotMessage(bot, message);
+        queued += 1;
+      }
+    }
+    await this.logger.write(queued > 0 ? "success" : "info", "历史消息补处理 Beta 已排队", `chat ${records.length} 个 / 消息 ${queued} 条 / 上限 ${max}`, bot.id);
+    return { queued, chats: records.length };
   }
 
   snapshot(): RuntimeSnapshot {
@@ -236,10 +274,57 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     return this.config.bots.filter((item) => primaryProvider(item) === "lark" && this.runningBotIds.has(item.id));
   }
 
+  private messageCursorPath(botId: string): string {
+    return path.join(stateRoot(), "bots", botId, "message-cursors.json");
+  }
+
+  private async readMessageCursors(botId: string): Promise<Record<string, MessageCursorRecord>> {
+    try {
+      const parsed = JSON.parse(await readFile(this.messageCursorPath(botId), "utf8")) as Record<string, MessageCursorRecord>;
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private async recordMessageCursor(botId: string, message: ChatMessage): Promise<void> {
+    if (!message.chatId) return;
+    const seenAt = messageTimestampIso(message);
+    const cursors = await this.readMessageCursors(botId);
+    const existing = cursors[message.chatId];
+    if (existing && Date.parse(existing.lastSeenAt) > Date.parse(seenAt)) return;
+    cursors[message.chatId] = {
+      chatId: message.chatId,
+      chatType: message.chatType,
+      lastSeenAt: seenAt,
+      lastMessageId: message.messageId
+    };
+    const target = this.messageCursorPath(botId);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, `${JSON.stringify(cursors, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  }
+
   private routeLarkBotMessage(sourceBot: BotConfig, message: ChatMessage): void {
     const bots = this.runningLarkBots();
     const route = selectLarkMessageTarget(bots, message, this.botIdentities, true);
     if (!route.bot) {
+      if (route.reason === "missing-group-mention-metadata") {
+        const betaBots = bots.filter((bot) => bot.contextualReplyBetaEnabled);
+        if (betaBots.length > 0) {
+          void this.logger.write("info", "未艾特群消息进入职责判断 Beta", JSON.stringify({
+            sourceBotId: sourceBot.id,
+            eventId: message.eventId,
+            messageId: message.messageId,
+            chatType: message.chatType,
+            betaBotIds: betaBots.map((bot) => bot.id)
+          }), sourceBot.id);
+          for (const betaBot of betaBots) {
+            void this.enqueueMessage(betaBot, { ...message, contextualReplyBeta: true });
+            void this.recordMessageCursor(betaBot.id, message);
+          }
+          return;
+        }
+      }
       void this.logger.write("info", "已忽略无法确定目标机器人的飞书消息", JSON.stringify({
         reason: route.reason,
         sourceBotId: sourceBot.id,
@@ -279,6 +364,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     if (sourceBot.id !== route.bot.id) {
       void this.logger.write("info", "飞书事件已跨 Bot 路由", `${sourceBot.name} -> ${route.bot.name} / ${route.reason}`, route.bot.id);
     }
+    void this.recordMessageCursor(route.bot.id, message);
     void this.enqueueMessage(route.bot, message);
   }
 
@@ -302,7 +388,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         await this.logger.write("info", "正在确认飞书 Bot 身份", maskAppId(currentBot.appId), currentBot.id);
         const identity = await getLarkBotIdentity(currentBot);
         this.botIdentities.set(currentBot.id, identity);
-        await this.logger.write("info", "飞书 Bot 身份已确认", `${maskAppId(currentBot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId}`, currentBot.id);
+        const identitySummary = `${maskAppId(currentBot.appId)} / ${identity.appName ?? "未命名"} / ${identity.openId ?? "open_id 未返回，将按 App ID 和名称路由"}`;
+        await this.logger.write(identity.openId ? "info" : "warn", identity.openId ? "飞书 Bot 身份已确认" : "飞书 Bot 身份缺少 open_id，已降级启动", identitySummary, currentBot.id);
       }
       await stream.start(currentBot);
       await this.logger.write("info", "机器人事件订阅正在重连", currentBot.name, currentBot.id);
@@ -335,7 +422,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     const limit = Math.max(1, Math.floor(this.config.runtime.maxConcurrentTasks || 1));
     const wasQueued = this.taskLimiter.active >= limit;
     const pendingRelease = this.taskLimiter.acquire(limit);
-    const queuedReaction = wasQueued ? this.addPendingReaction(bot, message, Date.now()) : undefined;
+    const queuedReaction = wasQueued && !message.contextualReplyBeta ? this.addPendingReaction(bot, message, Date.now()) : undefined;
     if (wasQueued) {
       this.emitSnapshot();
       await this.logger.write("info", "消息已进入处理队列", `${message.text} / 当前运行 ${this.taskLimiter.active}，排队 ${this.taskLimiter.queued}`, bot.id);
@@ -377,8 +464,8 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       sessionEvents.push({ time: new Date().toISOString(), ...event });
       if (sessionEvents.length > 80) sessionEvents.splice(0, sessionEvents.length - 80);
     };
-    const pendingReaction = existingReaction ?? this.addPendingReaction(bot, message, startedAt);
-    const cancelLongTaskNotice = this.scheduleLongTaskNotice(bot, message, (text) => {
+    const pendingReaction = existingReaction ?? (message.contextualReplyBeta ? Promise.resolve("") : this.addPendingReaction(bot, message, startedAt));
+    const cancelLongTaskNotice = message.contextualReplyBeta ? () => undefined : this.scheduleLongTaskNotice(bot, message, (text) => {
       pushSessionEvent({ type: "notice", title: "长任务自动提示", body: text });
     });
 
@@ -427,7 +514,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       const resourceStartedAt = Date.now();
       try {
         enrichedMessage = await this.downloadMessageResources(bot, message, resourcesDir);
-        enrichedMessage = await preprocessOfficeResources(enrichedMessage, resourcesDir, this.config.model.multimodalEnabled);
+        enrichedMessage = await preprocessOfficeResources(enrichedMessage, resourcesDir, hasMultimodalModelProvider(this.config));
         await cacheMessageResources(bot, enrichedMessage);
         if (enrichedMessage.resources.length > 0) {
           pushSessionEvent({ type: "progress", title: "资源准备", body: `已准备 ${enrichedMessage.resources.length} 个消息资源。` });
@@ -502,11 +589,22 @@ export class QuarkfanToolsRuntime extends EventEmitter {
             localPath: helperResult.localPath
           }]
         };
-        const processedHelperMessage = await preprocessOfficeResources(helperMessage, cachedFilesDir, this.config.model.multimodalEnabled);
+        const processedHelperMessage = await preprocessOfficeResources(helperMessage, cachedFilesDir, hasMultimodalModelProvider(this.config));
         result = await runClaude(this.config, bot, processedHelperMessage, botSkills, key, result.sessionId || this.sessionStore.get(bot, key), onAgentProgress, botSuiteContexts);
         timings.push(`受控文件 ${formatDelay(Date.now() - helperStartedAt)}`);
       }
       timings.push(`Agent ${formatDelay(Date.now() - agentStartedAt)}`);
+      if (message.contextualReplyBeta && isContextualNoReply(result.response)) {
+        pushSessionEvent({ type: "reply", title: "Beta 职责判断：不回复", body: result.response });
+        if (result.sessionId) await this.sessionStore.set(bot, key, result.sessionId, message.messageId, {
+          user: originalUserText,
+          assistant: result.response,
+          events: sessionEvents
+        });
+        await this.logger.write("info", "Beta 职责判断后静默", result.response, bot.id);
+        await this.logger.write("info", "消息处理耗时", `${timings.join(" / ")} / 总计 ${formatDelay(Date.now() - startedAt)}`, bot.id);
+        return;
+      }
       const replyStartedAt = Date.now();
       const escalation = parseEscalation(result.response);
       const deferred = parseDeferredTask(result.response);
@@ -719,7 +817,7 @@ export class QuarkfanToolsRuntime extends EventEmitter {
         await this.completeScheduledTask(bot, task, startedAt, "skipped", "任务已停用", trigger);
         return;
       }
-      if (!this.config.model.baseUrl || !this.config.model.model || !this.config.model.apiKey) {
+      if (!hasCompleteModelProvider(this.config)) {
         const detail = "模型配置不完整";
         await this.completeScheduledTask(bot, task, startedAt, "failed", detail, trigger);
         await this.notifyScheduledTaskFailure(bot, task, detail, trigger);
@@ -728,8 +826,9 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       const limit = Math.max(1, Math.floor(this.config.runtime.maxConcurrentTasks || 1));
       const release = await this.taskLimiter.acquire(limit);
       try {
-        const response = await this.executeScheduledTask(bot, task, startedAt, workflowSteps);
-        await imProviderForBot(bot).sendTextToChat(bot, task.delivery.chatId, response);
+        const delivery = scheduledTaskDeliveryTarget(bot, task);
+        const response = await this.executeScheduledTask(bot, task, startedAt, workflowSteps, delivery.chatId);
+        await imProvider(delivery.provider).sendTextToChat(delivery.bot, delivery.chatId, response);
         await this.completeScheduledTask(bot, task, startedAt, "success", scheduledRunDetail(response, workflowSteps), trigger);
       } finally {
         release();
@@ -745,13 +844,13 @@ export class QuarkfanToolsRuntime extends EventEmitter {
     }
   }
 
-  private async executeScheduledTask(bot: BotConfig, task: ScheduledTask, startedAt: Date, workflowSteps: WorkflowStepExecutionEvent[] = []): Promise<string> {
+  private async executeScheduledTask(bot: BotConfig, task: ScheduledTask, startedAt: Date, workflowSteps: WorkflowStepExecutionEvent[] = [], deliveryChatId = task.delivery.chatId): Promise<string> {
     const conversation = `scheduled:${task.id}`;
     const messageId = `scheduled-${task.id}-${startedAt.getTime()}`;
     const baseMessage: ChatMessage = {
       eventId: messageId,
       messageId,
-      chatId: task.delivery.chatId,
+      chatId: deliveryChatId,
       chatType: "scheduled",
       senderId: bot.id,
       messageType: "text",
@@ -891,8 +990,9 @@ export class QuarkfanToolsRuntime extends EventEmitter {
       `详情：${trimForLog(detail, 600)}`
     ].join("\n");
     try {
-      await imProviderForBot(bot).sendTextToChat(bot, task.delivery.chatId, text);
-      await this.logger.write("warn", "已发送定时任务失败告警", `${task.name} / ${task.delivery.chatId}`, bot.id);
+      const delivery = scheduledTaskDeliveryTarget(bot, task);
+      await imProvider(delivery.provider).sendTextToChat(delivery.bot, delivery.chatId, text);
+      await this.logger.write("warn", "已发送定时任务失败告警", `${task.name} / ${delivery.chatId}`, bot.id);
     } catch (error) {
       await this.logger.write("warn", "定时任务失败告警发送失败", `${task.name} / ${String(error)}`, bot.id);
     }
@@ -1161,12 +1261,23 @@ function processedPath(botId: string): string {
 
 function eventDelayMs(message: ChatMessage): number | null {
   if (!message.createdAt) return null;
-  const raw = Number(message.createdAt);
-  const created = Number.isFinite(raw)
-    ? raw < 10_000_000_000 ? raw * 1000 : raw
-    : Date.parse(message.createdAt);
+  const created = parseMessageTimestamp(message.createdAt);
   if (!Number.isFinite(created)) return null;
   return Math.max(0, Date.parse(message.receivedAt) - created);
+}
+
+function messageTimestampIso(message: ChatMessage): string {
+  const created = message.createdAt ? parseMessageTimestamp(message.createdAt) : NaN;
+  if (Number.isFinite(created)) return new Date(created).toISOString();
+  const received = Date.parse(message.receivedAt);
+  return new Date(Number.isFinite(received) ? received : Date.now()).toISOString();
+}
+
+function parseMessageTimestamp(value: string): number {
+  const raw = Number(value);
+  return Number.isFinite(raw)
+    ? raw < 10_000_000_000 ? raw * 1000 : raw
+    : Date.parse(value);
 }
 
 function formatDelay(ms: number): string {
@@ -1188,6 +1299,25 @@ function scheduledRunDetail(response: string, workflowSteps: WorkflowStepExecuti
       return `- ${step.workflowName} / ${step.stepName}: ${status}${attempt}${tail}`;
     })
   ].join("\n");
+}
+
+function scheduledTaskDeliveryTarget(bot: BotConfig, task: ScheduledTask): { provider: ImProviderId; bot: BotConfig; chatId: string } {
+  const raw = task.delivery.chatId.trim();
+  const route = (bot.deliveryRoutes ?? []).find((item) => item.enabled && (item.id === raw || item.name === raw));
+  if (route?.chatId.trim()) {
+    const provider = route.provider ?? primaryProvider(bot);
+    const routeBot = provider === primaryProvider(bot)
+      ? bot
+      : provider === "lark" ? larkConnectorBot(bot) : null;
+    if (routeBot) {
+      return {
+        provider,
+        bot: routeBot,
+        chatId: route.chatId.trim()
+      };
+    }
+  }
+  return { provider: primaryProvider(bot), bot, chatId: raw };
 }
 
 function trimForLog(value: string, maxLength = 240): string {

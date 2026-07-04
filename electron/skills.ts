@@ -79,15 +79,71 @@ async function skillDirectories(root: string): Promise<string[]> {
 }
 
 export async function importSkillFolder(source: string): Promise<string> {
+  return importSkillFolderWithStrategy(source, "overwrite");
+}
+
+export type SkillImportStrategy = "overwrite" | "keep";
+
+export interface SkillImportConflict {
+  hasConflict: boolean;
+  declaredName: string;
+  sourcePath: string;
+  targetPath: string;
+  existingPath?: string;
+  existingName?: string;
+  reason?: "same-directory" | "same-name";
+}
+
+export async function analyzeSkillImport(source: string): Promise<SkillImportConflict> {
   const sourceContent = await readFile(path.join(source, "SKILL.md"), "utf8");
   const declaredName = frontmatterValue(sourceContent, "name") || path.basename(source);
   const root = skillsRoot();
   await mkdir(root, { recursive: true });
   const target = path.join(root, path.basename(source));
+  const resolvedSource = path.resolve(source);
+  const resolvedTarget = path.resolve(target);
+  if (resolvedSource === resolvedTarget) {
+    return { hasConflict: false, declaredName, sourcePath: resolvedSource, targetPath: resolvedTarget };
+  }
+  for (const skillDir of await skillDirectories(root)) {
+    const resolvedSkillDir = path.resolve(skillDir);
+    const content = await readFile(path.join(skillDir, "SKILL.md"), "utf8").catch(() => "");
+    const existingName = frontmatterValue(content, "name") || path.basename(skillDir);
+    if (resolvedSkillDir === resolvedTarget) {
+      return {
+        hasConflict: true,
+        declaredName,
+        sourcePath: resolvedSource,
+        targetPath: resolvedTarget,
+        existingPath: resolvedSkillDir,
+        existingName,
+        reason: "same-directory"
+      };
+    }
+    if (existingName === declaredName) {
+      return {
+        hasConflict: true,
+        declaredName,
+        sourcePath: resolvedSource,
+        targetPath: resolvedSkillDir,
+        existingPath: resolvedSkillDir,
+        existingName,
+        reason: "same-name"
+      };
+    }
+  }
+  return { hasConflict: false, declaredName, sourcePath: resolvedSource, targetPath: resolvedTarget };
+}
+
+export async function importSkillFolderWithStrategy(source: string, strategy: SkillImportStrategy): Promise<string> {
+  const analysis = await analyzeSkillImport(source);
+  if (strategy === "keep" && analysis.hasConflict) return analysis.existingPath ?? analysis.targetPath;
+  const target = analysis.hasConflict && analysis.existingPath ? analysis.existingPath : analysis.targetPath;
   if (path.resolve(source) === path.resolve(target)) return target;
+  if (strategy === "overwrite") await rm(target, { recursive: true, force: true });
   await cp(source, target, { recursive: true, force: true });
   const imported = (await discoverSkills()).find((skill) => path.resolve(path.dirname(skill.path)) === path.resolve(target));
-  if (!imported) throw new Error(`Skill 已复制，但无法发现“${declaredName}”；请检查 SKILL.md frontmatter`);
+  if (!imported) throw new Error(`Skill 已复制，但无法发现“${analysis.declaredName}”；请检查 SKILL.md frontmatter`);
   return target;
 }
 
