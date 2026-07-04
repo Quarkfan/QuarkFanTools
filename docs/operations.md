@@ -372,7 +372,7 @@ npm run dev
 npm run pack:mac
 ```
 
-打包脚本显式使用 `node_modules/electron/dist` 作为 electron-builder 的 `electronDist`，避免发布打包阶段重新访问 GitHub 下载 Electron 分发包。DMG 由本机 `hdiutil` 基于 electron-builder 产出的 `mac-arm64/QuarkfanTools.app` 生成，并在镜像内放入 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式，提供拖动安装布局，同时避免 DMG 阶段下载外部辅助工具。上述依赖只属于开发/打包环境，生成的安装包仍是自包含交付物。
+打包脚本显式使用 `node_modules/electron/dist` 作为 electron-builder 的 `electronDist`，避免发布打包阶段重新访问 GitHub 下载 Electron 分发包。DMG 由本机 `hdiutil` 基于 electron-builder 产出的 `mac-arm64/QuarkfanTools.app` 生成，并在镜像内放入 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式，提供拖动安装布局，同时避免 DMG 阶段下载外部辅助工具。自定义 DMG 脚本固定使用 `-fs HFS+` 和 `UDZO` 压缩格式，避免不同 macOS 版本的 `hdiutil` 默认生成 APFS 镜像后在其他机器上出现“未能装载镜像 / 装载文件系统失败”。上述依赖只属于开发/打包环境，生成的安装包仍是自包含交付物。
 
 等价单独构建命令：
 
@@ -385,6 +385,8 @@ npm run pack:mac:arm64
 ```text
 release/arm64/
 ```
+
+`release/` 是本机忽略目录，不提交到 Git。另一台电脑从 Git 拉取代码后不会拿到本机已验证的 DMG / ZIP；如果需要在那台电脑生成安装包，应先安装依赖并执行 `npm run pack:mac`，或者通过外部分发渠道获取已校验的归档产物。
 
 正式发布归档按版本目录保存，结构与 1.x 系列保持一致。例如 `v2.2.0` 的最终可分发文件位于：
 
@@ -410,6 +412,15 @@ release/v2.2.0/
 10. 在 `STATUS.md` 记录命令、结果、归档路径、保留目录和未签名/未公证状态。
 
 当前没有配置代码签名和 Apple 公证，安装时可能出现系统安全提示。
+
+如果其他机器提示“未能装载镜像 / 装载文件系统失败”，先在目标机器执行：
+
+```bash
+hdiutil verify path/to/QuarkfanTools-2.2.5-arm64.dmg
+shasum -a 256 path/to/QuarkfanTools-2.2.5-arm64.dmg
+```
+
+`hdiutil verify` 失败通常表示下载、复制或本地构建产物损坏；校验通过但仍无法挂载时，优先确认是否使用了当前仓库的 `scripts/create-arm64-dmg.sh` 重新打包，或改用同版本 ZIP 产物临时安装。
 
 ### 当前分支状态
 

@@ -1,6 +1,6 @@
 # 当前状态
 
-最后更新：2026-06-29
+最后更新：2026-07-04
 
 ## 当前基线
 
@@ -20,6 +20,7 @@
 - 运行台、配置、Skill 市场、能力治理、存储管理和定时任务中心已改为页内标签组织；Bot、新增定时任务、自定义应用详情、Manifest 等长配置仍通过弹窗或局部编辑器处理。
 - Bot 编辑弹窗中的新增定时任务现在先作为前端草稿打开编辑弹窗，填写任务名、Prompt 和投递 `chat_id` 后再保存；取消、关闭或点遮罩会丢弃草稿。
 - 微信未读读取模板点击策略已改为优先 CGEvent 全局点击；当视觉坐标本身落在窗口范围内时优先使用原始坐标，再以缩放坐标兜底，并在点击后截图比较目标行和整个窗口差异。新增测试覆盖连续读取时第二个未读候选使用自己的坐标，以及点击策略失败诊断。
+- DMG 打包脚本已固定使用 HFS+ 文件系统和 UDZO 压缩格式，避免另一台 Mac 因本地重打包产生 APFS 镜像或镜像格式差异而提示“未能装载镜像 / 装载文件系统失败”；`release/` 仍是本机忽略目录，跨机器开发需重新执行 `npm run pack:mac` 或使用外部分发的已校验产物。
 
 ## 已实现
 
@@ -148,6 +149,7 @@
 
 ## 最近验证
 
+- 2026-07-04：`v2.2.5` 重新完成 arm64 打包验证：DMG 生成脚本固定使用 HFS+ 文件系统和 UDZO 压缩格式，避免不同 macOS 默认 `hdiutil` 产物导致另一台机器提示“未能装载镜像 / 装载文件系统失败”；发布文档补充 `release/` 为本机忽略目录、跨机器需重新打包或使用外部分发归档，以及目标机器上的 `hdiutil verify` / `shasum -a 256` 排障命令。`git diff --check` 通过；`npm test` 通过，136 项测试全部通过；`npm run pack:mac` 通过并重新生成 `release/arm64/QuarkfanTools-2.2.5-arm64.dmg`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip.blockmap` 和 `latest-mac.yml`，已归档到 `release/v2.2.5/`；`hdiutil verify` 通过并显示 DMG 内部分区为 `Apple_HFS`；挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式，app 版本 `2.2.5`，主程序 arm64。归档产物 SHA-256：DMG `7674211f09c0c6dc643fa3168d413a7f3c35ac12822482ab2473217b9402ee9c`，ZIP `213d01e72eebdb9e18982598eb53ece798c63de4e11d851841cc0d238f94ecd4`。安装包仍未签名和公证。
 - 2026-06-29：`v2.2.5` 已完成 arm64 打包验证：全面检查长内容弹窗滚动边界，补齐发布说明、使用手册、帮助说明、预览/Manifest、自定义应用详情、会话详情、运行详情、定时任务编辑和 Bot 编辑等弹窗的固定头部 + 内容区滚动；修复 Bot 编辑弹窗新增定时任务草稿无反馈问题；运行台、配置、Skill 市场、能力治理、存储管理和定时任务中心改为页内标签组织；修复 Skill 市场标签筛选不生效问题；飞书消息去重扩展为同时记录事件 ID 和消息 ID，避免同一 `message_id` 携带不同 `event_id` 时重复回答；飞书群聊消息统一要求 `mentions` 元数据命中目标 Bot，事件头 `sourceAppId` 不再让无 @ 群聊消息触发回答。`git diff --check` 通过；`npm test` 通过，136 项测试全部通过；`npm run pack:mac` 通过并重新生成 `release/arm64/QuarkfanTools-2.2.5-arm64.dmg`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip`、`release/arm64/QuarkfanTools-2.2.5-arm64.zip.blockmap` 和 `latest-mac.yml`，已归档到 `release/v2.2.5/`；核对 app 版本 `2.2.5`、主程序 arm64，`latest-mac.yml` 版本为 `2.2.5`；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；误生成的下一版本号本地产物已清理。当前 2.x 本地归档只保留 `release/v2.2.4/` 和 `release/v2.2.5/`。安装包仍未签名和公证。
 - 2026-06-28：`v2.2.4` 已完成 arm64 打包验证：微信未读读取模板改为连续队列流程，先通过当前微信窗口截图和多模态模型识别红点/红色数字徽标，再按可见未读候选读取最多 5 个会话并重新读取打开后的当前会话可见消息；点击会话可能让微信将该会话标记为已读，但模板仍不读取微信数据库、不调用协议、不 Hook 进程、不自动搜索、不自动粘贴、不自动发送。点击动作会先把视觉模型给出的截图像素坐标按当前窗口尺寸换算为 macOS 窗口点坐标，再依次尝试 WeChat 进程内点击、System Events 全局点击和 JXA/Quartz CGEvent 三种策略，失败时会列出各策略错误。本轮还新增自定义应用运行产物统计/清理入口、产物保留天数和自动清理配置，以及自定义应用回复原样返回/大模型总结的后处理配置。`git diff --check` 通过；`npm test` 通过，130 项测试全部通过；`npm run pack:mac` 通过，最终归档到 `release/v2.2.4/`，包含 `QuarkfanTools-2.2.4-arm64.dmg`、`QuarkfanTools-2.2.4-arm64.zip`、`QuarkfanTools-2.2.4-arm64.zip.blockmap` 和 `latest-mac.yml`；核对 app 版本 `2.2.4`、内置 Vision OCR helper 为 arm64；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；当前 2.x 本地归档只保留 `release/v2.2.3/` 和 `release/v2.2.4/`，已清理 `release/v2.2.2/` 以及 `release/arm64/` 下 2.2.2 旧分发文件。安装包仍未签名和公证。
 - 2026-06-28：`v2.2.2` 已完成 arm64 打包验证：微信桌面辅助模板改为截取当前微信窗口，并通过本地初筛和主进程受控多模态模型识别可见未读；API Key 只留在主进程配置，不传给自定义应用脚本。当前本机已验证 WeChat 可以置前并截取窗口区域，macOS Accessibility 只暴露窗口外壳，窗口截图路径能看到“微信游戏”等可见列表项，因此后续真实未读抽取应依赖多模态模型。`git diff --check` 通过；`npm test` 通过，124 项测试全部通过；`npm run pack:mac` 通过，最终归档到 `release/v2.2.2/`，包含 `QuarkfanTools-2.2.2-arm64.dmg`、`QuarkfanTools-2.2.2-arm64.zip`、`QuarkfanTools-2.2.2-arm64.zip.blockmap` 和 `latest-mac.yml`，构建中间 app 收入 `release/v2.2.2/build-arm64/`；核对 app 版本 `2.2.2`、主程序 arm64、内置 `lark-cli` / `wecom-cli` / Claude runtime / Vision OCR helper 均为 arm64；DMG 已通过 `hdiutil verify`，挂载后确认包含 `QuarkfanTools.app` 和指向 `/Applications` 的快捷方式；当前 2.x 本地归档只保留 `release/v2.2.1/` 和 `release/v2.2.2/`，已清理 `release/v2.2.0/` 以及 `release/arm64/` 下 2.2.0 旧分发文件。安装包仍未签名和公证。

@@ -20,6 +20,7 @@ ln -s /Applications "$STAGING/Applications"
 hdiutil create \
   -volname "QuarkfanTools ${VERSION}" \
   -srcfolder "$STAGING" \
+  -fs HFS+ \
   -ov \
   -format UDZO \
   "$DMG"
