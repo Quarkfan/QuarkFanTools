@@ -11,7 +11,7 @@
 | 模块 | 路径 | 远端 | 状态 |
 | --- | --- | --- | --- |
 | QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，当前指向 `a5346e4` / `v2.2.6` 发布提交。 |
-| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 已迁入 MG 相关设计文档并推送 `main`，当前指向 `276c3c4`。 |
+| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 已迁入 MG 相关设计文档并推送 `main`，当前指向 `0b04bbc`。 |
 
 ## 操作约定
 
@@ -19,6 +19,7 @@
 - Message Gateway 设计和后续实现进入 `Message-Gateway/`。
 - 父项目只提交 `.gitmodules`、子模块 gitlink、顶层导航文档和平台总设计文档。
 - 平台总设计文档在 `docs/`；子模块专属设计文档放在对应子模块内。
+- `docs/platform-reference-matrix.md` 是各中心建模参考矩阵，用于提供开源项目拆解、对照和反例检查，不作为任何中心的强制实现方案。
 - 子模块更新流程：先在子仓库提交并推送，再回到父项目更新 gitlink。
 
 ## 最近验证

@@ -15,6 +15,7 @@ Future centers should be added here as independent repositories and registered i
 
 ## Platform Docs
 
+- [Platform reference matrix](docs/platform-reference-matrix.md)
 - [Platform centers](docs/platform-centers.md)
 - [Cross-center protocols](docs/platform-interface-protocols.md)
 - [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
