@@ -1,49 +1,31 @@
-# QuarkfanTools 协作约定
+# QuarkfanTools Platform 协作约定
 
-本文件用于让任何后续 AI 或开发者不依赖聊天记录即可接续工作。
+本仓库是父项目，只用于管理独立模块，不再直接承载单机版应用代码。
 
 ## 开始工作前
 
-按顺序阅读：
+1. 先确认任务属于哪个模块。
+2. 修改模块内代码或文档时，进入对应子仓库工作：
+   - `QuarkfanTools-Single/`：macOS 单机版应用、打包、发布、历史 tags。
+   - `Message-Gateway/`：Message Gateway 中心设计与后续实现。
+3. 父项目只更新 `.gitmodules`、子模块 gitlink、顶层 README / STATUS / CHANGELOG / AGENTS。
 
-1. `docs/AI.md`
-2. `STATUS.md`
-3. `docs/requirements.md`
-4. 与任务相关的架构、运维、安全或决策文档
-5. 实际代码与测试
+## 边界
 
-文档是导航和当前共识，不替代代码证据。发现文档与代码不一致时，先核实代码和 Git 历史，再同步修正文档。
+- 不要把单机版应用源码重新提交到父项目根目录。
+- 每个中心未来都应是独立仓库，并作为 submodule 纳入父项目。
+- 子模块变更必须先在子仓库提交并推送，再更新父项目 gitlink。
+- 不得提交 API Key、App Secret、Token、用户数据或未脱敏日志。
 
-## 必须保持的边界
+## 验证
 
-- 支持 Apple Silicon 和 Intel macOS。
-- 交付物必须自包含，不能假定用户安装 Git、Node、Python、Office 或其他开发环境。
-- 多机器人凭据、飞书状态、Codex 状态、会话 workspace 和 Skill 权限必须隔离。
-- 一个机器人只能看到明确授权给它的 Skills。
-- 私聊以 chat 为连续会话；群聊以 chat 和发送者组合为连续会话。
-- 收到消息后添加原消息表情，任务结束后移除；不要先发送一条“正在查询”文本。
-- 用户配置、飞书授权与用户 Skills 不得被会话清理误删。
-- 不得把 API Key、App Secret、Token 或用户数据提交到 Git。
+- 父项目没有独立构建命令。
+- 单机版验证在 `QuarkfanTools-Single/` 中执行。
+- Message Gateway 验证在 `Message-Gateway/` 中执行。
+- 父项目常规检查：
 
-## 修改后的文档责任
+```bash
+git submodule status
+git diff --check
+```
 
-任何改变需求、运行结构、配置、数据路径、用户行为或发布方式的修改，都必须在同一提交中更新对应文档：
-
-- 用户可见能力或约束：`docs/requirements.md`
-- 模块、数据流、隔离或会话规则：`docs/architecture.md`
-- 配置、运行、排障、构建或发布：`docs/operations.md`
-- 安全边界和风险：`docs/security.md`
-- 重要技术取舍：`docs/decisions.md`
-- 当前进度、已知问题和下一步：`STATUS.md`
-- 已发布或待发布变更：`CHANGELOG.md`
-- 应用内面向用户的更新记录：`electron/release-notes.ts`
-- 文档入口变化：`docs/AI.md`
-
-## 验证与发布
-
-- 常规验证：`npm test`
-- 打包验证：`npm run pack:mac`
-- 每次形成具体版本号并写入版本记录后，必须在同一轮执行 `npm run pack:mac`，生成并核对 arm64 与 x64 安装包；未打包的变化只能保留在 `Unreleased`。
-- 发布前确认版本号、根 `CHANGELOG.md`、应用内更新记录、`STATUS.md` 与产物名称一致。
-- `release/` 是本地产物目录，不提交到 Git。
-- 当前安装包未签名；不要把“成功打包”等同于“可无提示安装”。

@@ -1,16 +1,11 @@
-node_modules/
-dist/
-dist-electron/
-build/
-release/
-runtime/
-github/
-state/
-bots/
-skills/store-bd-daily-followup/
-skills/*/data/
-.obsidian/
-config/local.json
-*.log
 .DS_Store
+*.log
+
+# Local editor / agent state
 .claude/settings.local.json
+.codex/
+
+# Temporary files
+tmp/
+.tmp/
+

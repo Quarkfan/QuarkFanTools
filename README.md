@@ -1,92 +1,37 @@
-# QuarkfanTools
+# QuarkfanTools Platform
 
-QuarkfanTools 是运行在 macOS 上的本地多 IM Skill Agent。安装包内置 Electron、Claude Agent SDK、飞书 CLI、企业微信 CLI，以及 Word、PowerPoint、Excel 基础 Skills；支持多个相互隔离、可独立启停的机器人。当前正式开放的消息平台是飞书，企业微信因官方能力限制暂时封闭入口。
+This repository is the parent workspace for QuarkfanTools platform modules.
 
-当前版本为 `2.2.6`。应用左下角显示当前版本，点击版本号可查看面向用户的更新记录。产品经理接手请先看 [`docs/PRODUCT_HANDOFF.md`](docs/PRODUCT_HANDOFF.md) 和 [`docs/PRD.md`](docs/PRD.md)；项目接续、需求、架构、运维和安全说明统一从 [`docs/AI.md`](docs/AI.md) 开始阅读。当前开发状态见 [`STATUS.md`](STATUS.md)，开发变更历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+It no longer contains the macOS standalone app source directly. Each major center or product line lives in its own Git repository and is referenced here as a submodule.
 
-## 核心能力
+## Modules
 
-- 后续发布默认提供 Apple Silicon / arm64 macOS 安装包；Intel x64 只作为历史版本兼容样本。
-- 支持配置多个飞书机器人，每个机器人使用独立凭据、HOME、状态与 Claude 工作区，并可在运行台独立启动和停止监听；飞书事件进入 Runtime 后按被艾特 Bot 统一路由。企业微信配置会保留历史值，但当前版本不能启动监听、轮询或投递。
-- 点击运行台中的机器人可查看其独立详细日志，并按信息、成功、警告或错误等级筛选。
-- 每个机器人只能访问明确授权的 Skills；导入或同步的新 Skill 默认不授权，授权区支持搜索和对筛选结果批量操作。
-- 使用内置 `lark-cli event +subscribe` NDJSON 长连接接收飞书事件，异常断线自动重连。
-- 收到消息后先在原消息上添加处理中表情，执行 Skill 并回复最终结果后移除表情。
-- 私聊按机器人与会话保持 24 小时连续上下文；群聊额外按发送者隔离。发送 `/new`、`新对话` 或 `重置会话` 可清空上下文。
-- 图片消息会自动下载并作为多模态输入交给模型；Skill 生成的图片或文件可通过内置 `lark-cli` 回复。
-- Agent 默认可调用当前机器人隔离身份下的 `lark-cli`，用于读取飞书文档、Wiki、云盘及发送媒体消息。
-- 内置 Word、Excel 和强制多模态视觉解析的 PowerPoint Skills，无需手动导入。
-- 每个连续会话使用独立 workspace；存储管理页可查看占用并清理过期或全部会话数据，保留机器人配置、飞书授权和用户 Skills。
-- 本地技能市场展示 Skill 来源和描述，可删除用户导入的 Skill；Git 市场可配置 HTTPS 仓库并由应用内置 Git 客户端同步，无需本机安装 Git。
-- Office 文件由应用内置 ZIP/XML 解析器预处理；不要求用户安装 Office、Python、Node、LibreOffice 或其他命令行环境。
-- PPT 视觉预览调用目标系统自带的 macOS Quick Look 服务，不依赖任何用户安装的软件。
-- 日志记录飞书事件投递延迟和资源、Agent、飞书回复分段耗时，便于判断消息延迟来源。
-- 支持 Bot 态或用户态接收与回复，并可针对单个机器人完成用户态 OAuth。
-- 使用官方 `@anthropic-ai/claude-agent-sdk` 作为 Agent 运行内核。
-- 自动发现用户导入、HTTPS Git 市场和安装包内置 Skills；同名时按用户、市场、内置顺序选择。
-- Skill 可读取和更新自身目录下的 `knowledge/` 内容。
-- GUI 提供按机器人启停、独立日志、Skill 授权、连接配置和会话存储管理；技能市场可按来源和未授权状态筛选。
-- Bot 可配置 Owner；无法解决或需要人工授权时会向 Owner 私聊发送卡片，并将处理结果回复原提问人。
-- 跨会话 Agent 按可配置并发上限运行，超出后排队，避免多人同时提问时无限争抢资源。
-- 消息事件去重，状态和日志保存在本机。
+| Path | Repository | Purpose |
+| --- | --- | --- |
+| `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | Current macOS standalone QuarkfanTools app. It keeps the full historical codebase and all release tags through `v2.2.6`. |
+| `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | Message Gateway center: channel access, Message Hub, Message Store, Sink, RouteBinding, Cursor, Delivery, Trace, and Loop Guard design. |
 
-## 使用
+Future centers should be added here as independent repositories and registered in `.gitmodules`.
 
-1. 打开 QuarkfanTools，进入“配置”。
-2. 填写兼容 Claude Messages API 和工具调用的模型 Base URL、模型名与 API Key。
-3. 按需点击“导入到本地 Skill 市场”，选择包含 `SKILL.md` 的文件夹；也可配置 HTTPS Git Skill 市场。
-4. 新增一个或多个机器人，填写各自 App ID、App Secret、接收/回复身份，并明确勾选允许访问的 Skills。
-5. 保存配置，进入运行台分别启动需要监听的机器人。
-
-导入或同步 Skill 不会自动改变任何机器人的授权。用户态需要针对对应机器人在应用配置页额外完成飞书 OAuth 登录。Bot 态只需要正确配置应用凭据、事件订阅和必要权限。
-
-## Skill 结构
-
-```text
-skills/
-└── example-skill/
-    ├── SKILL.md
-    ├── knowledge/
-    ├── references/
-    └── scripts/
-```
-
-仓库中的魔介问答参考 Skill 拆分为 `skills/moje-qa-assistant-basic/` 和 `skills/moje-qa-assistant-adv/`，仅供开发参考，不会打入安装包。
-
-## 开发
+## Clone
 
 ```bash
-npm install
-npm test
-npm run dev
+git clone --recurse-submodules git@github.com:Quarkfan/QuarkFanTools.git
 ```
 
-`npm run dev` 使用 Vite 热更新。`npm start` 会先构建再启动 Electron；开发服务器不可用时，Electron 会自动加载本地构建页面。
-
-生成 Apple Silicon / arm64 安装包：
+For an existing clone:
 
 ```bash
-npm run pack:mac
+git submodule update --init --recursive
 ```
 
-等价的单独构建命令：
+## Development
 
-```bash
-npm run pack:mac:arm64
-```
+Work inside the module repository that owns the change:
 
-输出位于 `release/arm64/`。
+- Standalone app code, packaging, release tags, and user-facing app behavior belong in `QuarkfanTools-Single/`.
+- Message Gateway contracts and future MG implementation belong in `Message-Gateway/`.
+- This parent repository should only track module references, platform-level navigation, and integration status.
 
-## 本机数据
+When a child module advances, commit and push inside that module first, then update the submodule gitlink in this parent repository.
 
-开发模式下状态保存在项目的 `state/`；打包应用的数据保存在 `~/Library/Application Support/quarkfantools/`。点击“导入到本地 Skill 市场”后，所选文件夹会复制到 `workspace/skills/`，但不会默认授权给任何机器人。首次运行会自动迁移旧版 `~/Library/Application Support/qah/` 中的配置、Skills 和状态；迁移前会先备份旧目录到 `~/Library/Application Support/quarkfantools/backups/legacy-qah-<timestamp>/`，便于升级异常时人工恢复。
-
-每个机器人使用独立目录：
-
-```text
-state/bots/<bot-id>/       # 飞书 CLI、消息去重、Claude 状态
-workspace/bots/<bot-id>/
-└── sessions/<hash>/       # 每个连续对话的隔离 workspace 与授权 Skills
-```
-
-更完整的配置、数据目录、故障排查与发布说明见 [`docs/operations.md`](docs/operations.md)。

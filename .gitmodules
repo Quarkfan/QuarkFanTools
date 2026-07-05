@@ -1,0 +1,6 @@
+[submodule "Message-Gateway"]
+	path = Message-Gateway
+	url = git@github.com:Quarkfan/Message-Gateway.git
+[submodule "QuarkfanTools-Single"]
+	path = QuarkfanTools-Single
+	url = git@github.com:Quarkfan/QuarkfanTools-Single.git
