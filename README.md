@@ -13,6 +13,14 @@ It no longer contains the macOS standalone app source directly. Each major cente
 
 Future centers should be added here as independent repositories and registered in `.gitmodules`.
 
+## Platform Docs
+
+- [Platform centers](docs/platform-centers.md)
+- [Cross-center protocols](docs/platform-interface-protocols.md)
+- [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
+
+Module-specific docs live inside each submodule. Message Gateway-specific design is in [Message-Gateway/docs/message-gateway.md](Message-Gateway/docs/message-gateway.md).
+
 ## Clone
 
 ```bash
@@ -34,4 +42,3 @@ Work inside the module repository that owns the change:
 - This parent repository should only track module references, platform-level navigation, and integration status.
 
 When a child module advances, commit and push inside that module first, then update the submodule gitlink in this parent repository.
-

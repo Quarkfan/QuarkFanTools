@@ -17,7 +17,8 @@
 
 - 单机版开发、测试、打包和发版进入 `QuarkfanTools-Single/`。
 - Message Gateway 设计和后续实现进入 `Message-Gateway/`。
-- 父项目只提交 `.gitmodules`、子模块 gitlink 和顶层导航文档。
+- 父项目只提交 `.gitmodules`、子模块 gitlink、顶层导航文档和平台总设计文档。
+- 平台总设计文档在 `docs/`；子模块专属设计文档放在对应子模块内。
 - 子模块更新流程：先在子仓库提交并推送，再回到父项目更新 gitlink。
 
 ## 最近验证
@@ -25,4 +26,3 @@
 - `QuarkfanTools-Single` 已推送 `main` 和全部历史 tags 到远端。
 - `Message-Gateway` 已推送 `main` 到远端。
 - 父项目 `git diff --check` 通过。
-
