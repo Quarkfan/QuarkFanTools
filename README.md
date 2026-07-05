@@ -47,3 +47,13 @@ Work inside the module repository that owns the change:
 - This parent repository should only track module references, platform-level navigation, and integration status.
 
 When a child module advances, commit and push inside that module first, then update the submodule gitlink in this parent repository.
+
+## New Session Checklist
+
+For a fresh AI or developer session:
+
+1. Read [AGENTS.md](AGENTS.md), then [STATUS.md](STATUS.md).
+2. If the work is platform-level modeling or cross-center design, read [docs/README.md](docs/README.md) and the relevant platform docs.
+3. If the work is product code, packaging, release, or current customer issues, enter `QuarkfanTools-Single/` and read its `AGENTS.md`, `docs/AI.md`, and `STATUS.md`.
+4. If the work is Message Gateway design or implementation, enter `Message-Gateway/` and read its `AGENTS.md`, `STATUS.md`, `docs/message-gateway.md`, and `docs/implementation-blueprint.md`.
+5. If the work uses open source projects as references, read [Reference-Projects/README.md](Reference-Projects/README.md) and keep upstream clones under `Reference-Projects/sources/`.

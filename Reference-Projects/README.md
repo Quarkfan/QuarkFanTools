@@ -85,3 +85,5 @@ The reference matrix is an input to modeling, not a replacement for QuarkfanTool
 Final product and architecture decisions are made by Dean. For work that does not itself decide product direction, repository ownership, release scope, external commitments, or irreversible architecture choices, Codex has independent judgment.
 
 Codex must proactively think, identify risks, compare tradeoffs, suggest alternatives, and recommend low-risk improvements. It should not behave as a purely passive executor when source-level reference reading exposes better modeling options or avoidable architecture risks.
+
+Open source reuse must be evaluated deliberately. A useful upstream project can become a full dependency, a submodule, an adapted component, a model for interfaces or state machines, a test-design reference, or a source of small license-compatible snippets. Do not copy upstream projects wholesale into this repository by default, and do not ignore mature open source implementations when they would reduce risk.

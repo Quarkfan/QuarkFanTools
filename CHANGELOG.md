@@ -9,4 +9,4 @@ This file tracks parent-workspace changes only. Product release history for the 
 - Added `QuarkfanTools-Single/` as a submodule pointing to `git@github.com:Quarkfan/QuarkfanTools-Single.git`.
 - Moved the standalone app source of record to `QuarkfanTools-Single/`, preserving full history and all release tags through `v2.2.6`.
 - Removed standalone app source, build configuration, bundled skills, Electron code, and old product docs from the parent root.
-
+- Added new-session handoff navigation for the parent workspace, Message Gateway, standalone app, and reference-project workspace.
