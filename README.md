@@ -10,6 +10,7 @@ It no longer contains the macOS standalone app source directly. Each major cente
 | --- | --- | --- |
 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | Current macOS standalone QuarkfanTools app. It keeps the full historical codebase and all release tags through `v2.2.6`. |
 | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | Message Gateway center: channel access, Message Hub, Message Store, Sink, RouteBinding, Cursor, Delivery, Trace, and Loop Guard design. |
+| `Reference-Projects/` | Parent repository directory | Local reference-project workspace for source-level evaluation of projects named in the platform reference matrix. Upstream clones live under `Reference-Projects/sources/` and are ignored by Git. |
 
 Future centers should be added here as independent repositories and registered in `.gitmodules`.
 
@@ -21,6 +22,8 @@ Future centers should be added here as independent repositories and registered i
 - [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
 
 Module-specific docs live inside each submodule. Message Gateway-specific design is in [Message-Gateway/docs/message-gateway.md](Message-Gateway/docs/message-gateway.md).
+
+Reference project evaluation guidance lives in [Reference-Projects/README.md](Reference-Projects/README.md).
 
 ## Clone
 
@@ -40,6 +43,7 @@ Work inside the module repository that owns the change:
 
 - Standalone app code, packaging, release tags, and user-facing app behavior belong in `QuarkfanTools-Single/`.
 - Message Gateway contracts and future MG implementation belong in `Message-Gateway/`.
+- Source-level reference analysis belongs in `Reference-Projects/`; do not commit cloned upstream source there.
 - This parent repository should only track module references, platform-level navigation, and integration status.
 
 When a child module advances, commit and push inside that module first, then update the submodule gitlink in this parent repository.

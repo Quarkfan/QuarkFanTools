@@ -1,0 +1,7 @@
+# Local upstream clones. Keep source reading local unless a project is
+# deliberately added as a managed dependency or submodule.
+sources/
+
+# Keep our own evaluation notes tracked.
+!evaluations/
+!evaluations/**

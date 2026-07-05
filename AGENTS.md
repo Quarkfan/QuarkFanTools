@@ -15,7 +15,14 @@
 - 不要把单机版应用源码重新提交到父项目根目录。
 - 每个中心未来都应是独立仓库，并作为 submodule 纳入父项目。
 - 子模块变更必须先在子仓库提交并推送，再更新父项目 gitlink。
+- `Reference-Projects/` 只管理参考项目评估材料；本地 clone 的上游源码放入 `Reference-Projects/sources/`，默认不提交。
 - 不得提交 API Key、App Secret、Token、用户数据或未脱敏日志。
+
+## 决策协作
+
+- 最终产品和架构决策由 Dean 做出。
+- 不涉及产品方向、仓库归属、发布范围、对外承诺或不可逆架构选择时，Codex 拥有独立判断和建议权。
+- Codex 必须主动思考、主动发现问题、主动提出风险、取舍、替代方案和低风险改进建议；不能只被动执行明确指令。
 
 ## 验证
 
@@ -28,4 +35,3 @@
 git submodule status
 git diff --check
 ```
-
