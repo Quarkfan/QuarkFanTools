@@ -11,8 +11,8 @@
 | 模块 | 路径 | 远端 | 状态 |
 | --- | --- | --- | --- |
 | QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，当前指向 `9193f38`，保留 `v2.2.6` 发布标签。 |
-| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 已迁入 MG 相关设计文档并推送 `main`，当前指向 `7e9e92c`。 |
-| Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
+| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 已迁入 MG 相关设计文档并推送 `main`，当前指向 `59532ab`。 |
+| Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 Chatwoot / Synapse 第一轮 MG 评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
 
