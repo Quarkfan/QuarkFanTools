@@ -22,7 +22,7 @@ Future centers should be added here as independent repositories and registered i
 - [Cross-center protocols](docs/platform-interface-protocols.md)
 - [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
 
-Module-specific docs live inside each submodule. Message Gateway-specific design is in [Message-Gateway/docs/message-gateway.md](Message-Gateway/docs/message-gateway.md). Context Hub-specific design is in [Context-Hub/docs/context-hub.md](Context-Hub/docs/context-hub.md).
+Module-specific docs live inside each submodule. Message Gateway-specific design is in [Message-Gateway/docs/message-gateway.md](Message-Gateway/docs/message-gateway.md). Context Hub-specific design is in [Context-Hub/docs/context-hub.md](Context-Hub/docs/context-hub.md), with implementation blueprint in [Context-Hub/docs/implementation-blueprint.md](Context-Hub/docs/implementation-blueprint.md).
 
 Reference project evaluation guidance lives in [Reference-Projects/README.md](Reference-Projects/README.md).
 
@@ -58,5 +58,5 @@ For a fresh AI or developer session:
 2. If the work is platform-level modeling or cross-center design, read [docs/README.md](docs/README.md) and the relevant platform docs.
 3. If the work is product code, packaging, release, or current customer issues, enter `QuarkfanTools-Single/` and read its `AGENTS.md`, `docs/AI.md`, and `STATUS.md`.
 4. If the work is Message Gateway design or implementation, enter `Message-Gateway/` and read its `AGENTS.md`, `STATUS.md`, `docs/message-gateway.md`, and `docs/implementation-blueprint.md`.
-5. If the work is Context Hub design or implementation, enter `Context-Hub/` and read its `AGENTS.md`, `STATUS.md`, and `docs/context-hub.md`.
+5. If the work is Context Hub design or implementation, enter `Context-Hub/` and read its `AGENTS.md`, `STATUS.md`, `docs/context-hub.md`, and `docs/implementation-blueprint.md`.
 6. If the work uses open source projects as references, read [Reference-Projects/README.md](Reference-Projects/README.md) and keep upstream clones under `Reference-Projects/sources/`.

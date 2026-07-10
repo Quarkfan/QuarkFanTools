@@ -12,3 +12,4 @@ This file tracks parent-workspace changes only. Product release history for the 
 - Added new-session handoff navigation for the parent workspace, Message Gateway, standalone app, and reference-project workspace.
 - Renamed the former Knowledge Center concept to Context Hub (CH), adding a first design for knowledge, RAG, short/mid/long-term memory, freshness, and context governance.
 - Split Context Hub into `Context-Hub/` as an independent module directory with its own handoff docs and future remote `git@github.com:Quarkfan/Context-Hub.git`.
+- Added Context Hub implementation blueprint covering P0 contracts, storage, APIs, memory governance, retrieval, cleanup, tests, and migration.
