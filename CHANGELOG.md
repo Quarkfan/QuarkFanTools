@@ -11,3 +11,4 @@ This file tracks parent-workspace changes only. Product release history for the 
 - Removed standalone app source, build configuration, bundled skills, Electron code, and old product docs from the parent root.
 - Added new-session handoff navigation for the parent workspace, Message Gateway, standalone app, and reference-project workspace.
 - Renamed the former Knowledge Center concept to Context Hub (CH), adding a first design for knowledge, RAG, short/mid/long-term memory, freshness, and context governance.
+- Split Context Hub into `Context-Hub/` as an independent module directory with its own handoff docs and future remote `git@github.com:Quarkfan/Context-Hub.git`.

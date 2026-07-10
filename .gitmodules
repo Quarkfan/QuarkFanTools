@@ -4,3 +4,6 @@
 [submodule "QuarkfanTools-Single"]
 	path = QuarkfanTools-Single
 	url = git@github.com:Quarkfan/QuarkfanTools-Single.git
+[submodule "Context-Hub"]
+	path = Context-Hub
+	url = git@github.com:Quarkfan/Context-Hub.git

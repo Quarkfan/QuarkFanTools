@@ -52,7 +52,7 @@ QuarkfanTools 从“飞书 Bot + Claude Code Skill Agent”演进为本机 Agent
 
 ### 2.2 Context Hub（CH，上下文中心）
 
-专门设计见 [`context-hub.md`](context-hub.md)。
+专门设计见 [`../Context-Hub/docs/context-hub.md`](../Context-Hub/docs/context-hub.md)。
 
 职责：
 
