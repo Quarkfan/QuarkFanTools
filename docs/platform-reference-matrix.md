@@ -11,7 +11,7 @@
 QuarkfanTools 后续将由八个独立中心组成：
 
 1. Message Gateway，消息网关
-2. 知识中心
+2. Context Hub（CH，上下文中心）
 3. 模型中心
 4. 工具与能力中心
 5. 运行时中心
@@ -39,7 +39,7 @@ quarkfan-platform-protocol
 ```text
 Message DTO
 Runtime DTO
-Knowledge DTO
+Context DTO
 Capability DTO
 Model DTO
 Governance DTO
@@ -85,7 +85,7 @@ Trace Context
 |**中心**|**主参考**|**子能力参考**|**主要借鉴点**|**明确不照搬**|
 |---|---|---|---|---|
 |Message Gateway|Chatwoot|Matrix / Synapse、OpenClaw、Mattermost|多通道接入、会话、消息、收件箱、联系人、投递|客服工单、CRM、坐席体系|
-|知识中心|AnythingLLM|Open WebUI、Dify、LlamaIndex、LangChain、Haystack|文档接入、知识库、RAG、索引、召回、workspace|完整聊天产品、应用市场|
+|Context Hub（CH）|AnythingLLM|Open WebUI、Dify、LlamaIndex、LangChain、Haystack、Mem0/OpenMemory、Letta、Zep/Graphiti、LangGraph/LangMem|文档接入、知识库、RAG、索引、召回、workspace、短期/中期/长期记忆、事实沉淀、记忆遗忘|完整聊天产品、应用市场、自动无治理写入长期记忆|
 |模型中心|LiteLLM|Open WebUI、Dify、Ollama、vLLM、LM Studio|Provider、Router、Fallback、Quota、Cost、Key 管理|Agent runtime、session、workspace|
 |工具与能力中心|MCP|Dify Plugin、Open WebUI Pipelines、LangChain Tools、Composio|工具协议、能力声明、插件、外部系统连接|发现即信任、直接暴露全部工具|
 |运行时中心|OpenHands|Claude Code、Aider、Open Interpreter、Anthropic Sandbox Runtime|sandbox、workspace、session、event stream、工具执行|只做 coding agent|
@@ -190,56 +190,68 @@ MG 不直接持有 runtime session
 
 ---
 
-# **5. 知识中心参考规划**
+# **5. Context Hub（CH）参考规划**
 
 ## **5.1 中心定位**
 
-知识中心负责知识源、知识索引、知识召回和知识权限范围。它不负责最终回复，也不直接执行工具。
+Context Hub 负责上下文源、知识索引、上下文召回、记忆分层和权限范围。它不负责最终回复，也不直接执行工具。知识库是 CH 的一部分；短期记忆、中期记忆和长期记忆也是 CH 的核心职责。
 
-AnythingLLM 适合作为主参考，因为它强调本地优先，文档、聊天、模型等可本地存储；同时支持文档接入、向量数据库和 document pipelines。([AnythingLLM](https://anythingllm.com/?utm_source=chatgpt.com))
+AnythingLLM 适合作为知识与本地优先主参考，因为它强调本地优先，文档、聊天、模型等可本地存储；同时支持文档接入、向量数据库和 document pipelines。([AnythingLLM](https://anythingllm.com/?utm_source=chatgpt.com))
 
-Open WebUI 也适合作为辅助参考，它定位为可离线运行的自托管 AI 平台，并内置 RAG inference engine。([GitHub](https://github.com/open-webui/open-webui?utm_source=chatgpt.com))
+Open WebUI 也适合作为知识权限和 RAG 辅助参考，它定位为可离线运行的自托管 AI 平台，并内置 RAG inference engine。([GitHub](https://github.com/open-webui/open-webui?utm_source=chatgpt.com))
+
+记忆方向需要补充第二批源码级参考：Mem0 / OpenMemory、Letta、Zep / Graphiti、LangGraph / LangMem。它们用于参考用户记忆、agent memory、temporal graph memory、checkpoint memory 和长期存储命名空间。
 
 ## **5.2 子能力参考矩阵**
 
 |**子能力**|**参考项目**|**参考内容**|**QuarkfanTools 中的落点**|
 |---|---|---|---|
-|本地知识库|AnythingLLM|workspace、documents、vector DB|KnowledgeCollection|
+|本地知识库|AnythingLLM|workspace、documents、vector DB|ContextCollection|
 |文档管道|AnythingLLM|document pipeline|DocumentIngestionPipeline|
-|RAG 召回|Open WebUI|RAG engine、knowledge|KnowledgeRetriever|
-|知识源连接器|Dify / AnythingLLM|connectors、dataset source|KnowledgeSourceAdapter|
-|索引框架|LlamaIndex|document、node、index、retriever|KnowledgeIndex、KnowledgeChunk|
+|RAG 召回|Open WebUI|RAG engine、knowledge|ContextRetriever|
+|知识源连接器|Dify / AnythingLLM|connectors、dataset source|ContextSourceAdapter|
+|索引框架|LlamaIndex|document、node、index、retriever|ContextIndex、ContextChunk|
 |通用检索链路|LangChain|retriever、document loader|RetrieverAdapter|
 |企业检索|Haystack|pipeline、retriever、ranker|RetrievalPipeline|
-|freshness / 快照|自研为主|version、snapshot、mtime|KnowledgeSnapshot|
+|短期记忆|LangGraph / LangMem|checkpoint、thread state、memory store|ShortTermContext|
+|中期记忆|Mem0 / OpenMemory|memory extraction、scoring、user memory|ContextMemoryCandidate|
+|长期记忆|Letta、Zep / Graphiti|archival memory、entity、relationship、temporal fact|LongTermMemory、ContextGraph|
+|freshness / 快照|自研为主|version、snapshot、mtime|ContextSnapshot|
 
 ## **5.3 推荐领域对象**
 
 ```text
-KnowledgeSource
-KnowledgeCollection
-KnowledgeDocument
-KnowledgeChunk
-KnowledgeIndex
-KnowledgeRetriever
-KnowledgeRetrieveRequest
-KnowledgeRetrieveResult
-KnowledgeSnapshot
-KnowledgeFreshnessKey
-KnowledgePermissionScope
-KnowledgeAuditRecord
+ContextSource
+ContextCollection
+ContextDocument
+ContextChunk
+ContextIndex
+ContextRetriever
+ContextRetrieveRequest
+ContextRetrieveResult
+ContextMemory
+ContextFreshnessKey
+ContextPermissionScope
+ContextAuditRecord
 ```
 
 ## **5.4 首批接口**
 
 ```ts
-interface KnowledgeSourceAdapter {
-  listDocuments(request: ListKnowledgeDocumentsRequest): Promise<KnowledgeDocument[]>
-  fetchDocument(documentId: string): Promise<KnowledgeDocumentContent>
+interface ContextSourceAdapter {
+  list(request: ContextSourceListRequest): Promise<ContextSourceItem[]>
+  fetch(request: ContextFetchRequest): Promise<ContextSourceContent>
+  freshness(request: ContextFreshnessRequest): Promise<ContextFreshness>
 }
 
-interface KnowledgeRetriever {
-  retrieve(request: KnowledgeRetrieveRequest): Promise<KnowledgeRetrieveResult[]>
+interface ContextRetriever {
+  retrieve(request: ContextRetrieveRequest): Promise<ContextRetrieveResult>
+}
+
+interface ContextMemoryWriter {
+  propose(request: MemoryProposeRequest): Promise<MemoryCandidate[]>
+  confirm(request: MemoryConfirmRequest): Promise<ContextMemory>
+  forget(request: MemoryForgetRequest): Promise<void>
 }
 ```
 
@@ -260,23 +272,25 @@ freshness key
 ## **5.6 禁止事项**
 
 ```text
-知识中心不直接回复用户
-知识中心不执行工具
-知识中心不绕过治理读取文档
-知识中心不直接操作 runtime workspace
-知识中心不把所有文件缓存都纳入自己管理
+CH 不直接回复用户
+CH 不执行工具
+CH 不绕过治理读取上下文或写入长期记忆
+CH 不直接操作 runtime workspace
+CH 不把所有文件缓存、日志、transcript 都纳入自己管理
+CH 不允许模型自动无治理写入长期记忆
 ```
 
 ## **5.7 推进优先级**
 
 |**优先级**|**内容**|
 |---|---|
-|P0|KnowledgeSource、KnowledgeDocument、KnowledgeChunk|
+|P0|ContextSource、ContextRecord、ContextMemory、ContextRetrieveResult|
 |P1|Skill knowledge 统一接入|
 |P1|飞书文档统一接入|
+|P1|短期 / 中期记忆候选|
 |P2|本地文件知识库|
 |P2|召回结果审计|
-|P3|向量库、rerank、知识图谱|
+|P3|向量库、rerank、知识图谱、长期记忆图谱|
 
 ---
 
@@ -538,7 +552,7 @@ RuntimeCancelled
 
 ## **9.1 中心定位**
 
-资源中心管理平台运行过程中产生和消耗的本地资源，不等于知识中心，也不等于聊天历史中心。
+资源中心管理平台运行过程中产生和消耗的本地资源，不等于 CH，也不等于聊天历史中心或记忆中心。
 
 AnythingLLM 和 Open WebUI 都可以作为本地化资源组织参考。AnythingLLM 强调 local by default，模型、文档、聊天等都可以存储在本地桌面。([AnythingLLM](https://anythingllm.com/?utm_source=chatgpt.com)) Open WebUI 则强调自托管、可离线运行。([GitHub](https://github.com/open-webui/open-webui?utm_source=chatgpt.com))
 
@@ -848,7 +862,7 @@ flowchart LR
     B --> C[治理与安全中心]
     C --> D[运行时中心]
     D --> E[模型中心]
-    D --> F[知识中心]
+    D --> F[Context Hub]
     D --> G[工具与能力中心]
     D --> H[资源中心]
     D --> B
@@ -867,15 +881,15 @@ flowchart LR
     RT --> GOV
 ```
 
-## **12.3 知识召回链路**
+## **12.3 上下文召回链路**
 
 ```mermaid
 flowchart LR
-    RT[运行时中心] --> KNOW[知识中心]
-    KNOW --> GOV[治理与安全中心]
-    GOV --> KNOW
-    KNOW --> RT
-    KNOW --> RES[资源中心]
+    RT[运行时中心] --> CH[Context Hub]
+    CH --> GOV[治理与安全中心]
+    GOV --> CH
+    CH --> RT
+    CH --> RES[资源中心]
 ```
 
 ## **12.4 长任务链路**
@@ -913,7 +927,7 @@ flowchart LR
 
 |**顺序**|**中心**|**原因**|
 |---|---|---|
-|6|知识中心|等权限和 runtime 边界稳定后再统一 RAG 更稳|
+|6|Context Hub|等权限和 runtime 边界稳定后再统一 RAG、记忆和上下文治理更稳|
 |7|资源中心|日志、缓存、排障包和清理策略可逐步下沉|
 |8|系统与编排中心|先收敛 task，再逐步引入 FlowEngine|
 
@@ -924,7 +938,7 @@ flowchart LR
 |**中心**|**首批交付物**|
 |---|---|
 |Message Gateway|Message、Conversation、Channel、Cursor、Delivery|
-|知识中心|KnowledgeSource、KnowledgeDocument、KnowledgeRetriever|
+|Context Hub|ContextSource、ContextRecord、ContextRetriever、ContextMemoryWriter|
 |模型中心|ModelProvider、ModelDeployment、ModelRouter|
 |工具与能力中心|CapabilityManifest、CapabilityRegistry、CapabilityBinding|
 |运行时中心|AgentRuntime、RuntimeContext、RuntimeEvent|

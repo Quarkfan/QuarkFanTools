@@ -78,7 +78,7 @@ Message Gateway references already evaluated:
 - Mattermost: channel, thread, post, group collaboration message shape.
 - GitHub Webhook / Slack Events: event envelope, signature verification, retry, idempotency.
 
-Knowledge Center references currently cloned for source-level evaluation:
+Context Hub references currently cloned for source-level evaluation:
 
 - AnythingLLM: local-first workspace, documents, vector DB, document pipeline.
 - Open WebUI: knowledge model, RAG/retrieval, access grants, knowledge tools.
@@ -87,7 +87,7 @@ Knowledge Center references currently cloned for source-level evaluation:
 
 Tracked first-pass notes:
 
-- `evaluations/knowledge-center/anythingllm-openwebui-dify-llamaindex-first-pass.md`
+- `evaluations/context-hub/anythingllm-openwebui-dify-llamaindex-first-pass.md`
 
 The reference matrix is an input to modeling, not a replacement for QuarkfanTools decisions.
 

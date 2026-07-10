@@ -282,7 +282,7 @@ Linux 服务端影响：
 | 中心 | Linux 迁移重点 |
 | --- | --- |
 | Message Gateway（MG，消息网关） | 从本机 CLI 长连接逐步支持 OpenAPI / Webhook；事件入队服务化 |
-| 知识中心 | 从本机文件缓存演进为服务端缓存、对象存储、RAG 索引和权限过滤 |
+| Context Hub（CH，上下文中心） | 从本机文件缓存和会话摘要演进为服务端缓存、对象存储、RAG 索引、短期/中期/长期记忆和权限过滤 |
 | 模型中心 | 服务端集中管理 Provider、限流、额度、计费和失败切换 |
 | 工具与能力中心 | 自定义应用、MCP、Skill 从本机目录迁移为受管资源和版本化包 |
 | 运行时中心 | 抽象 `AgentRuntime`，区分 Darwin / Linux Runtime，明确工具能力差异 |

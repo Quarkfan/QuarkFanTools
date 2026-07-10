@@ -164,11 +164,11 @@ interface PlatformEvent {
 | `CreateTaskFromMessage` | Message Gateway（MG，消息网关） | 调度与系统基础中心 | 入队并获得任务生命周期 |
 | `CheckPolicy` | 任意中心 | 治理与安全中心 | 判断某动作是否允许 |
 | `ResolveCapabilities` | 运行时 / 调度 | 工具与能力中心 | 获取当前 Bot 可见且可绑定的能力 |
-| `RetrieveKnowledge` | 运行时 / 工具 | 知识中心 | 获取带来源和权限的知识结果 |
-| `SelectModel` | 运行时 / 后处理 / 知识 | 模型中心 | 获取模型调用候选和失败切换计划 |
+| `RetrieveContext` | 运行时 / 工具 | Context Hub（CH，上下文中心） | 获取带来源、权限、freshness 和记忆层级的上下文结果；`RetrieveKnowledge` 作为兼容别名 |
+| `SelectModel` | 运行时 / 后处理 / CH | 模型中心 | 获取模型调用候选和失败切换计划 |
 | `RunAgent` | 调度 / MG | 运行时中心 | 执行一次 Agent 任务 |
 | `RunCapability` | 运行时 / 调度 / 命令 | 工具与能力中心 | 执行 Skill、MCP、套件、Workflow 或应用 |
-| `MaterializeResource` | 知识 / 运行时 / 工具 | 资源中心 | 物化缓存文件、workspace 文件或诊断附件 |
+| `MaterializeResource` | CH / 运行时 / 工具 | 资源中心 | 物化缓存文件、workspace 文件或诊断附件 |
 | `RecordAudit` | 任意中心 | 治理与安全中心 / 资源中心 | 写入授权、能力执行和敏感数据审计 |
 | `DeliverResult` | MG / 工具 | Message Gateway（MG，消息网关） | 把最终结果或受控投递发回 IM |
 | `ExportDiagnostics` | UI / 用户 | 资源中心 | 生成脱敏排障包 |
@@ -484,43 +484,56 @@ interface PolicyObligation {
 - `allow` 不代表永久授权，只对当前 `requestId` / `correlationId` 和上下文有效。
 - `require-owner-approval` 必须返回可恢复的 pending 状态，不能假装失败后静默。
 
-### 5.4 知识召回协议
+### 5.4 CH 上下文召回协议
 
 ```ts
-interface KnowledgeRetrieveRequest {
+interface ContextRetrieveRequest {
   query: string;
   botId: string;
   conversationKey?: string;
-  sources: KnowledgeSourceSelector[];
+  sources: ContextSourceSelector[];
+  memoryTiers?: Array<"short-term" | "mid-term" | "long-term">;
   maxResults: number;
-  freshness?: "latest" | "cached-ok" | "snapshot";
+  freshness?: "fresh-only" | "allow-stale-marked" | "snapshot";
 }
 
-interface KnowledgeRecord {
+interface ContextRecord {
   recordId: string;
-  source: "skill" | "lark-doc" | "lark-drive" | "wiki" | "local-rag" | "external";
+  source:
+    | "skill-knowledge"
+    | "lark-doc"
+    | "lark-drive"
+    | "wiki"
+    | "local-rag"
+    | "memory"
+    | "conversation-summary"
+    | "external";
+  type: "document" | "chunk" | "summary" | "memory" | "preference" | "fact" | "entity" | "relationship";
   title: string;
   summary: string;
   contentRef?: string;
   freshnessKey?: string;
   updatedAt?: string;
+  memoryTier?: "short-term" | "mid-term" | "long-term";
+  confidence?: number;
   authorizedForBotId: string;
   auditRef: string;
-  confidence?: number;
 }
 
-interface KnowledgeRetrieveResult {
-  records: KnowledgeRecord[];
+interface ContextRetrieveResult {
+  records: ContextRecord[];
   missingPermissions: PolicyObjectRef[];
-  staleRecords: KnowledgeRecord[];
+  staleRecords: ContextRecord[];
+  memoryCandidates?: ContextRecord[];
 }
 ```
 
 规则：
 
-- 知识中心返回召回结果，不直接修改 runtime prompt。
-- 召回前必须由治理中心确认 Bot 对知识源的访问权。
+- CH 返回上下文召回结果，不直接修改 runtime prompt。
+- 召回前必须由治理中心确认 Bot 对上下文源和记忆层级的访问权。
 - 大文件或云文档必须通过资源中心物化为受控引用，不能直接给 runtime 全局缓存路径。
+- 长期记忆写入不能由模型输出直接落库，必须先进入候选、确认或策略判定流程。
 
 ### 5.5 模型选择协议
 
@@ -562,7 +575,7 @@ interface AgentRuntimeRequest {
   conversationKey?: string;
   input: RuntimeInput;
   modelPlan?: ModelAttemptPlan;
-  knowledge?: KnowledgeRecord[];
+  context?: ContextRecord[];
   capabilities?: RuntimeCapabilityBinding[];
   workspacePolicy: WorkspacePolicy;
   progressMode: "silent" | "local-log" | "user-visible";
@@ -655,7 +668,7 @@ interface MaterializeResourceRequest {
 4. 调度中心调用治理中心 `CheckPolicy(action=run-agent)`。
 5. 运行时中心请求模型中心 `SelectModel(purpose=agent)`。
 6. 运行时中心请求工具中心 `ResolveCapabilities(trigger=agent)`。
-7. 运行时中心按需请求知识中心 `RetrieveKnowledge`。
+7. 运行时中心按需请求 CH `RetrieveContext`。
 8. 运行时中心执行 `RunAgent`，输出统一 `AgentRuntimeResult`。
 9. Message Gateway（MG，消息网关）执行 `DeliverResult`；资源中心记录日志和会话事件。
 
@@ -668,14 +681,14 @@ interface MaterializeResourceRequest {
 5. 结果写入定时任务运行历史；如果配置投递 chat，则 MG 执行投递。
 6. 手动执行不扰动原自动计划的 `nextRunAt`，除非用户显式修改任务定义。
 
-### 6.3 知识增强问答
+### 6.3 上下文增强问答
 
-1. 运行时中心根据任务上下文向知识中心发起 `RetrieveKnowledge`。
-2. 知识中心对每个候选知识源调用治理中心做授权判定。
-3. 知识中心必要时调用资源中心物化受控文件或缓存引用。
-4. 知识中心返回 `KnowledgeRecord[]`，包含来源、权限、freshness、审计引用。
-5. 运行时中心把知识结果转换成当前 runtime 的上下文格式。
-6. 最终回复中可附带知识来源摘要；详细来源写入资源中心和审计记录。
+1. 运行时中心根据任务上下文向 CH 发起 `RetrieveContext`。
+2. CH 对每个候选上下文源和记忆层级调用治理中心做授权判定。
+3. CH 必要时调用资源中心物化受控文件或缓存引用。
+4. CH 返回 `ContextRecord[]`，包含来源、权限、freshness、记忆层级、置信度和审计引用。
+5. 运行时中心把上下文结果转换成当前 runtime 的上下文格式。
+6. 最终回复中可附带上下文来源摘要；详细来源写入资源中心和审计记录。
 
 ### 6.4 自定义应用受控投递
 

@@ -5,6 +5,7 @@ These documents describe the parent platform and cross-module boundaries.
 - Start a new platform session from `../AGENTS.md` and `../STATUS.md`.
 - `platform-reference-matrix.md`: reference matrix for center modeling. It is a design input and comparison checklist, not an implementation mandate.
 - `platform-centers.md`: platform center boundaries.
+- `context-hub.md`: Context Hub (CH) design for knowledge, RAG, short/mid/long-term memory, freshness, and context governance.
 - `platform-interface-protocols.md`: cross-center request, response, error, audit, and protocol contracts.
 - `macos-linux-portability.md`: current macOS assumptions and future Linux/server blueprint.
 
