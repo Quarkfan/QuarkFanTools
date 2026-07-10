@@ -71,12 +71,23 @@ Use one note per reference project or per focused capability:
 
 ## Current Priority
 
-Start with Message Gateway references:
+Message Gateway references already evaluated:
 
 - Chatwoot: multi-channel, inbox/channel/conversation, contact binding, outbound delivery.
 - Matrix / Synapse: event, room, timeline, pagination, sync token, cursor thinking.
 - Mattermost: channel, thread, post, group collaboration message shape.
 - GitHub Webhook / Slack Events: event envelope, signature verification, retry, idempotency.
+
+Knowledge Center references currently cloned for source-level evaluation:
+
+- AnythingLLM: local-first workspace, documents, vector DB, document pipeline.
+- Open WebUI: knowledge model, RAG/retrieval, access grants, knowledge tools.
+- Dify: dataset/knowledge configuration, ingestion/retrieval DTOs, metadata filtering, reranking.
+- LlamaIndex: Document/Node/Index/Retriever abstractions.
+
+Tracked first-pass notes:
+
+- `evaluations/knowledge-center/anythingllm-openwebui-dify-llamaindex-first-pass.md`
 
 The reference matrix is an input to modeling, not a replacement for QuarkfanTools decisions.
 
