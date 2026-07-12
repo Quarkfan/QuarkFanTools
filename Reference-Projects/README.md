@@ -89,6 +89,18 @@ Tracked first-pass notes:
 
 - `evaluations/context-hub/anythingllm-openwebui-dify-llamaindex-first-pass.md`
 
+Model Center references currently cloned for source-level evaluation:
+
+- LiteLLM: provider abstraction, routing, fallback, cooldown, budget, spend, virtual key and management APIs.
+- Ollama: local model list/pull/run/status, OpenAI-compatible local adapter, process visibility.
+- vLLM: self-hosted OpenAI-compatible serving, scheduler capacity, metrics and deployment config.
+- Open WebUI: model config UI, model access grants, OpenAI-compatible provider proxying.
+- Dify: provider/model status, credential configuration, load balancing, model type separation.
+
+Tracked first-pass notes:
+
+- `evaluations/model-center/litellm-ollama-vllm-openwebui-dify-first-pass.md`
+
 The reference matrix is an input to modeling, not a replacement for QuarkfanTools decisions.
 
 ## Collaboration Rule
