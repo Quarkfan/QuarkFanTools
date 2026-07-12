@@ -163,12 +163,12 @@ interface PlatformEvent {
 | `channels logs` | UI / 资源 / 排障包 | Message Gateway（MG，消息网关） | 查看按 Bot / channel / account / instance 切片的脱敏日志 |
 | `CreateTaskFromMessage` | Message Gateway（MG，消息网关） | 调度与系统基础中心 | 入队并获得任务生命周期 |
 | `CheckPolicy` | 任意中心 | 治理与安全中心 | 判断某动作是否允许 |
-| `ResolveCapabilities` | 运行时 / 调度 | 工具与能力中心 | 获取当前 Bot 可见且可绑定的能力 |
+| `ResolveCapabilities` | 运行时 / 调度 | Capability Registry（CR，能力注册中心） | 获取当前 Bot 可见且可绑定的能力 |
 | `RetrieveContext` | 运行时 / 工具 | Context Hub（CH，上下文中心） | 获取带来源、权限、freshness 和记忆层级的上下文结果；`RetrieveKnowledge` 作为兼容别名 |
 | `SelectModel` | 运行时 / 后处理 / CH / 工具 | Model Hub（MH，模型枢纽） | 获取模型调用候选和失败切换计划 |
-| `ListModelCapabilityExports` | 工具与能力中心 / UI | Model Hub（MH，模型枢纽） | 获取可封装为工具的模型能力 |
+| `ListModelCapabilityExports` | CR / UI | Model Hub（MH，模型枢纽） | 获取可封装为能力的模型能力 |
 | `RunAgent` | 调度 / MG | 运行时中心 | 执行一次 Agent 任务 |
-| `RunCapability` | 运行时 / 调度 / 命令 | 工具与能力中心 | 执行 Skill、MCP、套件、Workflow 或应用 |
+| `RunCapability` | 运行时 / 调度 / 命令 | Capability Registry（CR，能力注册中心） | 解析 Skill、MCP、套件、Workflow 或应用的能力绑定；实际执行由运行时或编排中心完成 |
 | `MaterializeResource` | CH / 运行时 / 工具 | 资源中心 | 物化缓存文件、workspace 文件或诊断附件 |
 | `RecordAudit` | 任意中心 | 治理与安全中心 / 资源中心 | 写入授权、能力执行和敏感数据审计 |
 | `DeliverResult` | MG / 工具 | Message Gateway（MG，消息网关） | 把最终结果或受控投递发回 IM |
@@ -592,7 +592,7 @@ interface ModelAttempt {
 - MH 只输出候选和尝试顺序，不执行 Agent。
 - `secretRef` 只能被主进程模型调用层解析，不能传给自定义应用、Skill 或 runtime workspace。
 - runtime 选择和 model provider 选择必须保持两个字段，不得混用。
-- 工具中心可以基于 MH 的 `ModelCapabilityExport` 封装工具，但工具授权、工具展示和工作流编排不属于 MH。
+- CR 可以基于 MH 的 `ModelCapabilityExport` 登记能力，但能力授权、能力展示和工作流编排不属于 MH。
 
 ### 5.6 运行时协议
 
@@ -625,7 +625,7 @@ interface AgentRuntimeResult {
 - 不同 runtime 必须声明能力差异，例如是否支持工具、MCP、Bash、session resume、文件写入、流式事件。
 - `QFT_NO_REPLY` 这类 runtime 专属约定应被转换成统一 `noReply`。
 
-### 5.7 工具与能力协议
+### 5.7 Capability Registry 协议
 
 ```ts
 interface CapabilityResolveRequest {
@@ -654,7 +654,7 @@ interface CapabilityRunRequest {
 
 规则：
 
-- 工具中心输出能力绑定前必须带上治理判定结果。
+- CR 输出能力绑定前必须带上治理判定结果。
 - 自定义应用的 `deliveries` 仍只是投递请求，必须交回 MG 二次校验。
 - Workflow 每一步都要继承同一个 `correlationId`，但每步有自己的 `requestId`。
 
@@ -696,7 +696,7 @@ interface MaterializeResourceRequest {
 3. Message Gateway（MG，消息网关）调用调度中心 `CreateTaskFromMessage`。
 4. 调度中心调用治理中心 `CheckPolicy(action=run-agent)`。
 5. 运行时中心请求 MH `SelectModel(purpose=agent)`。
-6. 运行时中心请求工具中心 `ResolveCapabilities(trigger=agent)`。
+6. 运行时中心请求 CR `ResolveCapabilities(trigger=agent)`。
 7. 运行时中心按需请求 CH `RetrieveContext`。
 8. 运行时中心执行 `RunAgent`，输出统一 `AgentRuntimeResult`。
 9. Message Gateway（MG，消息网关）执行 `DeliverResult`；资源中心记录日志和会话事件。
@@ -706,7 +706,7 @@ interface MaterializeResourceRequest {
 1. UI 请求调度中心执行已保存任务。
 2. 调度中心读取任务定义和运行态，创建 `PlatformTaskRequest(taskKind=manual)`。
 3. 调度中心调用治理中心确认目标 capability / command / agent 是否允许定时或手动执行。
-4. 若目标是 Agent，进入运行时协议；若目标是 capability，进入工具与能力协议。
+4. 若目标是 Agent，进入运行时协议；若目标是 capability，进入 Capability Registry 协议。
 5. 结果写入定时任务运行历史；如果配置投递 chat，则 MG 执行投递。
 6. 手动执行不扰动原自动计划的 `nextRunAt`，除非用户显式修改任务定义。
 
@@ -721,9 +721,9 @@ interface MaterializeResourceRequest {
 
 ### 6.4 自定义应用受控投递
 
-1. 工具中心执行自定义应用，传入当前 Bot 可见的 `DeliveryRouteSummary[]`。
+1. CR 解析自定义应用能力绑定，执行方传入当前 Bot 可见的 `DeliveryRouteSummary[]`。
 2. 自定义应用返回 `reply` 和可选 `deliveries[]`。
-3. 工具中心不直接发送跨平台消息，只把投递请求返回给调用方。
+3. CR 不直接发送跨平台消息，只登记和解析投递相关能力；投递请求由调用方交给 MG。
 4. Message Gateway（MG，消息网关）按 routeId 查当前 Bot 启用路由，并调用治理中心确认 `deliver-result`。
 5. Message Gateway（MG，消息网关）投递结果，资源中心记录审计和失败详情。
 

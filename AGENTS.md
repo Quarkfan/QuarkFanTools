@@ -10,6 +10,7 @@
    - `Message-Gateway/`：Message Gateway 中心设计与后续实现。
    - `Context-Hub/`：Context Hub 上下文中心设计与后续实现。
    - `Model-Hub/`：Model Hub 模型枢纽设计与后续实现。
+   - `Capability-Registry/`：Capability Registry 能力注册中心设计与后续实现。
 3. 父项目只更新 `.gitmodules`、子模块 gitlink、顶层 README / STATUS / CHANGELOG / AGENTS。
 
 ## 边界
@@ -35,6 +36,7 @@
 - Message Gateway 验证在 `Message-Gateway/` 中执行。
 - Context Hub 验证在 `Context-Hub/` 中执行。
 - Model Hub 验证在 `Model-Hub/` 中执行。
+- Capability Registry 验证在 `Capability-Registry/` 中执行。
 - 父项目常规检查：
 
 ```bash

@@ -10,3 +10,6 @@
 [submodule "Model-Hub"]
 	path = Model-Hub
 	url = git@github.com:Quarkfan/Model-Hub.git
+[submodule "Capability-Registry"]
+	path = Capability-Registry
+	url = git@github.com:Quarkfan/Capability-Registry.git

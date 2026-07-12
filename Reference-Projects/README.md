@@ -101,6 +101,19 @@ Tracked first-pass notes:
 
 - `evaluations/model-hub/litellm-ollama-vllm-openwebui-dify-first-pass.md`
 
+Capability Registry references currently cloned or reused for source-level evaluation:
+
+- MCP TypeScript SDK: protocol packages, typed schema boundary, server/client package layout.
+- MCP Python SDK: tool/resource/prompt managers, client session, discovery and transports.
+- MCP Servers: real server examples and per-server package layout.
+- Dify: plugin declaration, package sources, marketplace/GitHub/local lifecycle.
+- Open WebUI: functions, valves, active/global flags, pipelines and admin APIs.
+- LangChain: structured tools, simple tools, conversion and retriever-as-tool pattern.
+
+Tracked first-pass notes:
+
+- `evaluations/capability-registry/mcp-dify-openwebui-langchain-first-pass.md`
+
 The reference matrix is an input to modeling, not a replacement for QuarkfanTools decisions.
 
 ## Collaboration Rule

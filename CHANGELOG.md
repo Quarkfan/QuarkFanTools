@@ -15,3 +15,4 @@ This file tracks parent-workspace changes only. Product release history for the 
 - Added Context Hub implementation blueprint covering P0 contracts, storage, APIs, memory governance, retrieval, cleanup, tests, and migration.
 - Added first-pass Model Hub source-level evaluation for LiteLLM, Ollama, vLLM, Open WebUI, and Dify.
 - Renamed the model center concept to Model Hub (MH), broadened it beyond LLMs, and split `Model-Hub/` as an independent module with design and implementation blueprint.
+- Formally named the former tool/capability center as Capability Registry (CR), split `Capability-Registry/` as an independent module, and added first-pass source-level evaluation for MCP, Dify, Open WebUI, and LangChain.
