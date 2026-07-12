@@ -165,7 +165,8 @@ interface PlatformEvent {
 | `CheckPolicy` | 任意中心 | 治理与安全中心 | 判断某动作是否允许 |
 | `ResolveCapabilities` | 运行时 / 调度 | 工具与能力中心 | 获取当前 Bot 可见且可绑定的能力 |
 | `RetrieveContext` | 运行时 / 工具 | Context Hub（CH，上下文中心） | 获取带来源、权限、freshness 和记忆层级的上下文结果；`RetrieveKnowledge` 作为兼容别名 |
-| `SelectModel` | 运行时 / 后处理 / CH | 模型中心 | 获取模型调用候选和失败切换计划 |
+| `SelectModel` | 运行时 / 后处理 / CH / 工具 | Model Hub（MH，模型枢纽） | 获取模型调用候选和失败切换计划 |
+| `ListModelCapabilityExports` | 工具与能力中心 / UI | Model Hub（MH，模型枢纽） | 获取可封装为工具的模型能力 |
 | `RunAgent` | 调度 / MG | 运行时中心 | 执行一次 Agent 任务 |
 | `RunCapability` | 运行时 / 调度 / 命令 | 工具与能力中心 | 执行 Skill、MCP、套件、Workflow 或应用 |
 | `MaterializeResource` | CH / 运行时 / 工具 | 资源中心 | 物化缓存文件、workspace 文件或诊断附件 |
@@ -535,13 +536,39 @@ interface ContextRetrieveResult {
 - 大文件或云文档必须通过资源中心物化为受控引用，不能直接给 runtime 全局缓存路径。
 - 长期记忆写入不能由模型输出直接落库，必须先进入候选、确认或策略判定流程。
 
-### 5.5 模型选择协议
+### 5.5 MH 模型选择协议
 
 ```ts
 interface ModelSelectRequest {
-  purpose: "agent" | "text-postprocess" | "vision" | "embedding" | "rerank";
-  requiredCapabilities: Array<"tools" | "vision" | "streaming" | "json" | "embedding">;
+  purpose:
+    | "agent"
+    | "chat"
+    | "text-postprocess"
+    | "vision"
+    | "ocr"
+    | "embedding"
+    | "rerank"
+    | "moderation"
+    | "speech-to-text"
+    | "text-to-speech"
+    | "image-generation"
+    | "image-editing";
+  requiredCapabilities: Array<
+    | "tools"
+    | "vision"
+    | "streaming"
+    | "json"
+    | "structured-output"
+    | "embedding"
+    | "image-input"
+    | "image-output"
+    | "audio-input"
+    | "audio-output"
+    | "local-only"
+  >;
   botId?: string;
+  ownerId?: string;
+  capabilityRef?: string;
   fallbackAllowed: boolean;
 }
 
@@ -552,7 +579,8 @@ interface ModelAttemptPlan {
 
 interface ModelAttempt {
   providerId: string;
-  baseUrlRef: string;
+  deploymentId: string;
+  endpointRef?: string;
   model: string;
   capabilities: string[];
   secretRef: string;
@@ -561,9 +589,10 @@ interface ModelAttempt {
 
 规则：
 
-- 模型中心只输出候选和尝试顺序，不执行 Agent。
+- MH 只输出候选和尝试顺序，不执行 Agent。
 - `secretRef` 只能被主进程模型调用层解析，不能传给自定义应用、Skill 或 runtime workspace。
 - runtime 选择和 model provider 选择必须保持两个字段，不得混用。
+- 工具中心可以基于 MH 的 `ModelCapabilityExport` 封装工具，但工具授权、工具展示和工作流编排不属于 MH。
 
 ### 5.6 运行时协议
 
@@ -666,7 +695,7 @@ interface MaterializeResourceRequest {
 2. Message Gateway（MG，消息网关）标准化并归属消息，生成 `InboundMessage`。
 3. Message Gateway（MG，消息网关）调用调度中心 `CreateTaskFromMessage`。
 4. 调度中心调用治理中心 `CheckPolicy(action=run-agent)`。
-5. 运行时中心请求模型中心 `SelectModel(purpose=agent)`。
+5. 运行时中心请求 MH `SelectModel(purpose=agent)`。
 6. 运行时中心请求工具中心 `ResolveCapabilities(trigger=agent)`。
 7. 运行时中心按需请求 CH `RetrieveContext`。
 8. 运行时中心执行 `RunAgent`，输出统一 `AgentRuntimeResult`。
@@ -720,7 +749,7 @@ interface MaterializeResourceRequest {
 - 消息去重仍以平台 `messageId` / `eventId` 为主，不能只看 `requestId`。
 - 可重试错误必须显式 `retryable=true`，调度中心才允许重试。
 - `POLICY_BLOCKED`、`UNAUTHORIZED`、`INVALID_REQUEST` 默认不可重试。
-- 模型失败切换只在模型中心计划内发生；运行时不能自行尝试未授权 Provider。
+- 模型失败切换只在 MH 计划内发生；运行时不能自行尝试未授权 Provider。
 - 知识源不可用可以返回 `PARTIAL_FAILURE`，但必须标记缺失来源，不能伪装成完整答案。
 - 受控文件物化失败时，不允许 fallback 到裸路径或裸 `lark-cli drive +download/+export`。
 

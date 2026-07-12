@@ -89,7 +89,7 @@ Tracked first-pass notes:
 
 - `evaluations/context-hub/anythingllm-openwebui-dify-llamaindex-first-pass.md`
 
-Model Center references currently cloned for source-level evaluation:
+Model Hub references currently cloned for source-level evaluation:
 
 - LiteLLM: provider abstraction, routing, fallback, cooldown, budget, spend, virtual key and management APIs.
 - Ollama: local model list/pull/run/status, OpenAI-compatible local adapter, process visibility.
@@ -99,7 +99,7 @@ Model Center references currently cloned for source-level evaluation:
 
 Tracked first-pass notes:
 
-- `evaluations/model-center/litellm-ollama-vllm-openwebui-dify-first-pass.md`
+- `evaluations/model-hub/litellm-ollama-vllm-openwebui-dify-first-pass.md`
 
 The reference matrix is an input to modeling, not a replacement for QuarkfanTools decisions.
 

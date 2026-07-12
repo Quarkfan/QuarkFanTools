@@ -7,3 +7,6 @@
 [submodule "Context-Hub"]
 	path = Context-Hub
 	url = git@github.com:Quarkfan/Context-Hub.git
+[submodule "Model-Hub"]
+	path = Model-Hub
+	url = git@github.com:Quarkfan/Model-Hub.git

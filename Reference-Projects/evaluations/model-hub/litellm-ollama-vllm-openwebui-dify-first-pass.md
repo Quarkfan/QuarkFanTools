@@ -1,9 +1,9 @@
-# Model Center First Pass: LiteLLM / Ollama / vLLM / Open WebUI / Dify
+# Model Hub First Pass: LiteLLM / Ollama / vLLM / Open WebUI / Dify
 
 ## Scope
 
-- Center: Model Center
-- Capability: provider abstraction, deployment routing, fallback, quota, spend, credential isolation, local model management, OpenAI-compatible serving, model configuration UI
+- Center: Model Hub（MH）
+- Capability: provider abstraction, deployment routing, fallback, quota, spend, credential isolation, local model management, OpenAI-compatible serving, multimodal model capabilities, model configuration UI
 - Upstream projects:
   - LiteLLM: `https://github.com/BerriAI/litellm.git`
   - Ollama: `https://github.com/ollama/ollama.git`
@@ -98,7 +98,7 @@ Useful ideas:
 Borrow carefully:
 
 - Ollama is itself a local model runtime and registry client. QuarkfanTools should integrate with it as a provider first, not embed or reimplement model serving.
-- Ollama prompt rendering and context shifting belong to runtime/model adapter behavior, not general model-center policy.
+- Ollama prompt rendering and context shifting belong to runtime/model adapter behavior, not general MH policy.
 - Pulling models can be large, slow and user-visible; model center needs progress, cancel, disk checks and cleanup hooks before exposing this broadly.
 
 ### vLLM
@@ -153,9 +153,9 @@ Useful ideas:
 
 Borrow carefully:
 
-- Open WebUI combines chat product UX, workspace models, access grants and provider proxying. QuarkfanTools should borrow UI/config models but keep runtime/session out of Model Center.
+- Open WebUI combines chat product UX, workspace models, access grants and provider proxying. QuarkfanTools should borrow UI/config models but keep runtime/session out of MH.
 - Forwarding user info headers and cookies is product-specific and should go through governance/security.
-- Direct pass-through can bypass accounting unless wrapped by Model Center trace and usage recording.
+- Direct pass-through can bypass accounting unless wrapped by MH trace and usage recording.
 
 ### Dify
 
@@ -185,7 +185,7 @@ Useful ideas:
 
 Borrow carefully:
 
-- Dify is an application/workflow platform; do not copy app model config, tenant/app coupling or workflow runtime into Model Center.
+- Dify is an application/workflow platform; do not copy app model config, tenant/app coupling or workflow runtime into MH.
 - Its plugin model runtime is powerful but should belong to Tool/Capability or Runtime Center boundaries if adopted later.
 - Tenant concepts should be translated into local owner/Bot/workspace scope, not copied literally.
 
@@ -211,6 +211,7 @@ ModelCostRecord
 ModelQuota
 ModelBudget
 ModelInvocationTrace
+ModelCapabilityExport
 LocalModelProvider
 LocalModelProcess
 SelfHostedModelDeployment
@@ -219,7 +220,7 @@ SelfHostedModelDeployment
 P0 interfaces:
 
 ```ts
-interface ModelCenter {
+interface ModelHub {
   listProviders(request: ModelProviderListRequest): Promise<ModelProviderSummary[]>;
   listModels(request: ModelListRequest): Promise<ModelCandidate[]>;
   selectModel(request: ModelSelectRequest): Promise<ModelSelection>;
@@ -264,13 +265,13 @@ P0 selection result should include:
 
 ## Initial Design Recommendations
 
-1. Treat LiteLLM as the main model-center reference for provider abstraction, router, fallback, cooldown, retry, budget, spend and management API shape.
+1. Treat LiteLLM as the main MH reference for provider abstraction, router, fallback, cooldown, retry, budget, spend and management API shape.
 2. Treat Dify as the best simpler reference for provider/model status, per-model load balancing credentials and model type separation.
 3. Treat Open WebUI as the best UI-facing reference for model entries, base model wrapping, capabilities metadata and access grants.
 4. Treat Ollama as the best local model provider reference. Integrate it through provider adapter first; do not embed its runtime.
 5. Treat vLLM as a future self-hosted deployment reference. It should influence `SelfHostedModelDeployment`, metrics and OpenAI-compatible serving tests, not desktop P0 packaging.
-6. Model Center should select and account for models; Runtime Center still executes agent sessions and decides how to use the selected model in a specific runtime.
-7. Model Center should not build prompts, inject tools, manage CH records or hold MG message state.
+6. MH should select and account for models; Runtime Center still executes agent sessions and decides how to use the selected model in a specific runtime.
+7. MH should not build prompts, inject tools, manage CH records or hold MG message state.
 8. Provider credential storage must use scoped references. Raw API keys should not appear in model selection results, traces, diagnostics or UI logs.
 
 ## Proposed P0 Build Order
@@ -292,10 +293,10 @@ P0 selection result should include:
 - How much cost tracking is needed in local desktop before central billing exists?
 - Should Ollama model pull/delete be exposed in P0, or only detect/list/use existing local models?
 - Should model selection return an executable adapter handle, or only an attempt plan for Runtime Center?
-- How should Claude Code SDK runtime model settings map to Model Center without breaking existing behavior?
+- How should Claude Code SDK runtime model settings map to MH without breaking existing behavior?
 
 ## Recommendation
 
-Start with QuarkfanTools-owned DTOs and adapters. Do not require a LiteLLM proxy or vLLM server in P0. Build direct provider adapters for current desktop needs, but keep the DTOs close enough to LiteLLM's router concepts that a LiteLLM-backed adapter can be added later.
+Start with QuarkfanTools-owned DTOs and adapters. Do not require a LiteLLM proxy or vLLM server in P0. Build direct provider adapters for current desktop needs, but keep the DTOs close enough to LiteLLM's router concepts that a LiteLLM-backed adapter can be added later. Broaden the next pass with diffusion/image/audio references such as ComfyUI, Stable Diffusion WebUI, InvokeAI and Diffusers.
 
 Confidence: high for LiteLLM as the main reference and DTO direction; medium for dependency strategy until we test packaging and current runtime integration constraints.

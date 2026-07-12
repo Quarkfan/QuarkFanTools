@@ -8,7 +8,7 @@ QuarkfanTools 从“飞书 Bot + Claude Code Skill Agent”演进为本机 Agent
 
 1. Message Gateway（MG，消息网关）
 2. Context Hub（CH，上下文中心）
-3. 模型中心
+3. Model Hub（MH，模型枢纽）
 4. 工具与能力中心
 5. 运行时中心
 6. 资源中心
@@ -82,17 +82,21 @@ QuarkfanTools 从“飞书 Bot + Claude Code Skill Agent”演进为本机 Agent
 - 把“召回什么上下文、写入什么记忆”和“运行时怎么使用这些上下文”分开。
 - 将飞书文档、Skill knowledge、会话摘要、用户偏好、项目记忆和未来本地 RAG 统一成可审计召回结果。
 
-### 2.3 模型中心
+### 2.3 Model Hub（MH，模型枢纽）
+
+专门设计见 [`../Model-Hub/docs/model-hub.md`](../Model-Hub/docs/model-hub.md) 和 [`../Model-Hub/docs/implementation-blueprint.md`](../Model-Hub/docs/implementation-blueprint.md)。
 
 职责：
 
-- 管理 MODEL PROVIDER 配置、完整性校验、轮流/随机策略、失败切换、多模态标记。
-- 未来承载协议转换、计费统计、token/成本统计、模型健康检查、本地模型运行和额度控制。
-- 对运行时中心提供可用模型候选，不直接等同于 Agent runtime。
+- 管理各类模型 provider、deployment、credential、capability、routing policy、fallback policy、health、usage 和 trace。
+- 覆盖 LLM、embedding、rerank、vision、speech-to-text、TTS、image generation、image editing、Stable Diffusion 类模型、本地模型和自托管推理服务。
+- 支持 MODEL PROVIDER 配置、完整性校验、轮流/随机策略、失败切换、多模态标记、成本/用量统计和本地模型状态。
+- 对运行时中心、CH、工具与能力中心提供可用模型候选、attempt plan 或 `ModelCapabilityExport`，不直接等同于 Agent runtime。
 
 不负责：
 
 - 不决定工具权限。
+- 不注册、展示或编排工具；工具中心可以封装 MH 的模型能力。
 - 不承担 session、workspace、sandbox 或 Agent 内核加载。
 - 不把“Claude Messages API 兼容模型”误认为“Claude Code Runtime”。
 
@@ -136,7 +140,7 @@ QuarkfanTools 从“飞书 Bot + Claude Code Skill Agent”演进为本机 Agent
 
 不负责：
 
-- 不直接管理模型池策略；只消费模型中心给出的候选。
+- 不直接管理模型池策略；只消费 MH 给出的候选。
 - 不直接管理上下文库或记忆；只消费 CH 返回的召回结果或上下文记录。
 - 不直接管理消息平台；只返回运行结果。
 
@@ -227,11 +231,13 @@ QuarkfanTools 从“飞书 Bot + Claude Code Skill Agent”演进为本机 Agent
 
 ## 3. 关键边界
 
-### 3.1 模型中心不等于运行时中心
+### 3.1 MH 不等于运行时中心
 
-MODEL PROVIDER 解决“用哪个模型服务、怎么失败切换、是否多模态、未来怎么计费统计”。运行时中心解决“由哪个 Agent 内核执行、怎么加载工具、怎么隔离、怎么恢复会话、怎么把工具事件转成平台事件”。
+MODEL PROVIDER 解决“哪些模型服务可用、如何选择、如何失败切换、如何记录用量”。运行时中心解决“由哪个 Agent 内核执行、怎么加载工具、怎么隔离、怎么恢复会话、怎么把工具事件转成平台事件”。
 
 因此未来不应把“增加 OpenAI 模型 Provider”误认为“支持 OpenAI runtime”。前者只是模型服务，后者是运行内核。
+
+Stable Diffusion / TTS / OCR 等模型能力可以被工具中心封装成工具，但不自动变成 runtime。
 
 ### 3.2 工具中心不等于治理中心
 
