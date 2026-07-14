@@ -4,11 +4,13 @@ This repository is the parent workspace for QuarkfanTools platform modules.
 
 It no longer contains the macOS standalone app source directly. Each major center or product line lives in its own Git repository and is referenced here as a submodule.
 
+`QuarkfanTools-Single/` is the 2.x standalone product line. It continues to carry the current macOS business, customer issues, packaging, release, and end-to-end validation work. The multi-center modules such as Message Gateway, Context Hub, Model Hub, and Capability Registry are the long-range 3.0/5.0 platform blueprint. They should inform future architecture work, but they are not a strong dependency for ordinary 2.x Single development.
+
 ## Modules
 
 | Path | Repository | Purpose |
 | --- | --- | --- |
-| `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | Current macOS standalone QuarkfanTools app. It keeps the full historical codebase and all release tags through `v2.2.6`. |
+| `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x macOS standalone QuarkfanTools product line. It keeps the full historical codebase and all release tags through `v2.2.6`, and continues current business development, packaging, release, and customer issue handling. |
 | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | Message Gateway center: channel access, Message Hub, Message Store, Sink, RouteBinding, Cursor, Delivery, Trace, and Loop Guard design. |
 | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | Context Hub center: context sources, knowledge/RAG, short/mid/long-term memory, freshness, scopes, retrieval, and memory governance design. |
 | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | Model Hub center: model providers, deployments, capabilities, routing, fallback, health, usage, local/self-hosted models, and tool-exportable model abilities. |
@@ -44,11 +46,11 @@ git submodule update --init --recursive
 
 Work inside the module repository that owns the change:
 
-- Standalone app code, packaging, release tags, and user-facing app behavior belong in `QuarkfanTools-Single/`.
-- Message Gateway contracts and future MG implementation belong in `Message-Gateway/`.
-- Context Hub contracts and future CH implementation belong in `Context-Hub/`.
-- Model Hub contracts and future MH implementation belong in `Model-Hub/`.
-- Capability Registry contracts and future CR implementation belong in `Capability-Registry/`.
+- 2.x standalone app code, packaging, release tags, customer issues, and user-facing app behavior belong in `QuarkfanTools-Single/`.
+- 3.0/5.0 Message Gateway contracts and future MG implementation belong in `Message-Gateway/`.
+- 3.0/5.0 Context Hub contracts and future CH implementation belong in `Context-Hub/`.
+- 3.0/5.0 Model Hub contracts and future MH implementation belong in `Model-Hub/`.
+- 3.0/5.0 Capability Registry contracts and future CR implementation belong in `Capability-Registry/`.
 - Source-level reference analysis belongs in `Reference-Projects/`; do not commit cloned upstream source there.
 - This parent repository should only track module references, platform-level navigation, and integration status.
 
@@ -60,7 +62,7 @@ For a fresh AI or developer session:
 
 1. Read [AGENTS.md](AGENTS.md), then [STATUS.md](STATUS.md).
 2. If the work is platform-level modeling or cross-center design, read [docs/README.md](docs/README.md) and the relevant platform docs.
-3. If the work is product code, packaging, release, or current customer issues, enter `QuarkfanTools-Single/` and read its `AGENTS.md`, `docs/AI.md`, and `STATUS.md`.
+3. If the work is 2.x product code, packaging, release, or current customer issues, enter `QuarkfanTools-Single/` and read its `AGENTS.md`, `docs/AI.md`, and `STATUS.md`. Do not force this work through the 3.0/5.0 center split unless the task explicitly asks for platform migration or blueprint alignment.
 4. If the work is Message Gateway design or implementation, enter `Message-Gateway/` and read its `AGENTS.md`, `STATUS.md`, `docs/message-gateway.md`, and `docs/implementation-blueprint.md`.
 5. If the work is Context Hub design or implementation, enter `Context-Hub/` and read its `AGENTS.md`, `STATUS.md`, `docs/context-hub.md`, and `docs/implementation-blueprint.md`.
 6. If the work is Model Hub design or implementation, enter `Model-Hub/` and read its `AGENTS.md`, `STATUS.md`, `docs/model-hub.md`, and `docs/implementation-blueprint.md`.

@@ -16,3 +16,4 @@ This file tracks parent-workspace changes only. Product release history for the 
 - Added first-pass Model Hub source-level evaluation for LiteLLM, Ollama, vLLM, Open WebUI, and Dify.
 - Renamed the model center concept to Model Hub (MH), broadened it beyond LLMs, and split `Model-Hub/` as an independent module with design and implementation blueprint.
 - Formally named the former tool/capability center as Capability Registry (CR), split `Capability-Registry/` as an independent module, and added first-pass source-level evaluation for MCP, Dify, Open WebUI, and LangChain.
+- Clarified the roadmap boundary: `QuarkfanTools-Single/` is the 2.x standalone business line, while MG / CH / MH / CR are 3.0/5.0 platform blueprint modules and should not be forced into ordinary Single development.

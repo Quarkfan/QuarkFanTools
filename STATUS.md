@@ -6,11 +6,13 @@
 
 当前仓库已清理为 QuarkfanTools 平台父项目，用于统一管理各独立模块。父项目不再直接承载 macOS 单机版应用源码。
 
+路线边界：`QuarkfanTools-Single/` 是 2.x 单机版业务延续线，继续承载当前 macOS 产品、客户问题、安装包发布和端到端验证。MG / CH / MH / CR 等多模块拆分是 3.0 甚至 5.0 的长期平台化规划，用于未来架构蓝图和逐步抽象，不应强行绑定普通 2.x Single 开发。
+
 ## 子模块
 
 | 模块 | 路径 | 远端 | 状态 |
 | --- | --- | --- | --- |
-| QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，已补齐独立子项目接续入口，当前指向 `9ad7634`，保留 `v2.2.6` 发布标签。 |
+| QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x 单机版业务延续线；已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，已补齐独立子项目接续入口，当前指向 `9ad7634`，保留 `v2.2.6` 发布标签。 |
 | Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 已迁入 MG 相关设计文档并推送 `main`，已完成可执行设计蓝图、开源复用原则和 MG 独立 STATUS 接续入口，当前指向 `6b1c79e`。 |
 | Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 已迁入 CH 相关设计文档，已完成可执行设计蓝图，当前指向 `095c065`。 |
 | Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 已建立 MH 独立模块，覆盖通用模型服务、provider、deployment、capability、routing、fallback、health、usage 和工具可封装模型能力，当前指向 `ba01f20`。 |
@@ -19,7 +21,8 @@
 
 ## 操作约定
 
-- 单机版开发、测试、打包和发版进入 `QuarkfanTools-Single/`。
+- 2.x 单机版开发、测试、打包、发版和客户问题处理进入 `QuarkfanTools-Single/`。
+- MG / CH / MH / CR 等多模块工作默认视为 3.0/5.0 平台化蓝图或未来实现，不与 2.x Single 普通开发强绑定。
 - Message Gateway 设计和后续实现进入 `Message-Gateway/`。
 - Capability Registry 设计和后续实现进入 `Capability-Registry/`。
 - 父项目只提交 `.gitmodules`、子模块 gitlink、顶层导航文档和平台总设计文档。
