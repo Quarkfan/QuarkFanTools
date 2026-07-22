@@ -1,6 +1,6 @@
 # 当前状态
 
-最后更新：2026-07-12
+最后更新：2026-07-22
 
 ## 父项目定位
 
@@ -12,11 +12,11 @@
 
 | 模块 | 路径 | 远端 | 状态 |
 | --- | --- | --- | --- |
-| QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x 单机版业务延续线；已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，已补齐独立子项目接续入口，当前指向 `9ad7634`，保留 `v2.2.6` 发布标签。 |
+| QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x 单机版业务延续线；已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，当前指向 `5faccdb`，产品版本 `2.2.15`。 |
 | Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 已迁入 MG 相关设计文档并推送 `main`，已完成可执行设计蓝图、开源复用原则和 MG 独立 STATUS 接续入口，当前指向 `6b1c79e`。 |
 | Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 已迁入 CH 相关设计文档，已完成可执行设计蓝图，当前指向 `095c065`。 |
-| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 已建立 MH 独立模块，覆盖通用模型服务、provider、deployment、capability、routing、fallback、health、usage 和工具可封装模型能力，当前指向 `ba01f20`。 |
-| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 已建立 CR 独立模块，覆盖能力声明、package、provider、binding、diagnostics、Skill/MCP/executable 适配器和模型/上下文导出能力登记。 |
+| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 已建立 MH 独立模块，覆盖通用模型服务、provider、deployment、capability、routing、fallback、health、usage 和工具可封装模型能力，当前指向 `0cbde41`。 |
+| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 已建立 CR 独立模块，覆盖能力声明、package、provider、binding、diagnostics、Skill/MCP/executable 适配器和模型/上下文导出能力登记，当前指向 `cb7dad2`。 |
 | Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
@@ -33,7 +33,7 @@
 
 ## 最近验证
 
-- `QuarkfanTools-Single` 已推送 `main` 和全部历史 tags 到远端。
+- `QuarkfanTools-Single` 已完成 `v2.2.15` 版本提交，父项目 gitlink 已更新到该提交；推送和标签发布仍按子模块发布流程执行。
 - `Message-Gateway` 已推送 `main` 到远端；新增 `docs/implementation-blueprint.md`，覆盖 MG P0 数据模型、管理面 API、存储布局、状态机、入站/出站流程、适配器合同、测试矩阵、迁移步骤和验收标准。
 - `Context-Hub` 已建立独立模块目录，新增 `AGENTS.md`、`README.md`、`STATUS.md`、`docs/context-hub.md` 和 `docs/implementation-blueprint.md`。
 - `Model-Hub` 已建立独立模块目录，新增 `AGENTS.md`、`README.md`、`STATUS.md`、`docs/model-hub.md` 和 `docs/implementation-blueprint.md`。

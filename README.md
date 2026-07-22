@@ -10,7 +10,7 @@ It no longer contains the macOS standalone app source directly. Each major cente
 
 | Path | Repository | Purpose |
 | --- | --- | --- |
-| `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x macOS standalone QuarkfanTools product line. It keeps the full historical codebase and all release tags through `v2.2.6`, and continues current business development, packaging, release, and customer issue handling. |
+| `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x macOS standalone QuarkfanTools product line. It keeps the full historical codebase and release tags through `v2.2.15`, and continues current business development, packaging, release, and customer issue handling. |
 | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | Message Gateway center: channel access, Message Hub, Message Store, Sink, RouteBinding, Cursor, Delivery, Trace, and Loop Guard design. |
 | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | Context Hub center: context sources, knowledge/RAG, short/mid/long-term memory, freshness, scopes, retrieval, and memory governance design. |
 | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | Model Hub center: model providers, deployments, capabilities, routing, fallback, health, usage, local/self-hosted models, and tool-exportable model abilities. |

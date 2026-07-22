@@ -4,6 +4,7 @@ This file tracks parent-workspace changes only. Product release history for the 
 
 ## Unreleased
 
+- Updated `QuarkfanTools-Single/` submodule to the `v2.2.15` standalone release commit and refreshed the parent status pointers.
 - Converted the root repository into a parent workspace for independent modules.
 - Added `Message-Gateway/` as a submodule pointing to `git@github.com:Quarkfan/Message-Gateway.git`.
 - Added `QuarkfanTools-Single/` as a submodule pointing to `git@github.com:Quarkfan/QuarkfanTools-Single.git`.
