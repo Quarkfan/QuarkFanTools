@@ -24,6 +24,7 @@ Future centers should be added here as independent repositories and registered i
 - [Platform reference matrix](docs/platform-reference-matrix.md)
 - [Platform centers](docs/platform-centers.md)
 - [Cross-center protocols](docs/platform-interface-protocols.md)
+- [3.0 server readiness roadmap](docs/server-readiness-roadmap.md)
 - [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
 
 Module-specific docs live inside each submodule. Message Gateway-specific design is in [Message-Gateway/docs/message-gateway.md](Message-Gateway/docs/message-gateway.md). Context Hub-specific design is in [Context-Hub/docs/context-hub.md](Context-Hub/docs/context-hub.md), with implementation blueprint in [Context-Hub/docs/implementation-blueprint.md](Context-Hub/docs/implementation-blueprint.md). Model Hub-specific design is in [Model-Hub/docs/model-hub.md](Model-Hub/docs/model-hub.md), with implementation blueprint in [Model-Hub/docs/implementation-blueprint.md](Model-Hub/docs/implementation-blueprint.md). Capability Registry-specific design is in [Capability-Registry/docs/capability-registry.md](Capability-Registry/docs/capability-registry.md), with implementation blueprint in [Capability-Registry/docs/implementation-blueprint.md](Capability-Registry/docs/implementation-blueprint.md).

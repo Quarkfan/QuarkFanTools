@@ -6,6 +6,7 @@ These documents describe the parent platform and cross-module boundaries.
 - `platform-reference-matrix.md`: reference matrix for center modeling. It is a design input and comparison checklist, not an implementation mandate.
 - `platform-centers.md`: platform center boundaries.
 - `platform-interface-protocols.md`: cross-center request, response, error, audit, and protocol contracts.
+- `server-readiness-roadmap.md`: 3.0 server-ready P0 roadmap for turning MG / CH / MH / CR contracts into deployable services.
 - `macos-linux-portability.md`: current macOS assumptions and future Linux/server blueprint.
 
 Module-specific documents should live inside their owning submodule. For example, Message Gateway-specific design lives in `../Message-Gateway/docs/message-gateway.md`, Context Hub-specific design lives in `../Context-Hub/docs/context-hub.md` plus `../Context-Hub/docs/implementation-blueprint.md`, Model Hub-specific design lives in `../Model-Hub/docs/model-hub.md` plus `../Model-Hub/docs/implementation-blueprint.md`, and Capability Registry-specific design lives in `../Capability-Registry/docs/capability-registry.md` plus `../Capability-Registry/docs/implementation-blueprint.md`.

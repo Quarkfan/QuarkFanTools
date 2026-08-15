@@ -1,6 +1,6 @@
 # macOS 依赖与 Linux 服务端迁移
 
-本文梳理 QuarkfanTools 当前对 macOS 的依赖，并给出未来迁移到 Linux 服务器部署时的蓝图方向。Linux 服务端是远期蓝图功能，不是当前或下一阶段开发路线；当前路线仍在 macOS 本机应用上，下一步技术重点是按八个中心拆分子系统、接口和边界。
+本文梳理 QuarkfanTools 当前对 macOS 的依赖，并给出未来迁移到 Linux 服务器部署时的蓝图方向。随着 3.0 开始进入 server-ready 准备，本文不再把 Linux 只视为遥远蓝图；但它仍不意味着直接迁移 2.x Single。当前正确路线是：Single 继续独立推进，3.0 从 MG / CH / MH / CR 的 Headless Core、API Server、Worker 和 Web Console 基础开始建设。
 
 当前 `2.2.6` 产品形态仍是 macOS 本机 Electron 应用，默认交付 Apple Silicon / arm64 安装包。Linux 服务端只有在 macOS 本机子系统拆分稳定后，才进入单独评审和立项。
 
@@ -21,7 +21,7 @@
 | 打包发布 | 极高 | DMG、HFS+、hdiutil、签名/公证仅 macOS；Linux 需 Docker/系统服务/二进制包 |
 | Keychain / lark-cli 安全存储 | 中到高 | 当前用 Bot 专属 HOME 模拟隔离；Linux 需确认 CLI 安全存储路径和权限 |
 
-远期推荐路线：不要把现有 Electron 应用“直接搬到 Linux”。如果未来启动 Linux 蓝图，应先在 macOS 本机主线中完成八个中心的子系统拆分，再评估 Headless Core、API Server、Worker 和 Web Console。短期不把 Linux PoC 作为优先级。
+推荐路线：不要把现有 Electron 应用“直接搬到 Linux”。3.0 应先把八个中心的接口边界和服务骨架做出来，再评估 Headless Core、API Server、Worker 和 Web Console。Linux PoC 可以作为 3.0 server readiness 的后续验证项，但不应从 Single 复制桌面实现开始。
 
 ## 2. 当前 macOS 依赖清单
 
@@ -292,7 +292,7 @@ Linux 服务端影响：
 
 ## 4. 蓝图迁移阶段
 
-以下阶段仅作为远期蓝图。当前下一步不是做 Linux PoC，而是在 macOS 本机上完成子系统拆分，让这些抽象未来可复用。
+以下阶段改为 3.0 server-ready 迁移参考。当前下一步不是迁移 Single，而是建设可服务化的中心骨架，让这些抽象未来可部署、可测试、可替换。
 
 ### 阶段一：macOS 本机子系统拆分
 

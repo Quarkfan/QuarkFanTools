@@ -33,6 +33,7 @@
 
 ## 最近验证
 
+- 2026-08-15：3.0 路线已从“只做远期 Linux 蓝图”调整为“server-ready 优先准备”。新增 `docs/server-readiness-roadmap.md`，明确 Single 不进入本轮服务器化优先工作，MG / CH / MH / CR 需要尽快从蓝图进入可启动服务骨架、HTTP/RPC 管理面、健康检查、存储抽象、Docker 路径和端到端 server smoke test。
 - 2026-07-23：`QuarkfanTools-Single` 当前产品版本为 `2.2.15`，本轮 2.x 工作仍在子模块内接续。后续普通客户问题、功能修复、打包和验证应直接进入 `QuarkfanTools-Single/`，先读该子模块 `AGENTS.md`、`docs/AI.md`、`STATUS.md`；不要把 2.x Browser Agent、OMS、魔表、OAuth、运行台和打包问题强行切到 MG / CH / MH / CR 平台化中心。最新 2.2.15 arm64 本地产物和哈希已记录在 `QuarkfanTools-Single/STATUS.md` 与 `QuarkfanTools-Single/docs/operations.md`。
 - 2026-08-15：`QuarkfanTools-Single` 当前产品版本为 `2.3.2`，本轮已提交并推送 2.x 当前代码状态；`npm test` 通过 257 项。`Context-Hub` 已提交并推送 memory binding / generation trace 蓝图更新，父项目同步更新子模块 gitlink。
 - `QuarkfanTools-Single` 已完成 `v2.2.15` 版本提交，父项目 gitlink 已更新到该提交；推送和标签发布仍按子模块发布流程执行。
