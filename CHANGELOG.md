@@ -4,6 +4,10 @@ This file tracks parent-workspace changes only. Product release history for the 
 
 ## Unreleased
 
+- Implemented and deployed the 3.0 platform across shared contracts, eight centers, authenticated Console and Docker Compose deployment while preserving the 2.x/3.x architecture boundary.
+- Added strong internal authentication, exact browser-state key validation, least-privilege container capabilities, bounded/redacted diagnostic ZIP collection and independent liveness/readiness/version visibility.
+- Added verified online/quiesced PostgreSQL plus five-volume backups, guarded restore, fail-safe cross-center acceptance and disposable-account desktop/mobile Dashboard acceptance.
+- Fixed Capability page rendering on internal HTTP deployments by removing the secure-context-only `crypto.randomUUID()` assumption.
 - Added the 3.0 server readiness roadmap and clarified that MG / CH / MH / CR should move from blueprint contracts toward deployable service skeletons, while `QuarkfanTools-Single/` remains the separate 2.x line.
 - Updated `QuarkfanTools-Single/` submodule to the `v2.2.15` standalone release commit and refreshed the parent status pointers.
 - Converted the root repository into a parent workspace for independent modules.

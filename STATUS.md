@@ -13,10 +13,17 @@
 | 模块 | 路径 | 远端 | 状态 |
 | --- | --- | --- | --- |
 | QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x 单机版业务延续线；已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，当前指向 `3e73523`，产品版本 `2.3.2`。 |
-| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 已迁入 MG 相关设计文档并推送 `main`，已完成可执行设计蓝图、开源复用原则和 MG 独立 STATUS 接续入口，当前指向 `6b1c79e`。 |
-| Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 已迁入 CH 相关设计文档，已完成可执行设计蓝图，并吸收 TencentDB Agent Memory 的 ContextBinding、Bot Loadout、记忆派生层和 generation trace 设计，当前指向 `daa0e78`。 |
-| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 已建立 MH 独立模块，覆盖通用模型服务、provider、deployment、capability、routing、fallback、health、usage 和工具可封装模型能力，当前指向 `0cbde41`。 |
-| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 已建立 CR 独立模块，覆盖能力声明、package、provider、binding、diagnostics、Skill/MCP/executable 适配器和模型/上下文导出能力登记，当前指向 `cb7dad2`。 |
+| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 可部署实现已完成并推送，当前本地指向 `409ea2c`。 |
+| Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 可部署上下文、检索和记忆治理实现已完成并推送，当前本地指向 `a140169`。 |
+| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 可部署多模型 provider、路由、失败切换和用量实现已完成并推送，当前本地指向 `d14bb96`。 |
+| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 可部署能力注册、导入、绑定、隔离执行与内置能力实现及安全硬化已推送，当前指向 `910ed4b`。 |
+| Platform Contracts | `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | 共享合同与 JSON Schema 已完成，当前本地指向 `0d56217`；远端仓库待创建。 |
+| Runtime Center | `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime、工作空间、会话、工作流与 Browser Worker 已部署，当前本地指向 `c7f1f0a`；远端仓库待创建。 |
+| Scheduler Center | `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | 调度、立即执行、重试、日志与历史补处理已部署，当前本地指向 `c9d5dd0`；远端仓库待创建。 |
+| Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理与 FFmpeg 已部署，当前本地指向 `4a568b6`；远端仓库待创建。 |
+| Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏与审计已部署，当前本地指向 `00af054`；远端仓库待创建。 |
+| Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 账号密码、RBAC、配置控制、状态与诊断 Dashboard 已部署，当前本地指向 `0866923`；远端仓库待创建。 |
+| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、E2E 与 UI acceptance 已部署，当前本地指向 `a896c5f`；远端仓库待创建。 |
 | Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
@@ -33,7 +40,8 @@
 
 ## 最近验证
 
-- 2026-08-16：3.0 十个生产服务已部署到 `zwj-ubuntu` 并全部健康；完整 Compose E2E、Browser 审批续跑、Media、Resource、Context、Scheduler、MG/Runtime 及诊断包链路通过。
+- 2026-08-16：3.0 十一个生产应用服务已部署到 `zwj-ubuntu` 并全部健康；完整 Compose E2E 在全栈重启前后均通过，覆盖 Browser 审批续跑、Media、Resource、Context、Scheduler、MG/Runtime 及诊断包链路。
+- 2026-08-16：在线与 quiesced 备份覆盖 PostgreSQL 和五个持久卷，自动完成 SHA-256、数据库目录和归档可读性校验；quiesced 路径只在所有服务恢复 healthy 后返回。
 - 2026-08-16：Dashboard 14 个页面完成桌面和移动端 Playwright 布局验收，无横向溢出和控件裁切；初始管理员强制改密已成为发布门禁。
 - 2026-08-16：MG 新增飞书用户 OAuth、token 轮换和 Sheets/Base 受管数据 API；CR 注册对应读写能力，写操作为高风险审批能力。
 - 2026-08-16：Browser Agent 通过 MH 规划与 Playwright 执行，默认阻断 localhost、私网 IP 和 DNS 解析到私网的请求；服务器生产环境已恢复该默认策略。

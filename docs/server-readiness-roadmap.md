@@ -1,5 +1,7 @@
 # 3.0 Server Readiness Roadmap
 
+> Historical baseline: this roadmap captured the starting position before Server P0 implementation. Sections 1-5 retain the original design intent; sections 6-7 record the current state and next production work as of 2026-08-16.
+
 本文记录 QuarkfanTools 3.0 服务器化准备路线。它替代此前“Linux 只是远期蓝图、先在 Single 里落 facade”的默认优先级，但不要求直接迁移 2.x Single。3.0 的正确方向是先建设可独立运行的 Headless Core、API Server、Worker 和 Web Console 基础，再逐步把 MG / CH / MH / CR 等中心做成可部署服务。
 
 ## 1. 当前判断
@@ -167,18 +169,19 @@ CH 可以和 MG/MH/CR 并行启动，但完整 RAG 不应压在第一阶段。P0
 - Playwright 在服务器上必须走 Node + bundled Chromium 或容器内 Chromium，不依赖 Electron。
 - 日志、排障包和 trace 必须按 Bot / tenant / center / correlationId 切片并脱敏。
 
-## 6. 当前未实现清单
+## 6. 当前实现状态
 
-- 四个中心还没有服务入口、路由、控制器、repository、测试和 Dockerfile。
-- 还没有共享协议包或 JSON Schema。
-- 还没有 Runtime Center、Resource Center、Scheduler Center、Governance Center 独立仓库。
-- MG 缺 Lark OpenAPI / Webhook server adapter 实现。
-- MH 缺真实 provider 调用、健康检查、失败切换和用量统计实现。
-- CR 缺 manifest registry、导入冲突处理、diagnostics 和 server 执行限制实现。
-- CH 缺 source ingestion、keyword index、memory candidate、confirmed memory 和 forget/audit 实现。
-- 还没有 Web Console。
-- 还没有端到端 server smoke test。
+- MG、CH、MH、CR、Runtime、Scheduler、Resource、Governance 均已具备独立服务入口、持久化 repository、测试、Dockerfile、健康检查和结构化管理 API。
+- `Platform-Contracts` 已提供共享 TypeScript 合同与 JSON Schema。
+- MG 已实现飞书长连接/Webhook、标准化、去重、历史、游标、投递、OAuth 和受治理的数据操作。
+- MH 已实现真实 provider adapter、多模型类型、健康检查、轮流/随机选择、失败切换和用量记录。
+- CR 已实现统一 capability registry、Skill/MCP/App/Suite/Workflow/Command、冲突处理、诊断与受治理执行。
+- CH 已实现 source ingestion、检索、短中长期记忆、遗忘、freshness 和 trace。
+- Web Console 已实现账号密码、RBAC、强制初始密码修改、配置管理、运行状态和诊断包入口。
+- Docker Compose 已在 `zwj-ubuntu` 运行十一个生产应用服务，并通过跨中心 E2E、桌面/移动端 Playwright 验证和完整备份校验。
+
+完整的逐项证据见 `docs/3.0-completion-audit.md`。
 
 ## 7. 下一步动作
 
-建议下一轮直接从 MG 开始建代码骨架，而不是继续扩设计。MG 的最小闭环完成后，再让 MH 提供模型选择，CR 提供能力清单，CH 提供上下文召回。这样 3.0 很快会从“蓝图”进入“可以跑起来”的阶段。
+当前重点由“搭建骨架”转为生产运营硬化：持续验证备份恢复、跨进程失败恢复、依赖健康可见性、诊断包脱敏和升级路径；随后再推进多节点部署、外部队列/对象存储、高可用 PostgreSQL、监控告警与容量压测。七个新增中心仓库创建并推送后，再发布父项目对应 gitlink，确保任何父项目提交都可完整克隆。
