@@ -1,12 +1,12 @@
 # 当前状态
 
-最后更新：2026-08-15
+最后更新：2026-08-16
 
 ## 父项目定位
 
 当前仓库已清理为 QuarkfanTools 平台父项目，用于统一管理各独立模块。父项目不再直接承载 macOS 单机版应用源码。
 
-路线边界：`QuarkfanTools-Single/` 是 2.x 单机版业务延续线，继续承载当前 macOS 产品、客户问题、安装包发布和端到端验证。MG / CH / MH / CR 等多模块拆分是 3.0 甚至 5.0 的长期平台化规划，用于未来架构蓝图和逐步抽象，不应强行绑定普通 2.x Single 开发。
+路线边界：`QuarkfanTools-Single/` 是 2.x 单机版业务延续线。MG / CH / MH / CR / Runtime / Scheduler / Resource / Governance / Console 已形成可部署的 3.0 平台。迁移 2.x 时只迁移能力语义和验收标准，表现与实现必须服从新架构。
 
 ## 子模块
 
@@ -32,6 +32,12 @@
 - 子模块更新流程：先在子仓库提交并推送，再回到父项目更新 gitlink。
 
 ## 最近验证
+
+- 2026-08-16：3.0 十个生产服务已部署到 `zwj-ubuntu` 并全部健康；完整 Compose E2E、Browser 审批续跑、Media、Resource、Context、Scheduler、MG/Runtime 及诊断包链路通过。
+- 2026-08-16：Dashboard 14 个页面完成桌面和移动端 Playwright 布局验收，无横向溢出和控件裁切；初始管理员强制改密已成为发布门禁。
+- 2026-08-16：MG 新增飞书用户 OAuth、token 轮换和 Sheets/Base 受管数据 API；CR 注册对应读写能力，写操作为高风险审批能力。
+- 2026-08-16：Browser Agent 通过 MH 规划与 Playwright 执行，默认阻断 localhost、私网 IP 和 DNS 解析到私网的请求；服务器生产环境已恢复该默认策略。
+- 3.0 当前完整事实、受控降级和验证记录见 `docs/3.0-current-release.md`。
 
 - 2026-08-15：3.0 路线已从“只做远期 Linux 蓝图”调整为“server-ready 优先准备”。新增 `docs/server-readiness-roadmap.md`，明确 Single 不进入本轮服务器化优先工作，MG / CH / MH / CR 需要尽快从蓝图进入可启动服务骨架、HTTP/RPC 管理面、健康检查、存储抽象、Docker 路径和端到端 server smoke test。
 - 2026-07-23：`QuarkfanTools-Single` 当前产品版本为 `2.2.15`，本轮 2.x 工作仍在子模块内接续。后续普通客户问题、功能修复、打包和验证应直接进入 `QuarkfanTools-Single/`，先读该子模块 `AGENTS.md`、`docs/AI.md`、`STATUS.md`；不要把 2.x Browser Agent、OMS、魔表、OAuth、运行台和打包问题强行切到 MG / CH / MH / CR 平台化中心。最新 2.2.15 arm64 本地产物和哈希已记录在 `QuarkfanTools-Single/STATUS.md` 与 `QuarkfanTools-Single/docs/operations.md`。

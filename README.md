@@ -15,6 +15,13 @@ It no longer contains the macOS standalone app source directly. Each major cente
 | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | Context Hub center: context sources, knowledge/RAG, short/mid/long-term memory, freshness, scopes, retrieval, and memory governance design. |
 | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | Model Hub center: model providers, deployments, capabilities, routing, fallback, health, usage, local/self-hosted models, and tool-exportable model abilities. |
 | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | Capability Registry center: capability manifests, packages, providers, bindings, diagnostics, Skill/MCP/executable adapters, and model/context export registration. |
+| `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | Shared envelopes, errors, request context, resource references and service helpers. |
+| `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime adapters, Bot execution, sessions, workspaces, workflows and Browser Worker. |
+| `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | Durable schedules, manual runs, retries, continuation and history backfill. |
+| `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | Content-addressed resources, media, diagnostics, cleanup and resource telemetry. |
+| `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | Policies, approvals, encrypted credentials, redaction and audit. |
+| `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | Authenticated Dashboard and browser-facing BFF. |
+| `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Linux Docker Compose deployment, operations and acceptance tests. |
 | `Reference-Projects/` | Parent repository directory | Local reference-project workspace for source-level evaluation of projects named in the platform reference matrix. Upstream clones live under `Reference-Projects/sources/` and are ignored by Git. |
 
 Future centers should be added here as independent repositories and registered in `.gitmodules`.
@@ -25,6 +32,7 @@ Future centers should be added here as independent repositories and registered i
 - [Platform centers](docs/platform-centers.md)
 - [Cross-center protocols](docs/platform-interface-protocols.md)
 - [3.0 server readiness roadmap](docs/server-readiness-roadmap.md)
+- [3.0 current release](docs/3.0-current-release.md)
 - [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
 
 Module-specific docs live inside each submodule. Message Gateway-specific design is in [Message-Gateway/docs/message-gateway.md](Message-Gateway/docs/message-gateway.md). Context Hub-specific design is in [Context-Hub/docs/context-hub.md](Context-Hub/docs/context-hub.md), with implementation blueprint in [Context-Hub/docs/implementation-blueprint.md](Context-Hub/docs/implementation-blueprint.md). Model Hub-specific design is in [Model-Hub/docs/model-hub.md](Model-Hub/docs/model-hub.md), with implementation blueprint in [Model-Hub/docs/implementation-blueprint.md](Model-Hub/docs/implementation-blueprint.md). Capability Registry-specific design is in [Capability-Registry/docs/capability-registry.md](Capability-Registry/docs/capability-registry.md), with implementation blueprint in [Capability-Registry/docs/implementation-blueprint.md](Capability-Registry/docs/implementation-blueprint.md).

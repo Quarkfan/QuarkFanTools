@@ -13,3 +13,24 @@
 [submodule "Capability-Registry"]
 	path = Capability-Registry
 	url = git@github.com:Quarkfan/Capability-Registry.git
+[submodule "Platform-Contracts"]
+	path = Platform-Contracts
+	url = git@github.com:Quarkfan/Platform-Contracts.git
+[submodule "Runtime-Center"]
+	path = Runtime-Center
+	url = git@github.com:Quarkfan/Runtime-Center.git
+[submodule "Scheduler-Center"]
+	path = Scheduler-Center
+	url = git@github.com:Quarkfan/Scheduler-Center.git
+[submodule "Resource-Center"]
+	path = Resource-Center
+	url = git@github.com:Quarkfan/Resource-Center.git
+[submodule "Governance-Center"]
+	path = Governance-Center
+	url = git@github.com:Quarkfan/Governance-Center.git
+[submodule "Platform-Console"]
+	path = Platform-Console
+	url = git@github.com:Quarkfan/Platform-Console.git
+[submodule "Platform-Deployment"]
+	path = Platform-Deployment
+	url = git@github.com:Quarkfan/Platform-Deployment.git

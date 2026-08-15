@@ -7,6 +7,9 @@ These documents describe the parent platform and cross-module boundaries.
 - `platform-centers.md`: platform center boundaries.
 - `platform-interface-protocols.md`: cross-center request, response, error, audit, and protocol contracts.
 - `server-readiness-roadmap.md`: 3.0 server-ready P0 roadmap for turning MG / CH / MH / CR contracts into deployable services.
+- `3.0-implementation-program.md`: implementation topology, technical baseline, milestones, resource budget, and release gates.
+- `2x-to-3x-capability-matrix.md`: complete capability migration baseline from QuarkfanTools-Single 2.3.2.
+- `3.0-current-release.md`: implemented 3.0 service topology, capability status, acceptance evidence, security boundaries and controlled degradations.
 - `macos-linux-portability.md`: current macOS assumptions and future Linux/server blueprint.
 
 Module-specific documents should live inside their owning submodule. For example, Message Gateway-specific design lives in `../Message-Gateway/docs/message-gateway.md`, Context Hub-specific design lives in `../Context-Hub/docs/context-hub.md` plus `../Context-Hub/docs/implementation-blueprint.md`, Model Hub-specific design lives in `../Model-Hub/docs/model-hub.md` plus `../Model-Hub/docs/implementation-blueprint.md`, and Capability Registry-specific design lives in `../Capability-Registry/docs/capability-registry.md` plus `../Capability-Registry/docs/implementation-blueprint.md`.

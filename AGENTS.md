@@ -13,11 +13,19 @@
    - `Context-Hub/`：Context Hub 上下文中心设计与后续实现。
    - `Model-Hub/`：Model Hub 模型枢纽设计与后续实现。
    - `Capability-Registry/`：Capability Registry 能力注册中心设计与后续实现。
+   - `Platform-Contracts/`：跨中心版本化合同与服务工具包。
+   - `Runtime-Center/`：运行时适配、执行、工作区和 Browser Worker。
+   - `Scheduler-Center/`：定时任务、队列、续跑和历史补处理。
+   - `Resource-Center/`：资源、缓存、媒体、诊断包和清理。
+   - `Governance-Center/`：策略、审批、凭据和审计。
+   - `Platform-Console/`：账号密码、RBAC、BFF 和 Dashboard。
+   - `Platform-Deployment/`：Linux Compose 部署、备份、烟测和验收。
 3. 父项目只更新 `.gitmodules`、子模块 gitlink、顶层 README / STATUS / CHANGELOG / AGENTS。
 
 ## 边界
 
 - 不要把单机版应用源码重新提交到父项目根目录。
+- 迁移 2.x 时迁移的是产品能力、行为语义和验收标准；实现和表现必须服从 3.x 中心边界，不复制 Electron IPC、主机路径、旧页面结构或跨层直连。
 - 每个中心未来都应是独立仓库，并作为 submodule 纳入父项目。
 - 子模块变更必须先在子仓库提交并推送，再更新父项目 gitlink。
 - `Reference-Projects/` 只管理参考项目评估材料；本地 clone 的上游源码放入 `Reference-Projects/sources/`，默认不提交。
