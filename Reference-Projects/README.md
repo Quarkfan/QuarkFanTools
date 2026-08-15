@@ -84,10 +84,12 @@ Context Hub references currently cloned for source-level evaluation:
 - Open WebUI: knowledge model, RAG/retrieval, access grants, knowledge tools.
 - Dify: dataset/knowledge configuration, ingestion/retrieval DTOs, metadata filtering, reranking.
 - LlamaIndex: Document/Node/Index/Retriever abstractions.
+- TencentDB Agent Memory: L0-L3 memory layering, Bot Loadout, memory assets, query-only knowledge tools, ACL and generation trace.
 
 Tracked first-pass notes:
 
 - `evaluations/context-hub/anythingllm-openwebui-dify-llamaindex-first-pass.md`
+- `evaluations/context-hub/tencentdb-agent-memory-first-pass.md`
 
 Model Hub references currently cloned for source-level evaluation:
 
