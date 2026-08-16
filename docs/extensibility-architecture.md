@@ -1,6 +1,6 @@
 # Platform Extensibility Architecture
 
-Status: architecture decision baseline for QuarkfanTools 3.x/5.x.
+Status: implemented platform baseline for QuarkfanTools 3.x/5.x.
 
 ## 1. Decision
 
@@ -150,18 +150,18 @@ The tool schemas shown to a model and the execution resolver use the same snapsh
 
 ## 8. Center ownership
 
-| Center | Extension ownership |
-| --- | --- |
-| Platform Contracts | Common descriptors, refs, event envelopes and compatibility rules |
-| Capability Registry | Capability definitions, provider packages, versions, bindings, trust metadata and diagnostics |
-| Runtime Center | Runtime providers, Runtime Profiles, session ledger, projections and execution pipeline |
-| Context Hub | Context source/processor providers, retrieval, compaction artifacts and memory lifecycle |
-| Model Hub | Model provider adapters, deployments, routing and model capability negotiation |
-| Message Gateway | Channel provider adapters, accounts, inbound/outbound normalization and channel capability probes |
-| Governance Center | Authorization, approval, credentials, sandbox policy and audit decisions |
-| Resource Center | Resource backends, artifacts, diagnostic bundles, capacity and retention execution |
-| Scheduler Center | Durable triggers, work admission, retries and continuation scheduling |
-| Platform Deployment | Packaging, rollout, canary, rollback, compatibility and release manifests |
+| Center              | Extension ownership                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| Platform Contracts  | Common descriptors, refs, event envelopes and compatibility rules                                 |
+| Capability Registry | Capability definitions, provider packages, versions, bindings, trust metadata and diagnostics     |
+| Runtime Center      | Runtime providers, Runtime Profiles, session ledger, projections and execution pipeline           |
+| Context Hub         | Context source/processor providers, retrieval, compaction artifacts and memory lifecycle          |
+| Model Hub           | Model provider adapters, deployments, routing and model capability negotiation                    |
+| Message Gateway     | Channel provider adapters, accounts, inbound/outbound normalization and channel capability probes |
+| Governance Center   | Authorization, approval, credentials, sandbox policy and audit decisions                          |
+| Resource Center     | Resource backends, artifacts, diagnostic bundles, capacity and retention execution                |
+| Scheduler Center    | Durable triggers, work admission, retries and continuation scheduling                             |
+| Platform Deployment | Packaging, rollout, canary, rollback, compatibility and release manifests                         |
 
 ## 9. Migration from the current implementation
 
@@ -217,3 +217,13 @@ DeepSeek Harness is the primary reference for runtime composition, session invar
 We will adopt DeepSeek's Cordis Core as a controlled Runtime-internal plugin kernel behind the QuarkfanTools Plugin SDK. It is exact-version pinned, limited to reviewed in-process adapters, and cannot cross center contracts or replace process/container isolation. Production loader/HMR and arbitrary runtime package installation remain disabled. The full DeepSeek Harness may later be integrated as an isolated Runtime Provider through the same provider contracts.
 
 This split captures the plugin architecture without making the harness's large, rapidly changing package graph the platform core. Detailed evidence, supply-chain caveats and promotion gates live in `Runtime-Center/docs/cordis-adoption.md` and the parent reference evaluation.
+
+## 12. Implemented production surface
+
+As of 2026-08-16, the production execution path is composed as `CordisPluginKernel -> RuntimeProviderRegistry -> RuntimeProvider`. The three existing engines are built-in Provider plugins rather than entries in a startup adapter map. Existing Bot `runtime` values are admitted through generated compatibility Profiles; new Bots can bind to revisioned Runtime Profiles.
+
+Runtime persists Provider lifecycle state, Profile revisions, immutable admission snapshots and an append-only per-session event ledger. Model Tool Loop and OpenAI Agents use one `CapabilityFacade`, so model-visible schemas and executable handles come from the same admitted capability snapshot. Claude Code remains a distinct Provider because its SDK owns its inner loop; read-only executions now remove write/edit/shell tools, and its remaining provider-specific capability limitations are declared rather than hidden.
+
+MG, CH, MH, CR, Scheduler, Resource and Governance expose the same extension descriptor, probe, lifecycle and log management surface. Their critical dispatch paths resolve the corresponding built-in extension before work begins. These center-local catalogs do not share Cordis contexts and do not grant security isolation. Runtime Provider/Profile state is durable; non-Runtime built-in lifecycle switches are operational process state and reset on service replacement, while permanent rollout and rollback remain Deployment responsibilities.
+
+The Dashboard exposes Runtime Provider list/detail, capability matrices, probe, lifecycle logs, Runtime Profile CRUD and cross-center extension inventory. Provider lifecycle mutation is admin-only; operator/viewer access remains bounded by the Console BFF and Governance audit.

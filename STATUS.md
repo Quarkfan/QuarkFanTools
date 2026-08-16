@@ -13,17 +13,17 @@
 | 模块 | 路径 | 远端 | 状态 |
 | --- | --- | --- | --- |
 | QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x 单机版业务延续线；已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，当前指向 `3e73523`，产品版本 `2.3.2`。 |
-| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 可部署实现、通道配置生命周期及可替换飞书后端合同已完成并推送，当前指向 `ae8257d`。 |
-| Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 可部署上下文、检索、记忆治理与配置生命周期已完成；新增 Session Event Ledger / context projection 边界，当前指向 `a3eadf4`。 |
-| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 可部署多模型 provider、路由、失败切换、用量和完整配置生命周期已完成并推送，当前指向 `92435ff`。 |
-| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 能力注册、导入、绑定 CRUD、隔离执行与内置能力实现已推送；新增 Provider/Binding 分层蓝图，当前指向 `27f9cf8`。 |
-| Platform Contracts | `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | 共享合同与 JSON Schema 已完成；新增跨中心 extensibility contract 蓝图，当前指向 `b9681de`。 |
-| Runtime Center | `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | 当前 Runtime、Bot CRUD、工作空间、会话、工作流与 Browser Worker 已部署；新增孵化 PluginKernel 和扩展架构，当前指向 `73fd6bd`。 |
-| Scheduler Center | `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | 调度、立即执行、重试、日志与历史补处理已部署并推送，当前指向 `c9d5dd0`。 |
-| Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理与 FFmpeg 已部署并推送，当前指向 `4a568b6`。 |
-| Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏与审计已部署并推送，当前指向 `00af054`。 |
-| Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 分层导航、列表/详情、完整配置生命周期、高级配置入口、账号/RBAC、状态、诊断与手册 Dashboard 已部署并推送，当前指向 `097fc1c`。 |
-| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、E2E 与 UI acceptance 已部署；新增 release preflight、source manifest 和交接门禁并完成服务器验证，当前指向 `a45f4f6`。 |
+| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 通道配置、可替换飞书后端与 Channel Provider 扩展控制面已完成，当前指向 `879fe8d`。 |
+| Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 上下文、检索、记忆治理、projection 边界与 Source/Processor 扩展控制面已完成，当前指向 `65eeba5`。 |
+| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 多类型模型、路由、失败切换、用量与 Model Adapter 扩展控制面已完成，当前指向 `ab73d21`。 |
+| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 能力注册、导入、绑定、隔离执行、内置能力与 Executor 扩展控制面已完成，当前指向 `7f15df5`。 |
+| Platform Contracts | `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | 共享合同、Provider 生命周期/探针、Runtime Profile、不可变解析快照和 Session Event Envelope 已导出，当前指向 `60d036a`。 |
+| Runtime Center | `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Cordis PluginKernel 已进入生产组合路径；Runtime Provider/Profile、不可变准入快照、统一 Capability Facade 与持久 Session Ledger 已完成，当前指向 `6e56c3c`。 |
+| Scheduler Center | `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | 调度、立即执行、重试、历史补处理与 Trigger/Queue/Dispatcher 扩展控制面已完成，当前指向 `5253777`。 |
+| Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理、FFmpeg 与 Storage/Diagnostics/Media 扩展控制面已完成，当前指向 `6bd0c57`。 |
+| Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏、审计与 Policy/Vault/Redactor 扩展控制面已完成，当前指向 `d7f5d76`。 |
+| Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 新增 Runtime Provider/Profile 和跨中心扩展的列表/详情、探针、生命周期、日志及高级配置 UI；生命周期变更仅管理员可用，当前指向 `8a1cec4`。 |
+| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、E2E、16 页面 UI acceptance 与 release handoff 已更新，当前指向 `96eea44`。 |
 | Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 及 Runtime 插件架构参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
@@ -40,7 +40,9 @@
 
 ## 最近验证
 
-- 2026-08-16：完成 DeepSeek Harness 与上游 Cordis 的源码、npm 包和发布链路评估。确定 Definition / Provider / Binding / Consumer 跨中心扩展模型；Runtime exact-pin `@deepseek-ai/cordis 4.0.1`，通过自有 PluginKernel facade 完成 5 项 scope、依赖、生命周期、声明与逆序清理测试。该内核仍为孵化路径，生产 adapter 尚未切换。
+- 2026-08-16：完成“Everything extensible is a plugin”生产基线。Runtime 三个引擎通过 Cordis PluginKernel 和持久 Provider Registry 组合，新增 revisioned Runtime Profile、不可变准入快照、Session Event Ledger 与统一 Capability Facade；MG / CH / MH / CR / Scheduler / Resource / Governance 的关键业务路径加入中心内扩展准入及 list/detail/probe/lifecycle/logs 控制面。
+- 2026-08-16：Dashboard 新增“扩展与插件”列表/详情工作区、Runtime Profile 完整 CRUD 与高级组合配置。跨中心目录支持单中心故障降级，生命周期操作由 BFF 强制限制为管理员。十个 Node 项目共 142 项测试通过，并全部通过 TypeScript 检查和生产构建。
+- 2026-08-16：完成 DeepSeek Harness 与上游 Cordis 的源码、npm 包和发布链路评估。确定 Definition / Provider / Binding / Consumer 跨中心扩展模型；Runtime exact-pin `@deepseek-ai/cordis 4.0.1`，通过自有 PluginKernel facade 管理 scope、依赖、生命周期、声明与逆序清理。Cordis 只承载受信任进程内组合，不作为安全沙箱。
 - 2026-08-16：建立每轮交付门禁。Deployment 新增 source/Compose preflight、父项目交接快照、精确 child commit manifest 和 child-first 发布/回滚手册；服务器 source/Compose preflight 和 12 服务 smoke 通过，未重建镜像或切换容器。
 - 2026-08-16：MG 抽取可注入的 `LarkChannelBackend` 与 `LarkConnectionBackendFactory`，并新增后端管理面、替换合同测试和 CLI 能力探测/升级/canary/回滚文档；当前生产仍使用 Node SDK/OpenAPI，CLI adapter 保持明确 external 状态。
 - 2026-08-16：Console 左侧导航按工作台、配置中心、运行与运维、系统管理分组；机器人、通道、上下文、模型、能力和调度改为列表进入新增/编辑详情，高级配置只在详情显示。生产滚动更新后 12 个服务健康，15 个页面在桌面和手机视口均无横向溢出或控件裁切。
