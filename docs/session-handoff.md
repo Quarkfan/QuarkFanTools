@@ -39,8 +39,8 @@
 | Scheduler Center | `79cd05e` |
 | Resource Center | `99332da` |
 | Governance Center | `c2c3526` |
-| Platform Console | `ec05ccc`（生产应用代码为 `2309841`，本提交补充部署证据） |
-| Platform Deployment | `b2891e5` |
+| Platform Console | `19c75d2`（底部提交区/健康可见性候选；生产应用仍为 `2309841`） |
+| Platform Deployment | `a826b2e` |
 
 父项目提交不要在本文硬编码为自引用哈希；新会话用 `git rev-parse origin/main` 获取当前交接版本。
 
@@ -48,6 +48,8 @@
 
 Console 已完成一轮全局信息架构和交互整改：
 
+- 所有配置提交动作统一位于表单最后的独立整行，行内只允许保存、取消、返回等同级按钮；能力授权已从配置中段移至高级配置之后。
+- 模型 Provider、通道、Runtime Provider 和平台插件显示真实探针状态、最后检查时间、可用延迟与最近错误；未检测、停用、降级和异常不再伪装为健康。
 - 文本输入与选择框显式使用统一 40px 高度；模型使用策略按基础设置、参与路由模型和行为开关分组。
 - 每页“本页指引”改为紧凑入口和按需弹窗，支持关闭按钮、遮罩与 Escape；Deployment 验收会逐页打开并校验三段内容。
 - 模型 Provider/部署高级配置逐项解释优先级、权重、能力、上下文、成本和元数据；自定义请求头说明适用场景、JSON 示例及不得重复存放密钥的边界。其他高级区也明确使用范围。
@@ -64,6 +66,7 @@ Console 已完成一轮全局信息架构和交互整改：
 ## 验证证据
 
 - Platform Console：19 项测试通过，TypeScript 检查和生产构建通过。
+- 最新未部署候选：Platform Console 20 项测试、TypeScript 检查和生产构建通过；Deployment UI acceptance 语法检查通过，并新增提交区与健康摘要结构合同。
 - Playwright 严格验收覆盖 16 个页面、桌面与移动共 32 个状态。
 - 每个业务页面恰有一份页面指引；全局横向溢出为 0，裁切控件为 0。
 - 真实回环登录、Session Cookie 和 `/api/me` 验收通过。
