@@ -224,6 +224,22 @@ As of 2026-08-16, the production execution path is composed as `CordisPluginKern
 
 Runtime persists Provider lifecycle state, Profile revisions, immutable admission snapshots and an append-only per-session event ledger. Model Tool Loop and OpenAI Agents use one `CapabilityFacade`, so model-visible schemas and executable handles come from the same admitted capability snapshot. Claude Code remains a distinct Provider because its SDK owns its inner loop; read-only executions now remove write/edit/shell tools, and its remaining provider-specific capability limitations are declared rather than hidden.
 
-MG, CH, MH, CR, Scheduler, Resource and Governance expose the same extension descriptor, probe, lifecycle and log management surface. Their critical dispatch paths resolve the corresponding built-in extension before work begins. These center-local catalogs do not share Cordis contexts and do not grant security isolation. Runtime Provider/Profile state is durable; non-Runtime built-in lifecycle switches are operational process state and reset on service replacement, while permanent rollout and rollback remain Deployment responsibilities.
+MG, CH, MH, CR, Scheduler, Resource and Governance expose the same extension descriptor, probe, lifecycle, generation and log management surface. Their critical dispatch paths resolve the corresponding built-in extension before work begins. These center-local catalogs do not share Cordis contexts and do not grant security isolation.
 
-The Dashboard exposes Runtime Provider list/detail, capability matrices, probe, lifecycle logs, Runtime Profile CRUD and cross-center extension inventory. Provider lifecycle mutation is admin-only; operator/viewer access remains bounded by the Console BFF and Governance audit.
+Every center now persists its extension state and append-only events in its own PostgreSQL schema. Initialization restores lifecycle state before the service becomes ready, records first install, increments generation on descriptor-version upgrade, serializes mutations per Provider, and atomically commits state with lifecycle/probe events. A disabled or failed Provider therefore remains gated after container replacement. Deployment still owns package/image rollout and whole-release rollback; the center catalog owns operational Provider admission.
+
+The Dashboard exposes Runtime Provider list/detail, capability matrices, probe, lifecycle logs, Runtime Profile CRUD and cross-center extension inventory. Cross-center details include persistent generation, install time and state-update time so operators can verify recovery and upgrades without database access. Provider lifecycle mutation is admin-only; operator/viewer access remains bounded by the Console BFF and Governance audit.
+
+### Center-local durable tables
+
+| Center     | State table              | Event table              |
+| ---------- | ------------------------ | ------------------------ |
+| MG         | `mg.extension_states`    | `mg.extension_events`    |
+| CH         | `ch.extension_states`    | `ch.extension_events`    |
+| MH         | `mh.extension_states`    | `mh.extension_events`    |
+| CR         | `cr.extension_states`    | `cr.extension_events`    |
+| Scheduler  | `sched.extension_states` | `sched.extension_events` |
+| Resource   | `res.extension_states`   | `res.extension_events`   |
+| Governance | `gov.extension_states`   | `gov.extension_events`   |
+
+The tables deliberately remain center-owned. No shared extension database or cross-schema execution query is introduced; the Console aggregates only through authenticated center APIs.
