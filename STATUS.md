@@ -22,8 +22,8 @@
 | Scheduler Center     | `Scheduler-Center/`     | `git@github.com:Quarkfan/Scheduler-Center.git`     | 调度、立即执行、重试、历史补处理与持久 Trigger/Queue/Dispatcher 扩展控制面已完成，当前指向 `79cd05e`。                                                                                                                |
 | Resource Center      | `Resource-Center/`      | `git@github.com:Quarkfan/Resource-Center.git`      | 资源、诊断、清理、FFmpeg 与持久 Storage/Diagnostics/Media 扩展控制面已完成，当前指向 `99332da`。                                                                                                                      |
 | Governance Center    | `Governance-Center/`    | `git@github.com:Quarkfan/Governance-Center.git`    | 策略、审批、凭据、脱敏、审计与持久 Policy/Vault/Redactor 扩展控制面已完成，当前指向 `c2c3526`。                                                                                                                       |
-| Platform Console     | `Platform-Console/`     | `git@github.com:Quarkfan/Platform-Console.git`     | Runtime Provider/Profile、跨中心扩展 UI、HTTPS/回环双入口认证与中文登录错误已完成；生命周期变更仅管理员可用，当前指向 `ed7c38b`。                                                                                  |
-| Platform Deployment  | `Platform-Deployment/`  | `git@github.com:Quarkfan/Platform-Deployment.git`  | Compose、备份恢复、回环认证与扩展持久化 smoke、E2E、16 页面 UI acceptance、release handoff 与公网 TLS 云边界排查记录已更新，当前指向 `5fbd54a`。                                                                       |
+| Platform Console     | `Platform-Console/`     | `git@github.com:Quarkfan/Platform-Console.git`     | 二级导航、逐页指引、单行列表、操作反馈、插件控制面、HTTPS/回环双入口认证已完成；生命周期变更仅管理员可用，当前指向 `68a30e7`。                                                                                         |
+| Platform Deployment  | `Platform-Deployment/`  | `git@github.com:Quarkfan/Platform-Deployment.git`  | Compose、备份恢复、回环认证与扩展持久化 smoke、E2E、重构后 16 页面 UI acceptance、release handoff 与公网 TLS 云边界排查记录已更新，当前指向 `148d04d`。                                                                |
 | Reference Projects   | `Reference-Projects/`   | 父项目目录                                         | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 及 Runtime 插件架构参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
@@ -40,6 +40,7 @@
 
 ## 最近验证
 
+- 2026-08-16：Console 完成信息架构与交互整改。模型、能力、插件加入二级导航；每个业务页提供概念/配置/效果指引；通道页移除内部 Lark backend 注册信息；列表保持单行横向滚动，高密度操作进入更多菜单；操作统一提供进度和结果反馈。19 项测试、类型检查和生产构建通过。
 - 2026-08-16：修复公网 HTTPS 启用后通过 `127.0.0.1:8080` SSH 隧道登录时 Secure Cookie 被浏览器拒绝、页面无提示闪回的问题。备份 `20260816T051437Z` 验证后部署父项目 `fd1b0de`；真实回环登录、Cookie、`/api/me`、中文错误提示和最终 12 服务 smoke 均通过。
 - 2026-08-16：父项目应用源码 `7650ea8` 部署到 `zwj-ubuntu`。在线备份 `20260816T043509Z` 完整通过；七个 schema 共恢复 32 个 Provider。MH 非关键适配器经 `disabled -> 重启保持 -> verified -> active` 验收，事件日志保留且无 Provider 遗留停用；完整 E2E、16 页面桌面/移动 UI 和最终 12 服务 smoke 通过。
 - 2026-08-16：MG / CH / MH / CR / Scheduler / Resource / Governance 的扩展生命周期从进程内状态升级为各中心 PostgreSQL schema 持久化；状态与事件原子提交，版本变化递增代次，初始化防并发且可在临时存储失败后重试。CR 管理面与执行器共享同一目录实例，七个中心均通过目录重建恢复合同。
