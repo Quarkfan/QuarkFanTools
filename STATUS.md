@@ -45,6 +45,7 @@
 - 2026-08-16：Dashboard 14 个页面完成桌面和移动端 Playwright 布局验收，无横向溢出和控件裁切；初始管理员强制改密已成为发布门禁。
 - 2026-08-16：MG 新增飞书用户 OAuth、token 轮换和 Sheets/Base 受管数据 API；CR 注册对应读写能力，写操作为高风险审批能力。
 - 2026-08-16：Browser Agent 通过 MH 规划与 Playwright 执行，默认阻断 localhost、私网 IP 和 DNS 解析到私网的请求；服务器生产环境已恢复该默认策略。
+- 2026-08-16：生产 Dashboard 已通过部署仓库的 Caddy HTTPS profile 发布到 `https://tool.quarkfan.com`；Console 收回主机 loopback，HTTP/IP 入口统一跳转规范 HTTPS 域名，Secure Cookie、HSTS、证书链和 12 项服务健康检查均已验证。
 - 3.0 当前完整事实、受控降级和验证记录见 `docs/3.0-current-release.md`。
 
 - 2026-08-15：3.0 路线已从“只做远期 Linux 蓝图”调整为“server-ready 优先准备”。新增 `docs/server-readiness-roadmap.md`，明确 Single 不进入本轮服务器化优先工作，MG / CH / MH / CR 需要尽快从蓝图进入可启动服务骨架、HTTP/RPC 管理面、健康检查、存储抽象、Docker 路径和端到端 server smoke test。
