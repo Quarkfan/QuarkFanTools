@@ -18,12 +18,12 @@
 | Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 可部署多模型 provider、路由、失败切换和用量实现已完成并推送，当前本地指向 `d14bb96`。 |
 | Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 可部署能力注册、导入、绑定、隔离执行与内置能力实现及安全硬化已推送，当前指向 `910ed4b`。 |
 | Platform Contracts | `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | 共享合同与 JSON Schema 已完成，当前本地指向 `0d56217`；远端仓库待创建。 |
-| Runtime Center | `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime、工作空间、会话、工作流与 Browser Worker 已部署，当前本地指向 `c7f1f0a`；远端仓库待创建。 |
+| Runtime Center | `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime、工作空间、会话、工作流与 Browser Worker 已部署，当前本地指向 `bf906ee`；远端仓库待创建。 |
 | Scheduler Center | `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | 调度、立即执行、重试、日志与历史补处理已部署，当前本地指向 `c9d5dd0`；远端仓库待创建。 |
 | Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理与 FFmpeg 已部署，当前本地指向 `4a568b6`；远端仓库待创建。 |
 | Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏与审计已部署，当前本地指向 `00af054`；远端仓库待创建。 |
-| Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 账号密码、RBAC、配置控制、状态与诊断 Dashboard 已部署，当前本地指向 `0866923`；远端仓库待创建。 |
-| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、E2E 与 UI acceptance 已部署，当前本地指向 `a896c5f`；远端仓库待创建。 |
+| Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 账号密码、RBAC、配置控制、状态、诊断与常驻使用手册 Dashboard 已部署，当前本地指向 `799dda7`；远端仓库待创建。 |
+| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、自动验收清理、E2E 与 UI acceptance 已部署，当前本地指向 `81252f6`；远端仓库待创建。 |
 | Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
