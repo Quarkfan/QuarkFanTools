@@ -228,6 +228,8 @@ MG, CH, MH, CR, Scheduler, Resource and Governance expose the same extension des
 
 Every center now persists its extension state and append-only events in its own PostgreSQL schema. Initialization restores lifecycle state before the service becomes ready, records first install, increments generation on descriptor-version upgrade, serializes mutations per Provider, and atomically commits state with lifecycle/probe events. A disabled or failed Provider therefore remains gated after container replacement. Deployment still owns package/image rollout and whole-release rollback; the center catalog owns operational Provider admission.
 
+Lifecycle admission and implementation health are independent axes. `disabled` blocks execution but remains probeable, so an operator can verify the loaded implementation and move it through `verified` back to service. Treating disabled state itself as a failed probe would create an unrecoverable lifecycle and is forbidden by the common recovery contract.
+
 The Dashboard exposes Runtime Provider list/detail, capability matrices, probe, lifecycle logs, Runtime Profile CRUD and cross-center extension inventory. Cross-center details include persistent generation, install time and state-update time so operators can verify recovery and upgrades without database access. Provider lifecycle mutation is admin-only; operator/viewer access remains bounded by the Console BFF and Governance audit.
 
 ### Center-local durable tables
