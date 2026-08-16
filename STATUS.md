@@ -22,8 +22,8 @@
 | Scheduler Center     | `Scheduler-Center/`     | `git@github.com:Quarkfan/Scheduler-Center.git`     | 调度、立即执行、重试、历史补处理与持久 Trigger/Queue/Dispatcher 扩展控制面已完成，当前指向 `79cd05e`。                                                                                                                |
 | Resource Center      | `Resource-Center/`      | `git@github.com:Quarkfan/Resource-Center.git`      | 资源、诊断、清理、FFmpeg 与持久 Storage/Diagnostics/Media 扩展控制面已完成，当前指向 `99332da`。                                                                                                                      |
 | Governance Center    | `Governance-Center/`    | `git@github.com:Quarkfan/Governance-Center.git`    | 策略、审批、凭据、脱敏、审计与持久 Policy/Vault/Redactor 扩展控制面已完成，当前指向 `c2c3526`。                                                                                                                       |
-| Platform Console     | `Platform-Console/`     | `git@github.com:Quarkfan/Platform-Console.git`     | 二级导航、弹窗式逐页指引、独立底部提交区、健康标签与悬停检查详情、统一表单控件、模型高级配置说明、使用策略分组、操作反馈、插件控制面、HTTPS/回环双入口认证已完成；当前指向 `f08e9db`，生产应用代码仍为 `19c75d2`。              |
-| Platform Deployment  | `Platform-Deployment/`  | `git@github.com:Quarkfan/Platform-Deployment.git`  | Compose、备份恢复、回环认证与扩展持久化 smoke、E2E、提交区/悬停健康详情/弹窗式逐页指引与结构 UI acceptance、release handoff 与公网 TLS 云边界排查记录已更新，当前指向 `3821e49`。                                           |
+| Platform Console     | `Platform-Console/`     | `git@github.com:Quarkfan/Platform-Console.git`     | 二级导航、弹窗式逐页指引、独立底部提交区、健康标签与悬停检查详情、统一表单控件、模型高级配置说明、使用策略分组、操作反馈、插件控制面、HTTPS/回环双入口认证已完成；当前指向 `385b44b`，生产应用代码为 `f08e9db`。                  |
+| Platform Deployment  | `Platform-Deployment/`  | `git@github.com:Quarkfan/Platform-Deployment.git`  | Compose、备份恢复、回环认证与扩展持久化 smoke、E2E、提交区/悬停健康详情/弹窗式逐页指引与结构 UI acceptance、release handoff 与公网 TLS 云边界排查记录已更新，当前指向 `e3449dc`。                                           |
 | Reference Projects   | `Reference-Projects/`   | 父项目目录                                         | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 及 Runtime 插件架构参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
@@ -40,7 +40,7 @@
 
 ## 最近验证
 
-- 2026-08-16：Console 健康信息紧凑展示候选已完成并推送。模型 Provider、通道、Runtime Provider 与平台插件在行内只保留明确健康标签；最后检查时间、可用延迟和最近错误改由鼠标悬停的小浮窗显示，移出后隐藏。Console 20 项测试、类型检查和生产构建通过；Deployment UI acceptance 已加入“详情存在于悬停提示且不常驻行内”的合同检查。本候选尚未部署。
+- 2026-08-16：Console 健康信息紧凑展示已从父项目源码 `d8020a9`、应用代码 `f08e9db` 部署到 `zwj-ubuntu`。发布前在线备份 `20260816T075300Z` 完整通过；模型 Provider、通道、Runtime Provider 与平台插件在行内只保留健康标签，最后检查时间、可用延迟和最近错误由鼠标悬停小浮窗显示并在移出后隐藏。Console 20 项测试、类型检查和生产构建通过；32 个桌面/移动页面状态、完整 E2E、回环登录及最终 12 服务 smoke 全部通过。
 - 2026-08-16：Console 底部提交区与健康可见性已从父项目源码 `cff04f8`、应用代码 `19c75d2` 部署到 `zwj-ubuntu`。发布前在线备份 `20260816T073909Z` 完整通过；所有配置提交动作位于表单最后的纯按钮整行，模型 Provider、通道、Runtime Provider 与平台插件展示真实探针状态、最后检查时间、可用延迟和最近错误。Console 20 项测试、类型检查和生产构建通过；32 个桌面/移动页面状态、完整 E2E、回环登录及最终 12 服务 smoke 全部通过。
 - 2026-08-16：Console 表单与帮助交互已从父项目 `6deaeaa`、应用代码 `2309841` 部署到 `zwj-ubuntu`。发布前在线备份 `20260816T065006Z` 完整通过；文本输入与选择框统一为 40px，逐页指引改为按需弹窗，模型高级配置补齐用途、自定义请求头示例和安全边界，使用策略完成分组。32 个桌面/移动页面状态的指引弹窗、详情和高级区全部通过，无全局溢出或控件裁切；完整 E2E、回环登录及最终 12 服务 smoke 通过。
 - 2026-08-16：新增 `docs/session-handoff.md` 作为 3.0 新会话首要入口，集中记录路线边界、生产状态、模块基线、最近完成、验证证据、已知事项和下一轮发布顺序。
