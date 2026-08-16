@@ -597,22 +597,28 @@ interface ModelAttempt {
 ### 5.6 运行时协议
 
 ```ts
-interface AgentRuntimeRequest {
-  runtimeId: "claude-code" | string;
-  mode: "agent" | "text" | "vision";
+interface RuntimeExecutionRequest {
+  runtimeProfileId: string;
+  runtimeProfileRevision?: number;
   botId: string;
   conversationKey?: string;
   input: RuntimeInput;
-  modelPlan?: ModelAttemptPlan;
-  context?: ContextRecord[];
-  capabilities?: RuntimeCapabilityBinding[];
-  workspacePolicy: WorkspacePolicy;
+  contextMaterializationId?: string;
+  capabilityResolutionSnapshotIds?: string[];
   progressMode: "silent" | "local-log" | "user-visible";
 }
 
-interface AgentRuntimeResult {
+interface RuntimeExecutionReceipt {
+  executionId: string;
+  sessionId: string;
+  resolvedProfileSnapshotId: string;
+  acceptedAt: string;
+}
+
+interface RuntimeExecutionResult {
+  executionId: string;
+  terminalState: "completed" | "failed" | "cancelled" | "suspended";
   finalText: string;
-  runtimeSessionId?: string;
   outputResources: ResourceRef[];
   toolCalls: RuntimeToolCallSummary[];
   noReply?: boolean;
@@ -623,6 +629,8 @@ interface AgentRuntimeResult {
 
 - 运行时中心消费模型、知识、工具绑定和 workspace policy，但不自行扩大权限。
 - 不同 runtime 必须声明能力差异，例如是否支持工具、MCP、Bash、session resume、文件写入、流式事件。
+- admission 先解析不可变 Runtime Profile 和 provider capability；不支持的能力在产生副作用前失败。
+- 所有模型可见输入必须可由 Session Event Ledger 和不可变资源引用重建。
 - `QFT_NO_REPLY` 这类 runtime 专属约定应被转换成统一 `noReply`。
 
 ### 5.7 Capability Registry 协议
@@ -634,18 +642,8 @@ interface CapabilityResolveRequest {
   filter?: CapabilityFilter;
 }
 
-interface RuntimeCapabilityBinding {
-  kind: "skill" | "mcp" | "app" | "suite" | "workflow";
-  id: string;
-  displayName: string;
-  trigger: "agent" | "command" | "scheduled" | "workflow";
-  policyDecisionId: string;
-  manifestRef?: string;
-  runtimeAdapter: "claude-skill" | "mcp-stdio" | "custom-app" | "workflow" | "prompt-only";
-}
-
 interface CapabilityRunRequest {
-  binding: RuntimeCapabilityBinding;
+  resolutionSnapshotId: string;
   input: string;
   workspaceId: string;
   deliveryRoutes?: DeliveryRouteSummary[];
@@ -655,6 +653,7 @@ interface CapabilityRunRequest {
 规则：
 
 - CR 输出能力绑定前必须带上治理判定结果。
+- Definition、Provider、Binding 和 Consumer 分离；visibility schema 与执行 handle 必须来自同一个不可变 resolution snapshot。
 - 自定义应用的 `deliveries` 仍只是投递请求，必须交回 MG 二次校验。
 - Workflow 每一步都要继承同一个 `correlationId`，但每步有自己的 `requestId`。
 
@@ -775,10 +774,10 @@ interface MaterializeResourceRequest {
 ## 9. 演进顺序
 
 1. 先在文档中固定协议和字段命名。
-2. 新增轻量 TypeScript 类型文件，例如 `electron/platform-protocol.ts`，不立即迁移所有调用。
-3. 从低风险链路开始落地：模型选择、能力解析、知识召回结果、资源引用。
-4. 再迁移运行时中心：把 Claude Code Runtime 包装到 `AgentRuntime`。
-5. 最后迁移消息主链路和调度链路，保持旧配置和旧日志兼容。
+2. 在 Platform Contracts 发布 provider、binding、resolution snapshot 和 Session Event envelope 合同及合同测试。
+3. 将现有 runtime adapter 包装为 provider，并保持当前生产行为。
+4. 双写 Session Event Ledger、影子验证 projection，再切换读取和能力执行管线。
+5. 最后迁移 live session/profile，保持旧配置、日志和回滚路径兼容。
 
 ## 10. 验收口径
 

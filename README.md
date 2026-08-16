@@ -16,7 +16,7 @@ It no longer contains the macOS standalone app source directly. Each major cente
 | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | Model Hub center: model providers, deployments, capabilities, routing, fallback, health, usage, local/self-hosted models, and tool-exportable model abilities. |
 | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | Capability Registry center: capability manifests, packages, providers, bindings, diagnostics, Skill/MCP/executable adapters, and model/context export registration. |
 | `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | Shared envelopes, errors, request context, resource references and service helpers. |
-| `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime adapters, Bot execution, sessions, workspaces, workflows and Browser Worker. |
+| `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime providers/adapters, PluginKernel, Bot execution, session ledger, profiles, workspaces, workflows and Browser Worker. |
 | `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | Durable schedules, manual runs, retries, continuation and history backfill. |
 | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | Content-addressed resources, media, diagnostics, cleanup and resource telemetry. |
 | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | Policies, approvals, encrypted credentials, redaction and audit. |
@@ -31,6 +31,7 @@ Future centers should be added here as independent repositories and registered i
 - [Platform reference matrix](docs/platform-reference-matrix.md)
 - [Platform centers](docs/platform-centers.md)
 - [Cross-center protocols](docs/platform-interface-protocols.md)
+- [Platform extensibility architecture](docs/extensibility-architecture.md)
 - [3.0 server readiness roadmap](docs/server-readiness-roadmap.md)
 - [3.0 current release](docs/3.0-current-release.md)
 - [3.0 configuration lifecycle](docs/3.0-configuration-lifecycle.md)
@@ -38,6 +39,8 @@ Future centers should be added here as independent repositories and registered i
 - [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
 
 Module-specific docs live inside each submodule. Message Gateway-specific design is in [Message-Gateway/docs/message-gateway.md](Message-Gateway/docs/message-gateway.md), with Lark CLI upgrade boundaries in [Message-Gateway/docs/lark-cli-compatibility.md](Message-Gateway/docs/lark-cli-compatibility.md). Platform Console navigation and list/detail rules are in [Platform-Console/docs/information-architecture.md](Platform-Console/docs/information-architecture.md). Context Hub-specific design is in [Context-Hub/docs/context-hub.md](Context-Hub/docs/context-hub.md), with implementation blueprint in [Context-Hub/docs/implementation-blueprint.md](Context-Hub/docs/implementation-blueprint.md). Model Hub-specific design is in [Model-Hub/docs/model-hub.md](Model-Hub/docs/model-hub.md), with implementation blueprint in [Model-Hub/docs/implementation-blueprint.md](Model-Hub/docs/implementation-blueprint.md). Capability Registry-specific design is in [Capability-Registry/docs/capability-registry.md](Capability-Registry/docs/capability-registry.md), with implementation blueprint in [Capability-Registry/docs/implementation-blueprint.md](Capability-Registry/docs/implementation-blueprint.md).
+
+Runtime extensibility and controlled DeepSeek Cordis adoption are documented in [Runtime-Center/docs/runtime-extension-blueprint.md](Runtime-Center/docs/runtime-extension-blueprint.md) and [Runtime-Center/docs/cordis-adoption.md](Runtime-Center/docs/cordis-adoption.md). Release reproducibility and handoff gates are in [Platform-Deployment/docs/release-handoff.md](Platform-Deployment/docs/release-handoff.md).
 
 Reference project evaluation guidance lives in [Reference-Projects/README.md](Reference-Projects/README.md).
 

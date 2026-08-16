@@ -116,6 +116,17 @@ Tracked first-pass notes:
 
 - `evaluations/capability-registry/mcp-dify-openwebui-langchain-first-pass.md`
 
+Runtime and platform extensibility references currently cloned:
+
+- DeepSeek Harness: plugin composition, capability seams, durable session events, guarded tools, compaction, subagents and verification discipline.
+- Cordis: upstream service injection, fiber lifecycle, logical isolation, loader and HMR comparison against DeepSeek's hardened rescoped package.
+
+Tracked evaluation:
+
+- `evaluations/platform/deepseek-harness-first-pass.md`
+
+Current recommendation is controlled adoption of exact-pinned `@deepseek-ai/cordis` Core behind the QuarkfanTools Plugin SDK inside Runtime. Cordis does not cross center boundaries and is not a security sandbox; complete DeepSeek Harness remains a future isolated Runtime Provider candidate.
+
 The reference matrix is an input to modeling, not a replacement for QuarkfanTools decisions.
 
 ## Collaboration Rule

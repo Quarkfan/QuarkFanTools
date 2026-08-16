@@ -31,6 +31,14 @@
 - `Reference-Projects/` 只管理参考项目评估材料；本地 clone 的上游源码放入 `Reference-Projects/sources/`，默认不提交。
 - 不得提交 API Key、App Secret、Token、用户数据或未脱敏日志。
 
+## 每轮交付门禁
+
+- 每次平台迭代都要同步更新受影响子仓库的 `README.md`、`STATUS.md`、设计/运维文档和测试证据；不能让代码、部署脚本和交接手册描述不同版本。
+- 部署、回滚、环境变量、服务拓扑或验收方式发生变化时，必须同步 `Platform-Deployment/` 的脚本、`docs/operations.md` 和 `docs/release-handoff.md`。
+- 父项目必须同步 `STATUS.md`、`docs/3.0-current-release.md`、`docs/3.0-completion-audit.md`、相关总设计和子模块 gitlink。
+- 提交顺序固定为：子仓库验证、提交、推送；父项目更新 gitlink 与总文档、提交、推送；随后才从该干净父项目状态同步和部署。
+- 完成前运行 `Platform-Deployment/scripts/release-preflight.sh`。若生产部署发生，再补备份、source manifest、smoke/E2E/UI 和回滚证据。
+
 ## 决策协作
 
 - 顶级工程原则：如果某个部分已经有成熟、优秀、许可合适且可维护的开源实现，应先做认真评估，再决定复用、适配、借鉴或自研，不要默认自己造轮子。
@@ -47,6 +55,7 @@
 - Context Hub 验证在 `Context-Hub/` 中执行。
 - Model Hub 验证在 `Model-Hub/` 中执行。
 - Capability Registry 验证在 `Capability-Registry/` 中执行。
+- 跨中心扩展架构先读 `docs/extensibility-architecture.md`；Runtime 插件内核还需读 `Runtime-Center/docs/cordis-adoption.md`。
 - 父项目常规检查：
 
 ```bash

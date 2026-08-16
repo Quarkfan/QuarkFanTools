@@ -135,9 +135,9 @@ QuarkfanTools 从“飞书 Bot + Claude Code Skill Agent”演进为本机 Agent
 
 职责：
 
-- 负责 Agent runtime 抽象、内核加载、工作空间构建、session 恢复、MCP 注入、工具注入、进程/线程/容器隔离和 runtime 生命周期。
-- 当前实现是 Claude Code Runtime；后续应支持多个 runtime，例如 Claude Code、纯文本模型 runtime、OpenAI Responses runtime、Gemini runtime、本地模型 runtime 等。
-- 把 runtime 专属事件转换为平台统一事件，例如进度、工具调用、最终回复、错误、session id。
+- 负责 Runtime Provider、Runtime Profile、插件内核、工作空间构建、session 恢复、能力注入、进程/线程/容器隔离和 runtime 生命周期。
+- 当前实现已支持 Model Hub tool loop、OpenAI Agents 和外部 Claude Code 路径；后续 provider 通过开放描述符和能力协商接入，不再扩展硬编码字符串联合。
+- 把 provider 专属事件转换为平台 Session Event Ledger、执行状态和资源引用。
 
 不负责：
 
@@ -145,18 +145,19 @@ QuarkfanTools 从“飞书 Bot + Claude Code Skill Agent”演进为本机 Agent
 - 不直接管理上下文库或记忆；只消费 CH 返回的召回结果或上下文记录。
 - 不直接管理消息平台；只返回运行结果。
 
-当前代码映射：
+当前代码与设计入口：
 
-- `electron/claude.ts` 是当前最厚的 runtime 适配层。
-- `electron/default-mcp.ts`
-- `electron/sandbox-filesystem.ts`
-- `electron/bot-runtime-context.ts`
+- `Runtime-Center/src/adapters.ts`：当前兼容适配器。
+- `Runtime-Center/src/plugin-kernel.ts`：DeepSeek Cordis Core 背后的稳定 PluginKernel facade（孵化中，尚未切换生产路径）。
+- `Runtime-Center/docs/runtime-extension-blueprint.md`：Provider、Profile、Session Event Ledger 和能力执行管线蓝图。
+- `Runtime-Center/docs/cordis-adoption.md`：插件内核接入、隔离和供应链边界。
 
 后续目标：
 
-- 新增 `AgentRuntime` 接口。
-- 将 `runClaude` 收敛为 `ClaudeCodeRuntime`。
-- 将 workspace、Skill 链接、prompt 构建、MCP 注入、sandbox policy 中 runtime 无关部分从 `electron/claude.ts` 拆出。
+- 用开放 `RuntimeProvider` registry 替换硬编码 `RuntimeKind`。
+- 让所有 adapter 通过同一个受治理 capability pipeline。
+- 双写并验证 Session Event Ledger projection 后移除可变 100 条消息截断。
+- 通过 profile revision、canary、drain 和 rollback 完成 provider 生命周期。
 
 ### 2.6 资源中心
 
@@ -267,9 +268,9 @@ MG 负责通道接入、入站标准化、订阅/查询、消息管理、路由�
 
 ### 阶段二：运行时接口抽象
 
-- 新增 `AgentRuntime` 接口，包含 Agent 调用、文本调用、视觉调用、进度事件和 session 语义。
-- 把当前 `runClaude` 包装为 `ClaudeCodeRuntime`。
-- 业务层只依赖 `AgentRuntime`，不直接依赖 `@anthropic-ai/claude-agent-sdk` 类型。
+- 当前 adapter 抽象已经完成第一版；下一步升级为版本化 `RuntimeProvider` 和声明式 Runtime Profile。
+- DeepSeek Cordis Core 只作为 Runtime 内部插件内核，平台插件通过 QuarkfanTools Plugin SDK，中心间仍只使用 Platform Contracts。
+- provider 专属 SDK 类型不得进入 Bot、session、消息、上下文或跨中心合同。
 
 ### 阶段三：CH 接口抽象
 
@@ -284,9 +285,9 @@ MG 负责通道接入、入站标准化、订阅/查询、消息管理、路由�
 
 ### 阶段五：多 runtime 扩展
 
-- 先支持无工具纯文本 runtime，用于总结、后处理和简单问答。
-- 再支持带受控 MCP 的 runtime。
-- 最后再考虑具备完整工具、workspace、session resume 和隔离语义的 runtime。
+- 先将现有三个 adapter 包装为 provider，并通过统一合同测试。
+- 再接入新的纯文本、工具型和远程 runtime；不支持的能力必须在 admission 前明确拒绝。
+- 完整 DeepSeek Harness 作为可选隔离 Runtime Provider 评估，不直接接管平台中心。
 
 ## 5. 验收口径
 
