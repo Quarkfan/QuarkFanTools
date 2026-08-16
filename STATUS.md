@@ -42,7 +42,8 @@
 
 - 2026-08-16：3.0 十一个生产应用服务已部署到 `zwj-ubuntu` 并全部健康；完整 Compose E2E 在全栈重启前后均通过，覆盖 Browser 审批续跑、Media、Resource、Context、Scheduler、MG/Runtime 及诊断包链路。
 - 2026-08-16：在线与 quiesced 备份覆盖 PostgreSQL 和五个持久卷，自动完成 SHA-256、数据库目录和归档可读性校验；quiesced 路径只在所有服务恢复 healthy 后返回。
-- 2026-08-16：Dashboard 14 个页面完成桌面和移动端 Playwright 布局验收，无横向溢出和控件裁切；初始管理员强制改密已成为发布门禁。
+- 2026-08-16：Dashboard 15 个页面完成桌面和移动端 Playwright 布局验收，无横向溢出和控件裁切；新增可搜索的常驻“使用手册”，覆盖首次配置、日常操作、故障排查与安全维护。
+- 2026-08-16：在完整备份验证后清除了所有可明确归属于 acceptance 租户的数据库、资源、工作空间和能力包数据；管理员、默认系统助手、默认上下文、内置能力及无法证明归属的治理决策均保留。后续完整验收退出时自动执行同范围清理。
 - 2026-08-16：MG 新增飞书用户 OAuth、token 轮换和 Sheets/Base 受管数据 API；CR 注册对应读写能力，写操作为高风险审批能力。
 - 2026-08-16：Browser Agent 通过 MH 规划与 Playwright 执行，默认阻断 localhost、私网 IP 和 DNS 解析到私网的请求；服务器生产环境已恢复该默认策略。
 - 2026-08-16：生产 Dashboard 已通过部署仓库的 Caddy HTTPS profile 发布到 `https://tool.quarkfan.com`；Console 收回主机 loopback，HTTP/IP 入口统一跳转规范 HTTPS 域名，Secure Cookie、HSTS、证书链和 12 项服务健康检查均已验证。
