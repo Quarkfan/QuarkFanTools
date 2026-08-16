@@ -22,7 +22,7 @@
 - 服务器别名：`zwj-ubuntu`；部署根目录：`/opt/quarkfantools`。
 - Dashboard 配置域名：`https://tool.quarkfan.com`；Console 也保留受控的 SSH 回环访问面。不要在文档或 Git 中记录账号密码、密钥和 Cookie。
 - PostgreSQL、十一项应用服务和 Caddy edge 共十二项健康检查全部通过。
-- 最近一次 UI 发布前验证备份：`/opt/quarkfantools/Platform-Deployment/backups/20260816T065006Z`。
+- 最近一次 UI 发布前验证备份：`/opt/quarkfantools/Platform-Deployment/backups/20260816T073909Z`。
 - 服务器 `DEPLOYED-SOURCE-MANIFEST.md` 是最近一次同步的精确源码证据；新的文档提交同步后应以该文件和父项目 `origin/main` 为准。
 - 当前数据库迁移均为增量兼容。回滚前仍必须重新备份，并按 Deployment 交接门禁执行。
 
@@ -39,8 +39,8 @@
 | Scheduler Center | `79cd05e` |
 | Resource Center | `99332da` |
 | Governance Center | `c2c3526` |
-| Platform Console | `19c75d2`（底部提交区/健康可见性候选；生产应用仍为 `2309841`） |
-| Platform Deployment | `a826b2e` |
+| Platform Console | `66c9528`（生产应用代码 `19c75d2`） |
+| Platform Deployment | `77277ce` |
 
 父项目提交不要在本文硬编码为自引用哈希；新会话用 `git rev-parse origin/main` 获取当前交接版本。
 
@@ -65,14 +65,14 @@ Console 已完成一轮全局信息架构和交互整改：
 
 ## 验证证据
 
-- Platform Console：19 项测试通过，TypeScript 检查和生产构建通过。
-- 最新未部署候选：Platform Console 20 项测试、TypeScript 检查和生产构建通过；Deployment UI acceptance 语法检查通过，并新增提交区与健康摘要结构合同。
+- Platform Console：20 项测试通过，TypeScript 检查和生产构建通过。
+- Deployment UI acceptance 已验证提交区末行与健康摘要结构合同；所有 32 个桌面/移动页面状态通过。
 - Playwright 严格验收覆盖 16 个页面、桌面与移动共 32 个状态。
 - 每个业务页面恰有一份页面指引；全局横向溢出为 0，裁切控件为 0。
 - 真实回环登录、Session Cookie 和 `/api/me` 验收通过。
 - 部署后 `Platform-Deployment/scripts/smoke.sh` 显示十二项服务全部 `healthy`。
 - 验收截图只作临时目检，已经从本机和服务器删除。
-- 父项目 `6deaeaa`、Console 应用 `2309841` 已部署；备份 `20260816T065006Z`、完整 E2E、回环认证、32 状态 UI 验收与最终 12 服务 smoke 全部通过。
+- 父项目源码 `cff04f8`、Console 应用 `19c75d2` 已部署；备份 `20260816T073909Z`、完整 E2E、回环认证、32 状态 UI 验收与最终 12 服务 smoke 全部通过。
 
 常用检查：
 
