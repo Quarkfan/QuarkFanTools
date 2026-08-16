@@ -23,7 +23,7 @@
 | Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理与 FFmpeg 已部署并推送，当前指向 `4a568b6`。 |
 | Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏与审计已部署并推送，当前指向 `00af054`。 |
 | Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 分层导航、列表/详情、完整配置生命周期、高级配置入口、账号/RBAC、状态、诊断与手册 Dashboard 已部署并推送，当前指向 `097fc1c`。 |
-| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、E2E 与 UI acceptance 已部署；新增 release preflight、source manifest 和交接门禁，当前指向 `21db300`。 |
+| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、E2E 与 UI acceptance 已部署；新增 release preflight、source manifest 和交接门禁并完成服务器验证，当前指向 `a45f4f6`。 |
 | Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 及 Runtime 插件架构参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
@@ -41,7 +41,7 @@
 ## 最近验证
 
 - 2026-08-16：完成 DeepSeek Harness 与上游 Cordis 的源码、npm 包和发布链路评估。确定 Definition / Provider / Binding / Consumer 跨中心扩展模型；Runtime exact-pin `@deepseek-ai/cordis 4.0.1`，通过自有 PluginKernel facade 完成 5 项 scope、依赖、生命周期、声明与逆序清理测试。该内核仍为孵化路径，生产 adapter 尚未切换。
-- 2026-08-16：建立每轮交付门禁。Deployment 新增 source/Compose preflight、父项目交接快照、精确 child commit manifest 和 child-first 发布/回滚手册；本地 source preflight 通过，生产脚本行为尚未更新到服务器。
+- 2026-08-16：建立每轮交付门禁。Deployment 新增 source/Compose preflight、父项目交接快照、精确 child commit manifest 和 child-first 发布/回滚手册；服务器 source/Compose preflight 和 12 服务 smoke 通过，未重建镜像或切换容器。
 - 2026-08-16：MG 抽取可注入的 `LarkChannelBackend` 与 `LarkConnectionBackendFactory`，并新增后端管理面、替换合同测试和 CLI 能力探测/升级/canary/回滚文档；当前生产仍使用 Node SDK/OpenAPI，CLI adapter 保持明确 external 状态。
 - 2026-08-16：Console 左侧导航按工作台、配置中心、运行与运维、系统管理分组；机器人、通道、上下文、模型、能力和调度改为列表进入新增/编辑详情，高级配置只在详情显示。生产滚动更新后 12 个服务健康，15 个页面在桌面和手机视口均无横向溢出或控件裁切。
 - 2026-08-16：补齐 Provider、模型部署、路由策略、通道、Context Source/Binding、Capability Binding、Bot 和调度任务的配置生命周期；复杂表单增加高级配置入口，使用手册移至左下辅助区。发布前在线备份验证通过，六个服务滚动更新后完整 E2E 与桌面/移动 Playwright 验收通过。
