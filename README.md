@@ -28,6 +28,7 @@ Future centers should be added here as independent repositories and registered i
 
 ## Platform Docs
 
+- [New session handoff](docs/session-handoff.md)
 - [Platform reference matrix](docs/platform-reference-matrix.md)
 - [Platform centers](docs/platform-centers.md)
 - [Cross-center protocols](docs/platform-interface-protocols.md)
@@ -74,7 +75,7 @@ When a child module advances, commit and push inside that module first, then upd
 
 For a fresh AI or developer session:
 
-1. Read [AGENTS.md](AGENTS.md), then [STATUS.md](STATUS.md).
+1. Read [AGENTS.md](AGENTS.md), [STATUS.md](STATUS.md), then [docs/session-handoff.md](docs/session-handoff.md).
 2. If the work is platform-level modeling or cross-center design, read [docs/README.md](docs/README.md) and the relevant platform docs.
 3. If the work is 2.x product code, packaging, release, or current customer issues, enter `QuarkfanTools-Single/` and read its `AGENTS.md`, `docs/AI.md`, and `STATUS.md`. Do not force this work through the 3.0/5.0 center split unless the task explicitly asks for platform migration or blueprint alignment.
 4. If the work is Message Gateway design or implementation, enter `Message-Gateway/` and read its `AGENTS.md`, `STATUS.md`, `docs/message-gateway.md`, and `docs/implementation-blueprint.md`.

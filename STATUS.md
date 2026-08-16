@@ -22,7 +22,7 @@
 | Scheduler Center     | `Scheduler-Center/`     | `git@github.com:Quarkfan/Scheduler-Center.git`     | 调度、立即执行、重试、历史补处理与持久 Trigger/Queue/Dispatcher 扩展控制面已完成，当前指向 `79cd05e`。                                                                                                                |
 | Resource Center      | `Resource-Center/`      | `git@github.com:Quarkfan/Resource-Center.git`      | 资源、诊断、清理、FFmpeg 与持久 Storage/Diagnostics/Media 扩展控制面已完成，当前指向 `99332da`。                                                                                                                      |
 | Governance Center    | `Governance-Center/`    | `git@github.com:Quarkfan/Governance-Center.git`    | 策略、审批、凭据、脱敏、审计与持久 Policy/Vault/Redactor 扩展控制面已完成，当前指向 `c2c3526`。                                                                                                                       |
-| Platform Console     | `Platform-Console/`     | `git@github.com:Quarkfan/Platform-Console.git`     | 二级导航、逐页指引、单行列表、操作反馈、插件控制面、HTTPS/回环双入口认证已完成；生命周期变更仅管理员可用，当前指向 `c338794`。                                                                                         |
+| Platform Console     | `Platform-Console/`     | `git@github.com:Quarkfan/Platform-Console.git`     | 二级导航、逐页指引、单行列表、操作反馈、插件控制面、HTTPS/回环双入口认证已完成；生命周期变更仅管理员可用，当前指向 `5099e0b`。                                                                                         |
 | Platform Deployment  | `Platform-Deployment/`  | `git@github.com:Quarkfan/Platform-Deployment.git`  | Compose、备份恢复、回环认证与扩展持久化 smoke、E2E、结构/截图 UI acceptance、release handoff 与公网 TLS 云边界排查记录已更新，当前指向 `eacdf18`。                                                                      |
 | Reference Projects   | `Reference-Projects/`   | 父项目目录                                         | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 及 Runtime 插件架构参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
@@ -40,6 +40,7 @@
 
 ## 最近验证
 
+- 2026-08-16：新增 `docs/session-handoff.md` 作为 3.0 新会话首要入口，集中记录路线边界、生产状态、模块基线、最近完成、验证证据、已知事项和下一轮发布顺序。
 - 2026-08-16：Console 信息架构与交互整改已在备份 `20260816T055728Z` 验证后部署。生产运行 Console `c338794`；回环登录通过，12 个服务全部健康，16 个页面共 32 个桌面/移动状态均有逐页指引且无全局横向溢出、控件裁切或错位。模型、能力、插件、调度加入分层导航；通道只展示真实账号；列表单行滚动，多余操作收进更多菜单；过程操作统一显示进度与结果。
 - 2026-08-16：Console 完成信息架构与交互整改。模型、能力、插件加入二级导航；每个业务页提供概念/配置/效果指引；通道页移除内部 Lark backend 注册信息；列表保持单行横向滚动，高密度操作进入更多菜单；操作统一提供进度和结果反馈。19 项测试、类型检查和生产构建通过。
 - 2026-08-16：修复公网 HTTPS 启用后通过 `127.0.0.1:8080` SSH 隧道登录时 Secure Cookie 被浏览器拒绝、页面无提示闪回的问题。备份 `20260816T051437Z` 验证后部署父项目 `fd1b0de`；真实回环登录、Cookie、`/api/me`、中文错误提示和最终 12 服务 smoke 均通过。

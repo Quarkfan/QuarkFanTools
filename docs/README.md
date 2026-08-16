@@ -2,7 +2,8 @@
 
 These documents describe the parent platform and cross-module boundaries.
 
-- Start a new platform session from `../AGENTS.md` and `../STATUS.md`.
+- Start a new platform session from `../AGENTS.md`, `../STATUS.md` and `session-handoff.md`.
+- `session-handoff.md`: concise current production state, exact module baseline, latest completed work, known issues and continuation procedure.
 - `platform-reference-matrix.md`: reference matrix for center modeling. It is a design input and comparison checklist, not an implementation mandate.
 - `platform-centers.md`: platform center boundaries.
 - `platform-interface-protocols.md`: cross-center request, response, error, audit, and protocol contracts.
