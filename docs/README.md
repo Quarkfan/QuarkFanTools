@@ -10,6 +10,7 @@ These documents describe the parent platform and cross-module boundaries.
 - `3.0-implementation-program.md`: implementation topology, technical baseline, milestones, resource budget, and release gates.
 - `2x-to-3x-capability-matrix.md`: complete capability migration baseline from QuarkfanTools-Single 2.3.2.
 - `3.0-current-release.md`: implemented 3.0 service topology, capability status, acceptance evidence, security boundaries and controlled degradations.
+- `3.0-configuration-lifecycle.md`: required CRUD, dependency protection, advanced-setting and non-CRUD runtime-record rules.
 - `3.0-completion-audit.md`: requirement-by-requirement implementation evidence, controlled degradations and remaining external publication gap.
 - `macos-linux-portability.md`: current macOS assumptions and future Linux/server blueprint.
 

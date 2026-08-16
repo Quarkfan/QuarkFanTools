@@ -13,17 +13,17 @@
 | 模块 | 路径 | 远端 | 状态 |
 | --- | --- | --- | --- |
 | QuarkfanTools 单机版 | `QuarkfanTools-Single/` | `git@github.com:Quarkfan/QuarkfanTools-Single.git` | 2.x 单机版业务延续线；已从原仓库完整历史克隆并推送 `main` 与全部历史 tags，当前指向 `3e73523`，产品版本 `2.3.2`。 |
-| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 可部署实现已完成并推送，当前本地指向 `409ea2c`。 |
-| Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 可部署上下文、检索和记忆治理实现已完成并推送，当前本地指向 `a140169`。 |
-| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 可部署多模型 provider、路由、失败切换和用量实现已完成并推送，当前本地指向 `d14bb96`。 |
-| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 可部署能力注册、导入、绑定、隔离执行与内置能力实现及安全硬化已推送，当前指向 `910ed4b`。 |
-| Platform Contracts | `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | 共享合同与 JSON Schema 已完成，当前本地指向 `0d56217`；远端仓库待创建。 |
-| Runtime Center | `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime、工作空间、会话、工作流与 Browser Worker 已部署，当前本地指向 `bf906ee`；远端仓库待创建。 |
-| Scheduler Center | `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | 调度、立即执行、重试、日志与历史补处理已部署，当前本地指向 `c9d5dd0`；远端仓库待创建。 |
-| Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理与 FFmpeg 已部署，当前本地指向 `4a568b6`；远端仓库待创建。 |
-| Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏与审计已部署，当前本地指向 `00af054`；远端仓库待创建。 |
-| Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 账号密码、RBAC、配置控制、状态、诊断与常驻使用手册 Dashboard 已部署，当前本地指向 `799dda7`；远端仓库待创建。 |
-| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、自动验收清理、E2E 与 UI acceptance 已部署，当前本地指向 `81252f6`；远端仓库待创建。 |
+| Message Gateway | `Message-Gateway/` | `git@github.com:Quarkfan/Message-Gateway.git` | 可部署实现与通道配置生命周期已完成并推送，当前指向 `082f1ac`。 |
+| Context Hub | `Context-Hub/` | `git@github.com:Quarkfan/Context-Hub.git` | 可部署上下文、检索、记忆治理与配置生命周期已完成并推送，当前指向 `ef918cb`。 |
+| Model Hub | `Model-Hub/` | `git@github.com:Quarkfan/Model-Hub.git` | 可部署多模型 provider、路由、失败切换、用量和完整配置生命周期已完成并推送，当前指向 `92435ff`。 |
+| Capability Registry | `Capability-Registry/` | `git@github.com:Quarkfan/Capability-Registry.git` | 能力注册、导入、绑定 CRUD、隔离执行与内置能力实现已推送，当前指向 `f896832`。 |
+| Platform Contracts | `Platform-Contracts/` | `git@github.com:Quarkfan/Platform-Contracts.git` | 共享合同与 JSON Schema 已完成并推送，当前指向 `0d56217`。 |
+| Runtime Center | `Runtime-Center/` | `git@github.com:Quarkfan/Runtime-Center.git` | Runtime、Bot CRUD、工作空间、会话、工作流与 Browser Worker 已部署并推送，当前指向 `3428806`。 |
+| Scheduler Center | `Scheduler-Center/` | `git@github.com:Quarkfan/Scheduler-Center.git` | 调度、立即执行、重试、日志与历史补处理已部署并推送，当前指向 `c9d5dd0`。 |
+| Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理与 FFmpeg 已部署并推送，当前指向 `4a568b6`。 |
+| Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏与审计已部署并推送，当前指向 `00af054`。 |
+| Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 完整配置生命周期、高级配置入口、账号/RBAC、状态、诊断与手册 Dashboard 已部署并推送，当前指向 `bf3d0ea`。 |
+| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、自动验收清理、E2E 与 UI acceptance 已部署并推送，当前指向 `dfc3333`。 |
 | Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
@@ -40,6 +40,8 @@
 
 ## 最近验证
 
+- 2026-08-16：补齐 Provider、模型部署、路由策略、通道、Context Source/Binding、Capability Binding、Bot 和调度任务的配置生命周期；复杂表单增加高级配置入口，使用手册移至左下辅助区。发布前在线备份验证通过，六个服务滚动更新后完整 E2E 与桌面/移动 Playwright 验收通过。
+- 2026-08-16：Platform Contracts、Runtime、Scheduler、Resource、Governance、Console 和 Deployment 七个新远端仓库已首次推送 `main` 并建立本地 upstream；MG、CH、MH、CR 同步推送本轮实现。
 - 2026-08-16：3.0 十一个生产应用服务已部署到 `zwj-ubuntu` 并全部健康；完整 Compose E2E 在全栈重启前后均通过，覆盖 Browser 审批续跑、Media、Resource、Context、Scheduler、MG/Runtime 及诊断包链路。
 - 2026-08-16：在线与 quiesced 备份覆盖 PostgreSQL 和五个持久卷，自动完成 SHA-256、数据库目录和归档可读性校验；quiesced 路径只在所有服务恢复 healthy 后返回。
 - 2026-08-16：Dashboard 15 个页面完成桌面和移动端 Playwright 布局验收，无横向溢出和控件裁切；新增可搜索的常驻“使用手册”，覆盖首次配置、日常操作、故障排查与安全维护。

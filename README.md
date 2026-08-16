@@ -33,6 +33,7 @@ Future centers should be added here as independent repositories and registered i
 - [Cross-center protocols](docs/platform-interface-protocols.md)
 - [3.0 server readiness roadmap](docs/server-readiness-roadmap.md)
 - [3.0 current release](docs/3.0-current-release.md)
+- [3.0 configuration lifecycle](docs/3.0-configuration-lifecycle.md)
 - [3.0 completion audit](docs/3.0-completion-audit.md)
 - [macOS / Linux portability blueprint](docs/macos-linux-portability.md)
 
