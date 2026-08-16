@@ -19,7 +19,8 @@ Module-specific documents should live inside their owning submodule. For example
 Current module handoff entry points:
 
 - Standalone app: `../QuarkfanTools-Single/AGENTS.md`, `../QuarkfanTools-Single/docs/AI.md`, `../QuarkfanTools-Single/STATUS.md`.
-- Message Gateway: `../Message-Gateway/AGENTS.md`, `../Message-Gateway/STATUS.md`, `../Message-Gateway/docs/message-gateway.md`, `../Message-Gateway/docs/implementation-blueprint.md`.
+- Message Gateway: `../Message-Gateway/AGENTS.md`, `../Message-Gateway/STATUS.md`, `../Message-Gateway/docs/message-gateway.md`, `../Message-Gateway/docs/implementation-blueprint.md`, `../Message-Gateway/docs/lark-cli-compatibility.md`.
+- Platform Console: `../Platform-Console/README.md`, `../Platform-Console/STATUS.md`, `../Platform-Console/docs/information-architecture.md`.
 - Context Hub: `../Context-Hub/AGENTS.md`, `../Context-Hub/STATUS.md`, `../Context-Hub/docs/context-hub.md`, `../Context-Hub/docs/implementation-blueprint.md`.
 - Model Hub: `../Model-Hub/AGENTS.md`, `../Model-Hub/STATUS.md`, `../Model-Hub/docs/model-hub.md`, `../Model-Hub/docs/implementation-blueprint.md`.
 - Capability Registry: `../Capability-Registry/AGENTS.md`, `../Capability-Registry/STATUS.md`, `../Capability-Registry/docs/capability-registry.md`, `../Capability-Registry/docs/implementation-blueprint.md`.
