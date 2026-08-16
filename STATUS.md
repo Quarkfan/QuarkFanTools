@@ -23,7 +23,7 @@
 | Resource Center | `Resource-Center/` | `git@github.com:Quarkfan/Resource-Center.git` | 资源、诊断、清理与 FFmpeg 已部署并推送，当前指向 `4a568b6`。 |
 | Governance Center | `Governance-Center/` | `git@github.com:Quarkfan/Governance-Center.git` | 策略、审批、凭据、脱敏与审计已部署并推送，当前指向 `00af054`。 |
 | Platform Console | `Platform-Console/` | `git@github.com:Quarkfan/Platform-Console.git` | 完整配置生命周期、高级配置入口、账号/RBAC、状态、诊断与手册 Dashboard 已部署并推送，当前指向 `bf3d0ea`。 |
-| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、自动验收清理、E2E 与 UI acceptance 已部署并推送，当前指向 `dfc3333`。 |
+| Platform Deployment | `Platform-Deployment/` | `git@github.com:Quarkfan/Platform-Deployment.git` | Compose、备份恢复、smoke、自动验收清理、E2E 与 UI acceptance 已部署并推送，当前指向 `28c8c2f`。 |
 | Reference Projects | `Reference-Projects/` | 父项目目录 | 用于管理 `docs/platform-reference-matrix.md` 中参考项目的本地源码阅读、综合评估和借鉴点抽取；已完成 MG / CH / MH / CR 参考评估，本地 clone 的上游源码放在 `Reference-Projects/sources/` 且不提交。 |
 
 ## 操作约定
